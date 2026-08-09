@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/StreamReader/StreamReader.csproj" />
+    <Project Path="samples/StreamViewer/StreamViewer.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/IrTactile.Shm/IrTactile.Shm.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/IrTactile.Shm.Tests/IrTactile.Shm.Tests.csproj" />
+  </Folder>
+</Solution>

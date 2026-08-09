@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;netstandard2.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- The binding reads shared memory through raw pointers (the same memory
+         the producer is concurrently writing). All unsafe code is internal;
+         the consumer-facing surface is safe (ReadOnlySpan&lt;float&gt;). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <RootNamespace>IrTactile.Shm</RootNamespace>
+    <AssemblyName>IrTactile.Shm</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+
+    <!-- NuGet metadata -->
+    <PackageId>IrTactile.Shm</PackageId>
+    <Title>irTactile shared-memory binding</Title>
+    <Description>Managed binding for the irTactile shared-memory contracts (stream-shm v1). Fully managed; no native dependency.</Description>
+    <Authors>Jakob Schmidt</Authors>
+    <Copyright>Copyright (c) Jakob Schmidt</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>irtactile;shared-memory;audio;telemetry</PackageTags>
+    <PackageProjectUrl>https://github.com/jSchmidt-design/irtactile-shm</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/jSchmidt-design/irtactile-shm</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+
+    <!-- Tracks CHANGELOG.md. The package version and the WIRE version are
+         independent: this can go to 1.1.0 while the section it reads stays
+         stream-shm v1 (spec/common/versioning.md). -->
+    <Version>1.0.0</Version>
+
+    <!-- Debugging into the binding from a consumer's project. SourceLink
+         itself is in-box in the .NET 8 SDK and needs no PackageReference;
+         these are the switches that turn it on and ship the symbols. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <!-- Deterministic only under CI: on a dev box it rewrites source paths to
+       placeholders and breaks local step-through debugging. -->
+  <PropertyGroup Condition="'$(CI)' == 'true' or '$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The consumer guide becomes the nuget.org landing page; its links are
+         absolute for exactly that reason. -->
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Memory" Version="4.5.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="IrTactile.Shm.Tests" />
+  </ItemGroup>
+
+</Project>

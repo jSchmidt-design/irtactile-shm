@@ -1,0 +1,19 @@
+# Build artifacts
+build*/
+out/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# .NET
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/

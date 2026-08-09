@@ -1,0 +1,811 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>irTactile Shared-Memory Stream - Format v1.0</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b23;
+    --panel2: #1c2330;
+    --border: #2a3242;
+    --text: #d7dde8;
+    --dim: #8b96a8;
+    --mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace;
+
+    --c-meta: #3b82f6;   /* identity & sizes   */
+    --c-cfg:  #22c55e;   /* stream config      */
+    --c-addr: #a855f7;   /* addressing         */
+    --c-diag: #6b7280;   /* diagnostics        */
+    --c-hot:  #f97316;   /* concurrent [80,112)*/
+    --c-str:  #06b6d4;   /* strings            */
+    --c-res:  #374151;   /* reserved           */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", system-ui, sans-serif; font-size: 15px; line-height: 1.55;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 24px 96px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 56px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 16px; margin: 28px 0 8px; }
+  .sub { color: var(--dim); margin-bottom: 24px; }
+  .dim { color: var(--dim); font-weight: 400; font-size: 12.5px; }
+  code, .mono { font-family: var(--mono); font-size: 13px; }
+  code { background: var(--panel2); padding: 1px 6px; border-radius: 4px; }
+  pre {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.6;
+  }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin: 16px 0; }
+  .note { border-left: 3px solid var(--c-hot); background: rgba(249,115,22,.08); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; font-size: 14px; }
+  .note.blue { border-color: var(--c-meta); background: rgba(59,130,246,.08); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; margin: 10px 0; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  td.num, th.num { text-align: right; font-family: var(--mono); }
+
+  /* ---------- byte-grid visualizations ---------- */
+  .grid { display: grid; gap: 2px; margin: 12px 0 4px; }
+  .grid .cell {
+    height: 26px; border-radius: 3px; cursor: pointer; position: relative;
+    transition: filter .08s;
+  }
+  .grid .cell:hover, .grid .cell.hl { filter: brightness(1.5); outline: 2px solid #fff; outline-offset: -1px; z-index: 2; }
+  .grid .cell.pinned { outline: 2px solid #fff; outline-offset: -1px; }
+  .grid .cell .lbl {
+    position: absolute; left: 3px; top: 50%; transform: translateY(-50%);
+    font-family: var(--mono); font-size: 10.5px; color: rgba(255,255,255,.92);
+    white-space: nowrap; overflow: hidden; pointer-events: none;
+    text-shadow: 0 1px 2px rgba(0,0,0,.7);
+  }
+  .ruler { display: grid; gap: 2px; margin-bottom: 2px; }
+  .ruler span { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0; font-size: 12.5px; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .detail {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; margin-top: 12px; font-size: 13.5px; min-height: 64px;
+  }
+  .detail .fname { font-family: var(--mono); font-size: 15px; font-weight: 600; }
+  .detail .fmeta { color: var(--dim); font-family: var(--mono); font-size: 12px; margin: 2px 0 6px; }
+  .detail .empty { color: var(--dim); font-style: italic; }
+
+  /* ---------- section overview diagram ---------- */
+  .membar { display: flex; align-items: stretch; height: 58px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); font-family: var(--mono); font-size: 12px; }
+  .membar > div { display: flex; align-items: center; justify-content: center; padding: 0 6px; text-align: center; white-space: nowrap; overflow: hidden; }
+  .slotdiag { display: flex; align-items: stretch; height: 54px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); font-family: var(--mono); font-size: 12px; margin-top: 14px; }
+  .slotdiag > div { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2px 8px; text-align: center; }
+  .slotdiag > div small { color: rgba(255,255,255,.65); font-size: 10px; }
+
+  /* ---------- ring simulator ---------- */
+  .sim-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+  .sim-controls label { font-size: 13px; color: var(--dim); }
+  .sim-controls select, .sim-controls button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer;
+  }
+  .sim-controls button:hover { border-color: var(--c-meta); }
+  .slots { display: flex; gap: 12px; flex-wrap: wrap; }
+  .slot {
+    flex: 1; min-width: 150px; background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; font-family: var(--mono); font-size: 12px;
+  }
+  .slot.busy { border-color: var(--c-hot); box-shadow: 0 0 0 1px var(--c-hot); }
+  .slot.reading { border-color: var(--c-cfg); box-shadow: 0 0 0 1px var(--c-cfg); }
+  .slot .title { color: var(--dim); margin-bottom: 6px; }
+  .slot .seqv { font-size: 14px; margin-bottom: 8px; }
+  .slot .seqv.busy { color: var(--c-hot); font-weight: 700; }
+  .bar { height: 10px; background: #0a0d12; border-radius: 5px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0%; background: var(--c-meta); transition: width .1s linear; }
+  .sim-stats { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 16px; font-family: var(--mono); font-size: 13px; }
+  .sim-stats b { font-size: 16px; }
+  .sim-log { margin-top: 12px; font-family: var(--mono); font-size: 12px; color: var(--dim); min-height: 20px; }
+  .sim-log .drop { color: #ef4444; }
+  .sim-log .ok { color: var(--c-cfg); }
+
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11.5px; font-family: var(--mono); }
+  .twoCol { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 800px) { .twoCol { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>irTactile Shared-Memory Stream</h1>
+<div class="sub">
+  Binary format &amp; protocol - <b>version 1.0</b> · <code>kMagic = 0x41535449</code> ("ITSA") ·
+  little-endian throughout · IEEE-754 float32 · two's-complement int16 · all fields naturally aligned, no packing.
+  <br>The normative text is the spec tree - <code>spec/stream-shm/v1/fields.md</code>, <code>README.md</code> and
+  <code>spec/common/</code>; this page is a visual map of it. Offsets are pinned in
+  <code>bindings/cpp/include/irtactile/shm/stream/layout.h</code>.
+</div>
+
+<!-- ==================================================================== -->
+<h2>1 · Section layout at a glance</h2>
+
+<p>A stream lives in one named shared-memory section. Its bytes, from offset 0:</p>
+
+<div class="membar">
+  <div style="flex:0 0 18%; background:var(--c-meta);">ShmStreamHeader<br>256 B</div>
+  <div style="flex:1; background:#26304a;">slot array - ringBlocks × slotBytes</div>
+  <div style="flex:0 0 16%; background:#11151c; color:var(--dim);">trailing pad<br>to totalBytes</div>
+</div>
+<div style="font-family:var(--mono); font-size:11px; color:var(--dim); margin-top:4px;">
+  offset 0 &nbsp;·&nbsp; header at offset 0 is 64 KB-aligned by the OS mapping, so its 64-byte alignment survives into the view
+  &nbsp;·&nbsp; slotArrayOffset = 256 (align64 of the header)
+  &nbsp;·&nbsp; access-class breakdown within the header, including <b>producerPid</b> at 224, is shown in the byte grid below
+</div>
+<p><b><code>totalBytes</code> is the size class, not the live footprint.</b> The live layout ends at
+<code>slotArrayOffset + ringBlocks × slotBytes</code>; everything from there to <code>totalBytes</code> is unused
+producer-zeroed padding. A consumer bounds-checks against <code>totalBytes</code> (itself checked against the real
+mapped size) and never assumes the two are equal.</p>
+
+<p>Each slot is a self-describing block: a 64-byte descriptor followed by one contiguous <i>plane</i> per channel, padded to a multiple of 64 so a slot being written never shares a cache line with a slot being read:</p>
+
+<div class="slotdiag">
+  <div style="flex:0 0 22%; background:var(--c-hot);">ShmBlockDesc<small>64 B</small></div>
+  <div style="flex:1; background:#14532d;">plane ch 0<small>channelPlaneBytes</small></div>
+  <div style="flex:1; background:#166534;">plane ch 1<small>channelPlaneBytes</small></div>
+  <div style="flex:1; background:#14532d;">… ch N−1<small>channelPlaneBytes</small></div>
+  <div style="flex:0 0 8%; background:#11151c; color:var(--dim);">pad<small>to ×64 B</small></div>
+</div>
+
+<h3>Normative addressing arithmetic</h3>
+<pre>slot_index   = seq % ringBlocks
+slot_base    = base + slotArrayOffset + slot_index × slotBytes
+descriptor   = slot_base                                  // ShmBlockDesc
+plane(ch)    = slot_base + slotPayloadOffset + ch × channelPlaneBytes
+sample(ch,i) = plane(ch) + i × bytesPerSample             // i &lt; samplesPerBlock</pre>
+<div class="note"><b>Every published block is full.</b> There is no per-block sample count. A block carries exactly
+<code>header.samplesPerBlock</code> samples per channel; a producer that cannot finish one <b>abandons</b> it
+(the slot stays at <code>kSlotBusy</code>) and charges the partial fill to the next block's
+<code>firstSampleIndex</code>, so the loss appears in your <code>gap_samples</code>. Validate the bound
+<b>once, at attach</b> - <code>samplesPerBlock × bytesPerSample &lt;= channelPlaneBytes</code> - and every block
+is then in bounds by construction; the per-block <code>layoutEpoch</code> also guarantees the payload was
+written under the geometry you validated. Do not take a loop bound from anywhere else.</div>
+<div class="note blue">Every quantity above is a <b>byte offset</b> from <code>base</code>, and every one of
+<code>slotArrayOffset</code>, <code>slotBytes</code>, <code>slotPayloadOffset</code>, <code>channelPlaneBytes</code>
+is <b>read from the header, never recomputed</b>. A consumer that re-derives them works until a future version pads
+differently - then it walks into the middle of a slot with no error anywhere.</div>
+
+<div class="note"><b>Plane alignment is weaker than the slot's.</b> Plane 0 is always 64-aligned (because the
+slot is), but every plane after it is aligned to whatever <code>channelPlaneBytes</code> divides by - as little
+as 4 bytes. <b>Planes are guaranteed <code>bytesPerSample</code>-aligned and nothing more.</b> That is exactly
+enough for the typed view every binding builds (<code>const float*</code>, Rust's
+<code>slice::from_raw_parts::&lt;f32&gt;</code>, <code>MemoryMarshal.Cast</code>, a NumPy view) - and not
+enough for an aligned SIMD load, so use unaligned loads. Because a typed view's soundness rests on it, the
+guarantee is <b>validated at attach, not assumed</b>: every term of the plane address -
+<code>slotArrayOffset</code>, <code>slotBytes</code>, <code>slotPayloadOffset</code>, <code>channelPlaneBytes</code> -
+must be a multiple of <code>bytesPerSample</code>, and a header violating that is rejected as malformed.</div>
+
+<!-- ==================================================================== -->
+<h2>2 · ShmStreamHeader - 256 bytes</h2>
+
+<p>The header splits into three access classes:</p>
+<ul style="font-size:14px;">
+  <li><span class="pill" style="background:var(--c-hot); color:#000;">bytes [80, 112)</span> - the <b>only concurrently written fields</b>. Read directly, per field, with acquire loads.</li>
+  <li><span class="pill" style="background:var(--c-meta); color:#fff;">pinned</span> - <code>magic</code>, <code>versionMajor</code>, <code>headerBytes</code>, <code>totalBytes</code>, <code>slotArrayOffset</code>. A rewrite MUST NOT change these: consumers map once, blind, against them and never remap, and a Win32 section cannot grow. Changing one requires a different section, and therefore a different name.</li>
+  <li><span class="pill" style="background:var(--c-cfg); color:#000;">layout</span> - stream configuration and addressing fields. Protected by the <code>layoutSeq</code> seqlock; a producer restart may rewrite them in place.</li>
+</ul>
+
+<div class="legend" id="legend-hdr"></div>
+<div class="ruler" id="ruler-hdr"></div>
+<div class="grid" id="grid-hdr" style="grid-template-columns:repeat(32,1fr);"></div>
+<div style="font-family:var(--mono); font-size:11px; color:var(--dim); margin-top:3px;">
+  32 bytes per row · the ruler is the byte offset <i>within</i> a row; row r starts at byte 32 × r · absolute
+  offsets are in the field table below
+</div>
+<div class="detail" id="detail-hdr"><span class="empty">Hover or click a field to inspect it.</span></div>
+
+<h3>Field table</h3>
+<table id="table-hdr">
+  <thead><tr><th class="num">Offset</th><th class="num">Size</th><th>Field</th><th>Type</th><th>Meaning</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h3><code>producerPid</code> - diagnostics only, never load-bearing</h3>
+<p>The process id of the producer that last (re)wrote the header, stored under the same <code>layoutSeq</code>
+rewrite that stamps the identity strings. It answers one question: <i>is the process that owns this section
+still alive?</i> - which makes zombie adjudication (a section left behind by a crashed producer, kept alive by
+a consumer's open handle) deterministic instead of purely staleness-based.</p>
+<p><b>PIDs are reused by every OS.</b> A liveness verdict may treat "PID no longer names a running process" as
+proof of abandonment, but never the converse: <code>producerPid</code> alive says nothing by itself, and it
+must always be combined with the <code>deviceState</code> / <code>lastPublishQpc</code> staleness rules. It is
+not a substitute for them, and no addressing or timing behaviour may ever derive from it.</p>
+
+<!-- ==================================================================== -->
+<h2>3 · ShmBlockDesc - 64 bytes</h2>
+
+<p>Sits at the base of every slot. The descriptor's <code>seq</code> is both the block's identity and the slot's lock word.</p>
+
+<div class="legend" id="legend-desc"></div>
+<div class="grid" id="grid-desc" style="grid-template-columns:repeat(16,1fr);"></div>
+<div class="detail" id="detail-desc"><span class="empty">Hover or click a field to inspect it.</span></div>
+
+<table id="table-desc">
+  <thead><tr><th class="num">Offset</th><th class="num">Size</th><th>Field</th><th>Type</th><th>Meaning</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<div class="note"><code>kSlotBusy = 0xFFFFFFFFFFFFFFFF</code> is stored in <code>seq</code> for the whole time the
+producer is filling the slot, and replaced by the real block index on publish. It is load-bearing, not cosmetic:
+at <code>ringBlocks = 2</code> the slot a reader is copying is the very next one the writer claims. The invalidating
+store, published <i>before</i> the first sample of the new block lands, is what stops a preempted reader from
+re-checking the descriptor, finding the previous block's seq still there, and returning torn data.</div>
+
+<!-- ==================================================================== -->
+<h2>4 · Ring protocol - interactive</h2>
+
+<p>The section is a ring of <code>ringBlocks</code> slots addressed by <code>seq % ringBlocks</code>.
+The writer publishes blocks at a fixed cadence
+(<code>periodSeconds = samplesPerBlock / (sampleRateMilliHz / 1000)</code>); the reader keeps a cursor and copies
+blocks out. The readable window is <b><code>ringBlocks − 1</code></b>, never <code>ringBlocks</code>: the writer owns
+slot <code>head % ringBlocks</code> for the entire current publish period.</p>
+
+<div class="panel">
+  <div class="sim-controls">
+    <label>ringBlocks
+      <select id="sim-ring">
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4" selected>4</option>
+        <option value="8">8</option>
+      </select>
+    </label>
+    <label>speed
+      <select id="sim-speed">
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="sim-slowreader"> slow reader (drops blocks)</label>
+    <button id="sim-toggle">⏸ Pause</button>
+    <button id="sim-reset">Reset</button>
+  </div>
+  <div class="slots" id="sim-slots"></div>
+  <div class="sim-stats">
+    <div>writeSeq <b id="st-writeseq">0</b></div>
+    <div>reader cursor <b id="st-cursor" style="color:var(--c-cfg);">0</b></div>
+    <div>published <b id="st-pub">0</b></div>
+    <div>read <b id="st-read" style="color:var(--c-cfg);">0</b></div>
+    <div>dropped <b id="st-drop" style="color:#ef4444;">0</b></div>
+  </div>
+  <div class="sim-log" id="sim-log"></div>
+</div>
+
+<h3>What the reader owes the ring (and how it is enforced)</h3>
+<table>
+  <thead><tr><th>Step</th><th>Rule</th></tr></thead>
+  <tbody>
+    <tr><td>0 · at attach</td><td>Initialise <code>cursor = header.writeSeq</code>, <b>not 0</b> - starting at 0 reports a spurious multi-million-block overrun on the first read. To read ring history instead, start at <code>head − min(head, ringBlocks − 1)</code>.</td></tr>
+    <tr><td>1 · pick a block</td><td>Advance a local cursor toward <code>writeSeq</code> (acquire load). Unsigned differences only - never <code>&lt;</code> - so the arithmetic survives 64-bit wrap and a cursor briefly seen ahead of head.</td></tr>
+    <tr><td>2 · overrun check</td><td>If <code>writeSeq − cursor &gt; ringBlocks − 1</code>, the oldest wanted blocks are already recycled: count them as dropped, snap the cursor to the oldest still-readable block.</td></tr>
+    <tr><td>3 · check before copy</td><td><code>desc.seq == wanted seq</code>? Anything else - <code>kSlotBusy</code> or another block's index - means the slot is gone. Count, move on, never spin.</td></tr>
+    <tr><td>4 · copy</td><td>Copy payload out into your own buffer. Loop to <code>header.samplesPerBlock</code> from your seqlock snapshot - every published block is full, and attach-time validation has already bounded that field by the plane extent.</td></tr>
+    <tr><td>5 · check after copy</td><td>Re-read <b>three</b> values and discard the block unless all three still match: <code>desc.seq</code> must equal the wanted <code>seq</code>; <code>header.layoutSeq</code> must equal the snapshot; <code>desc.layoutEpoch</code> must also equal that same snapshot - the <code>layoutEpoch</code> check is the one that defends against stale-geometry aliasing (a block written under a previous geometry can pass the <code>layoutSeq</code> check yet no longer belong to the one you validated).</td></tr>
+  </tbody>
+</table>
+
+<p>Two read modes, same protocol:</p>
+<ul style="font-size:14px;">
+  <li><b>Lossless</b> (<code>Reader::next</code>) - every block in sequence; drops are counted in <code>droppedBlocks()</code>, not hidden.</li>
+  <li><b>Latest-value-wins</b> (<code>Reader::latest</code>) - only the newest complete block; polling on your own cadence is first-class, not a fallback.</li>
+</ul>
+
+<div class="note blue"><b>The event is auto-reset, so a configured event means one consumer per stream.</b>
+Two waiting processes each miss half the wakeups. It is signalled as the <i>last</i> step of a publish and never
+earlier, so a woken reader always finds <code>writeSeq</code> already advanced - but wakes coalesce, so one wake is
+not one block once you fall behind: always drain (<code>while (next(b))</code>). <b>Open the event, never create it</b>
+- <code>CreateEventW</code> on an existing name silently ignores the manual-reset and initial-state arguments.
+Polling <code>writeSeq</code> carries none of these restrictions and lets several consumers share one section;
+derive the poll interval from <code>periodMs</code>, never from a constant.</div>
+
+<!-- ==================================================================== -->
+<h2>5 · The layoutSeq seqlock</h2>
+
+<p>Layout fields are protected by the <code>layoutSeq</code> seqlock; a producer restart may rewrite them in place.
+Pinned fields are never rewritten while the section exists. The seqlock makes changes detectable:</p>
+
+<pre>reader:                             producer (start / restart / reconfigure):
+  s1 = load(layoutSeq)                next = old + ((old &amp; 1) ? 2 : 1)  // step PAST a leftover odd value
+  if (s1 &amp; 1) retry                   store(layoutSeq, next)            // → odd: writing
+  copy header (≤ headerBytes)         … rewrite layout fields …
+  s2 = load(layoutSeq)                store(layoutSeq, next + 1)        // → even AND strictly greater: done
+  if (s1 != s2) retry</pre>
+
+<ul style="font-size:14px;">
+  <li><b>Odd</b> ⇒ rewrite in progress; <b>even</b> ⇒ stable.</li>
+  <li><b>A producer restarting into an existing section MUST cycle the seqlock, even when it rewrites nothing.</b>
+      The bump is the only restart signal a holding consumer gets: it is what triggers re-reading
+      <code>deviceName</code>, re-checking any structural assertion, and knowing that
+      <code>firstSampleIndex</code> restarted at 0 while <code>writeSeq</code> kept running. A leftover
+      <b>odd</b> value - a producer that crashed mid-rewrite - is stepped <i>past</i>, never decremented, so the
+      final value is even and greater than anything a spinning reader has seen.</li>
+  <li>A producer that died mid-rewrite therefore leaves <code>layoutSeq</code> odd, and an attaching consumer sees
+      <code>NotReady</code> on every retry until a producer restarts into the section. That is not a consumer
+      error.</li>
+  <li>The reader re-checks <code>layoutSeq</code> on <i>every</i> read cycle, not only at attach. It is free - the whole
+      hot range <code>[80, 112)</code> sits in one cache line (64–127), so the load rides along with the
+      <code>writeSeq</code> fetch that was happening anyway.</li>
+  <li>When copying, never copy more than <code>headerBytes</code>: a v1.0 reader facing a larger v1.1 header clamps
+      rather than trusts <code>sizeof</code>.</li>
+  <li><b>The snapshot's bytes in <code>[80, 112)</code> are meaningless.</b> The concurrent fields change on every
+      publish with no <code>layoutSeq</code> movement, so those bytes may be mid-store garbage in a valid snapshot.
+      Take concurrent values from live per-field acquire loads only.</li>
+</ul>
+
+<!-- ==================================================================== -->
+<h2>6 · Attach, liveness &amp; structure assertions</h2>
+
+<div class="twoCol">
+  <div>
+    <h3>AttachResult</h3>
+    <table>
+      <thead><tr><th>Value</th><th>Meaning</th><th>Retry?</th></tr></thead>
+      <tbody>
+        <tr><td><code>Ok</code></td><td>Attached.</td><td>-</td></tr>
+        <tr><td><code>NotReady</code></td><td><code>magic == 0</code>: section exists, header not written yet - or a header snapshot that will not settle, which is what a producer that died mid-rewrite (<code>layoutSeq</code> left odd) looks like.</td><td><b>yes</b></td></tr>
+        <tr><td><code>BadVersion</code></td><td>Major mismatch or unknown enum value. Higher <i>minor</i> is fine.</td><td>no</td></tr>
+        <tr><td><code>Malformed</code></td><td>Wrong magic, an offset that doesn't fit <code>mappedBytes</code>, or a violated alignment invariant (§1).</td><td>no</td></tr>
+        <tr><td><code>Mismatch</code></td><td>Valid, but not the structure the consumer expects (profile drift). Waiting won't fix it.</td><td>no</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <h3>StreamState - deviceState × staleness</h3>
+    <table>
+      <thead><tr><th>State</th><th>Condition</th></tr></thead>
+      <tbody>
+        <tr><td><code>Live</code></td><td>Active, publishing on time.</td></tr>
+        <tr><td><code>Quiet</code></td><td>Inactive - engine up, device not driven. Legitimate.</td></tr>
+        <tr><td><code>Stalled</code></td><td>Active, but <code>lastPublishQpc</code> older than <code>staleAfterMs()</code> (formula in §7). Wedged or crashed.</td></tr>
+        <tr><td><code>Closed</code></td><td><code>stop()</code> ran - clean shutdown.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="note blue"><code>DeviceState::Inactive = 0</code> on purpose: a freshly created, zero-filled section reads
+as "not being driven" during the window before the header is written - the conservative answer. <code>magic</code>
+guards that window regardless.</div>
+
+<!-- ==================================================================== -->
+<h2>7 · Enumerations &amp; constants</h2>
+
+<div class="twoCol">
+  <div>
+    <h3>SampleFormat <span class="dim">(uint32, offset 16)</span></h3>
+    <table><tbody>
+      <tr><td class="num">1</td><td><code>Float32</code> - IEEE-754, 4 B/sample</td></tr>
+      <tr><td class="num">2</td><td><code>Int16</code> - two's complement, 2 B/sample; convert with clamping, never wrapping</td></tr>
+    </tbody></table>
+    <h3>ChannelLayout <span class="dim">(uint32, offset 20)</span></h3>
+    <table><tbody>
+      <tr><td class="num">1</td><td><code>Planar</code> - the only layout v1 produces</td></tr>
+      <tr><td class="num">2</td><td><code>Interleaved</code> - reserved; never produced in v1.0</td></tr>
+    </tbody></table>
+    <h3>DeviceState <span class="dim">(uint32, offset 96)</span></h3>
+    <table><tbody>
+      <tr><td class="num">0</td><td><code>Inactive</code> - engine alive, device not driven</td></tr>
+      <tr><td class="num">1</td><td><code>Active</code> - blocks should be arriving</td></tr>
+      <tr><td class="num">2</td><td><code>Closed</code> - stop() ran</td></tr>
+    </tbody></table>
+    <h3>BlockFlags <span class="dim">(uint32, desc offset 24)</span></h3>
+    <table><tbody>
+      <tr><td class="num">0x1</td><td><code>BlockSilence</code> - every channel is zero in this block</td></tr>
+      <tr><td class="num">0x2</td><td><code>BlockDiscontinuity</code> - first block after start/reconfigure</td></tr>
+    </tbody></table>
+  </div>
+  <div>
+    <h3>Limits (normative)</h3>
+    <table><tbody>
+      <tr><td><code>channelCount</code></td><td class="num">1 … 32</td></tr>
+      <tr><td>stream rate</td><td class="num">46.875 Hz … 48 kHz</td></tr>
+      <tr><td><code>ringBlocks</code></td><td class="num">2 … 256</td></tr>
+      <tr><td><code>rateDivisor</code></td><td class="num">1 … 1024</td></tr>
+      <tr><td><code>publishHz</code></td><td class="num">≤ 375 Hz *</td></tr>
+      <tr><td>ring duration</td><td class="num">warn &gt; 1.0 s</td></tr>
+    </tbody></table>
+    <p style="font-size:13.5px;">The stream rate is one of eleven values, <code>48000 / 2^k</code> for k = 0…10,
+    each half the one above. <b>*</b> <code>publishHz</code> is a bound on the <i>current producer</i>, not on the
+    format - it is the producer's render cadence that sets it, and a later producer may publish faster. Derive the
+    period from <code>samplesPerBlock</code> and <code>sampleRateMilliHz</code>; hardcode nothing.</p>
+    <h3>Size classes (normative)</h3>
+    <table><tbody>
+      <tr><th>Class</th><th class="num">Section bytes</th><th>Name suffix</th><th>Envelope (sized as Float32)</th></tr>
+      <tr><td><code>"256k"</code></td><td class="num">256 KiB</td><td><code>_256k</code></td><td><code>computeTotalSize(layout) ≤ 256 KiB</code></td></tr>
+      <tr><td><code>"512k"</code></td><td class="num">512 KiB</td><td><code>_512k</code></td><td><code>computeTotalSize(layout) ≤ 512 KiB</code></td></tr>
+      <tr><td><code>"1m"</code></td><td class="num">1 MiB</td><td><code>_1m</code></td><td><code>computeTotalSize(layout) ≤ 1 MiB</code></td></tr>
+    </tbody></table>
+    <p style="font-size:13.5px;">The envelope is checked against a Float32 layout even when the profile uses <code>Int16</code>, so switching sample format does not change the class. A profile that does not fit the requested class fails <code>open()</code> with a log naming the next larger class that would hold it.</p>
+    <p style="font-size:13.5px;"><b>Resolved names and handover.</b> The configured <code>shmName</code> and <code>eventName</code> are base names; the producer appends the class suffix before creating the kernel objects:</p>
+    <pre style="font-size:12.5px;">resolvedShmName   = shmName   + sizeClassSuffix
+resolvedEventName = eventName + sizeClassSuffix</pre>
+    <p style="font-size:13.5px;">A class switch therefore creates a new section and a new event. Before the new section is created, any abandoned leftover section at the old class name (matching magic, <code>deviceGuid</code>, and a stale <code>lastPublishQpc</code>) is stamped <code>Closed</code> and its event is signalled, so a parked consumer on the old name wakes with <code>WaitResult::Closed</code> instead of waiting out a timeout.</p>
+    <h3>Size formulas <span class="dim">(producer-side; consumers read the header)</span></h3>
+    <pre style="font-size:12.5px;">bytesPerSample      = fmt==Int16 ? 2 : 4
+channelPlaneBytes   = samplesPerBlock × bytesPerSample
+slotPayloadOffset   = sizeof(ShmBlockDesc)        // 64
+slotBytes           = align64(64 + channelCount × channelPlaneBytes)
+slotArrayOffset     = align64(sizeof(ShmStreamHeader)) // 256
+computeTotalSize()  = slotArrayOffset + ringBlocks × slotBytes   // the LIVE footprint
+totalBytes          = the chosen size class (256 KiB / 512 KiB / 1 MiB)</pre>
+    <p style="font-size:13.5px;"><code>header.totalBytes</code> is the <b>size-class size, not the live
+    footprint</b> - normally larger. The bytes between the last slot and <code>totalBytes</code> are unused
+    producer-zeroed padding, as is the padding inside <code>slotBytes</code> and the <code>reserved[]</code>
+    arrays. <code>computeTotalSize(layout)</code> is what the size-class envelope above is checked against.</p>
+    <h3>Derived quantities <span class="dim">(consumers and producers)</span></h3>
+    <p style="font-size:13.5px;">These are the formulas <code>Reader</code> uses for timing and liveness. Non-C++ bindings should derive the same timeouts from the header fields rather than hard-coding reader internals.</p>
+    <pre style="font-size:12.5px;">periodSeconds   = samplesPerBlock / (sampleRateMilliHz / 1000)
+periodMs        = samplesPerBlock × 1 000 000 / sampleRateMilliHz   // = periodSeconds × 1000
+publishHz       = (sampleRateMilliHz / 1000) / samplesPerBlock
+ringSeconds     = ringBlocks × periodSeconds
+waitTimeoutMs   = max(50, 4 × periodMs)
+staleAfterMs    = max(100, 5 × periodMs)</pre>
+    <p style="font-size:13.5px;">Constants: <code>kWaitTimeoutPeriods = 4.0</code>, <code>kStaleAfterPeriods = 5.0</code>. The floors keep very short periods from producing timeouts no host scheduler can satisfy.</p>
+    <h3>Concurrency facts for foreign bindings</h3>
+    <ul style="font-size:13.5px;">
+      <li>Fields are plain integers, not <code>std::atomic&lt;T&gt;</code> - bindings see bytes and hardcode offsets.</li>
+      <li>x86-64 loads/stores are acquire/release in hardware (TSO); the protocol needs no StoreLoad ordering. <b>Windows-on-ARM64 needs real barriers.</b></li>
+      <li>64-bit fields must be naturally aligned to be tear-free; a mapping at offset 0 is 64 KB-aligned, so alignment survives.</li>
+      <li>A 32-bit consumer must use an 8-byte atomic load intrinsic (<code>Interlocked.Read</code> / <code>cmpxchg8b</code>) for the 64-bit fields.</li>
+    </ul>
+  </div>
+</div>
+
+<div style="margin-top:48px; color:var(--dim); font-size:12.5px; border-top:1px solid var(--border); padding-top:14px;">
+  Generated from <code>bindings/cpp/include/irtactile/shm/stream/layout.h</code>, which implements the contract
+  written in <code>spec/stream-shm/v1/fields.md</code>; this page is a map of both. All offsets are pinned in that
+  header by <code>static_assert</code>, so a layout change fails the build rather than drifting silently from this
+  document. Where this page and the spec markdown disagree, <b>the markdown wins</b>.
+</div>
+
+</div><!-- /wrap -->
+
+<script>
+"use strict";
+
+/* ============================================================
+ * Field data - mirrored from the stream binding static_asserts
+ * ============================================================ */
+const CAT = {
+  meta: { color: getCss('--c-meta'), label: 'Identity & sizes (pinned)' },
+  metaL:{ color: getCss('--c-meta'), label: 'Clock / version (layout, seqlock)' },
+  cfg:  { color: getCss('--c-cfg'),  label: 'Stream config (layout, seqlock)' },
+  addr: { color: getCss('--c-addr'), label: 'Addressing - read, never recompute (layout, seqlock)' },
+  diag: { color: getCss('--c-diag'), label: 'Producer diagnostics (layout, seqlock)' },
+  hot:  { color: getCss('--c-hot'),  label: 'Concurrent - bytes [80, 112), direct acquire loads' },
+  str:  { color: getCss('--c-str'),  label: 'Device identity strings (layout, seqlock)' },
+  res:  { color: getCss('--c-res'),  label: 'Reserved - producer zeroes, reader ignores' },
+  desc: { color: getCss('--c-hot'),  label: 'Block descriptor fields' },
+};
+function getCss(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+const HDR_FIELDS = [
+  {off:0,  size:4, name:'magic',               type:'uint32',  cat:'meta', desc:"kMagic = 0x41535449 ('ITSA'). 0 ⇒ header not yet written; wrong ⇒ Malformed."},
+  {off:4,  size:2, name:'versionMajor',        type:'uint16',  cat:'meta', desc:'Layout-break number. Reader must reject a mismatch (= 1 for v1.0).'},
+  {off:6,  size:2, name:'versionMinor',        type:'uint16',  cat:'metaL', desc:'Additive only. Reader must tolerate a higher value.'},
+  {off:8,  size:4, name:'headerBytes',         type:'uint32',  cat:'meta', desc:'Size of THIS header. Never copy more than this - a v1.0 reader facing a larger v1.1 header clamps.'},
+  {off:12, size:4, name:'totalBytes',          type:'uint32',  cat:'meta', desc:'Size of the whole section; equals the chosen size class, not the live layout footprint.'},
+  {off:16, size:4, name:'sampleFormat',        type:'uint32',  cat:'cfg',  desc:'SampleFormat enum: 1 = Float32, 2 = Int16. Unknown value ⇒ BadVersion.'},
+  {off:20, size:4, name:'channelLayout',       type:'uint32',  cat:'cfg',  desc:'ChannelLayout enum: 1 = Planar, 2 = Interleaved (reserved; v1 produces planar only).'},
+  {off:24, size:4, name:'channelCount',        type:'uint32',  cat:'cfg',  desc:'Number of channels, 1…32. A uint32 channel mask covers this exactly.'},
+  {off:28, size:4, name:'sampleRateMilliHz',   type:'uint32',  cat:'cfg',  desc:'Operative sample rate in millihertz - exact at every rate. E.g. 375000 = 375 Hz after decimation.'},
+  {off:32, size:4, name:'sourceSampleRate',    type:'uint32',  cat:'cfg',  desc:'Provenance: rate before decimation (Hz).'},
+  {off:36, size:4, name:'rateDivisor',         type:'uint32',  cat:'cfg',  desc:'Provenance: decimation ratio, 1…1024.'},
+  {off:40, size:4, name:'samplesPerBlock',     type:'uint32',  cat:'cfg',  desc:'Samples per channel in one block.'},
+  {off:44, size:4, name:'ringBlocks',          type:'uint32',  cat:'cfg',  desc:'Ring depth in slots, 2…256. Readable window is ringBlocks − 1.'},
+  {off:48, size:4, name:'bytesPerSample',      type:'uint32',  cat:'cfg',  desc:'4 (Float32) or 2 (Int16). Must agree with sampleFormat.'},
+  {off:52, size:4, name:'slotPayloadOffset',   type:'uint32',  cat:'addr', desc:'Slot base → plane 0 (= 64, sizeof(ShmBlockDesc)). Not a hardcoded constant: protects bindings from assuming the descriptor size forever.'},
+  {off:56, size:4, name:'channelArrayOffset',  type:'uint32',  cat:'addr', desc:'0 in v1: there is no channel table.'},
+  {off:60, size:4, name:'slotArrayOffset',     type:'uint32',  cat:'meta', desc:'Section base → slot[0] (= 256, align64 of the header). PINNED: a rewrite must never move it, because consumers map blind against it.'},
+  {off:64, size:4, name:'slotBytes',           type:'uint32',  cat:'addr', desc:'Slot-to-slot stride; a multiple of 64 so filling and copying never share a cache line.'},
+  {off:68, size:4, name:'channelPlaneBytes',   type:'uint32',  cat:'addr', desc:'Plane-to-plane stride inside a slot (≥ samplesPerBlock × bytesPerSample).'},
+  {off:72, size:4, name:'diagEngineBlockSize', type:'uint32',  cat:'diag', desc:'irTactile DSP block size: 32/64/128. Diagnostic only - never derive behaviour from it; unrelated to samplesPerBlock.'},
+  {off:76, size:4, name:'diagFramesPerPublish',type:'uint32',  cat:'diag', desc:'irTactile frames batched per publish. Diagnostic only - not a sample count; that is samplesPerBlock.'},
+  {off:80, size:8, name:'writeSeq',            type:'uint64',  cat:'hot',  desc:'THE counter: number of blocks published. Head of the ring. Acquire load / release store.'},
+  {off:88, size:8, name:'lastPublishQpc',      type:'uint64',  cat:'hot',  desc:'QueryPerformanceCounter value at the last publish - the input to the Stalled verdict. Acquire/release.'},
+  {off:96, size:4, name:'deviceState',         type:'uint32',  cat:'hot',  desc:'DeviceState: 0 = Inactive, 1 = Active, 2 = Closed. Acquire/release.'},
+  {off:100,size:4, name:'layoutSeq',           type:'uint32',  cat:'hot',  desc:'Seqlock over the layout fields: odd ⇒ layout fields being rewritten. Acquire/release.'},
+  {off:104,size:4, name:'wiredChannelMask',    type:'uint32',  cat:'hot',  desc:'Bit c ⇒ channel c has a source in the live graph. Changes on every graph rebuild - read live, not from the snapshot.'},
+  {off:108,size:4, name:'reserved1',           type:'uint32',  cat:'hot',  desc:'Producer zeroes; reader ignores.'},
+  {off:112,size:8, name:'qpcFrequency',        type:'uint64',  cat:'metaL', desc:'QPC ticks per second; applies to both QPC fields.'},
+  {off:120,size:40,name:'deviceGuid[40]',      type:'char[40]',cat:'str',  desc:'UTF-8, NUL-terminated device GUID string. A layout field: a restart that hands the section to a different device instance rewrites it under the seqlock. Producer must zero the unused tail so a byte-wise comparison of two headers is meaningful.'},
+  {off:160,size:64,name:'deviceName[64]',      type:'char[64]',cat:'str',  desc:'UTF-8, NUL-terminated friendly device name. A layout field: a restart that renames the device rewrites it, so re-read after any layoutSeq change. Producer must zero the unused tail.'},
+  {off:224,size:4, name:'producerPid',         type:'uint32',  cat:'diag', desc:"Producer's OS process id; 0 ⇒ unknown. Diagnostics and zombie adjudication only - is the process that owns this section still alive? PIDs are reused by every OS: a liveness verdict may treat 'PID no longer names a running process' as proof of abandonment, but never the converse. Always combine with deviceState/lastPublishQpc; never a substitute, and never derive addressing or timing from it."},
+  {off:228,size:28,name:'reserved[28]',        type:'uint8[28]',cat:'res', desc:'Padding to 256 B. Producer zeroes; reader IGNORES.'},
+];
+
+const DESC_FIELDS = [
+  {off:0,  size:8, name:'seq',               type:'uint64', cat:'desc', desc:'Block index, or kSlotBusy (0xFFFF…) while the producer fills the slot. slot = seq % ringBlocks. Acquire/release. The reader\u2019s check before AND after copying is an equality against the wanted seq.'},
+  {off:8,  size:8, name:'firstSampleIndex',  type:'uint64', cat:'desc', desc:'Stream-rate samples emitted before this block, including any later discarded. gap_samples = firstSampleIndex - (prev.firstSampleIndex + samplesPerBlock): 0 ⇒ continuous, non-zero ⇒ lost samples (overrun or abandoned partial). Monotonic within one producer lifetime only - a restart restarts the index at 0 while writeSeq keeps moving. Sample-unit only; never an offset.'},
+  {off:16, size:8, name:'timestampQpc',      type:'uint64', cat:'desc', desc:'QPC at publish. Convert with the header\u2019s qpcFrequency.'},
+  {off:24, size:4, name:'flags',             type:'uint32', cat:'desc', desc:'BlockFlags: 0x1 = BlockSilence (all channels zero), 0x2 = BlockDiscontinuity (first block after start/reconfigure).'},
+  {off:28, size:4, name:'silentChannelMask', type:'uint32', cat:'desc', desc:'Bit c set ⇒ channel c is all-zero in this block.'},
+  {off:32, size:4, name:'layoutEpoch',       type:'uint32', cat:'desc', desc:'layoutSeq snapshot at publish. The reader rejects a block whose layoutEpoch does not match the snapshot it entered the copy with, defending against stale-geometry aliasing after a rewrite.'},
+  {off:36, size:28,name:'reserved[28]',      type:'uint8[28]',cat:'res',desc:'Padding to 64 B. Producer zeroes; reader IGNORES. There is no per-block sample count: every published block carries exactly samplesPerBlock samples per channel.'},
+];
+
+/* ============================================================
+ * Byte-grid rendering
+ * ============================================================ */
+function renderGrid(gridId, rulerId, legendId, tableId, detailId, fields, totalBytes, cols) {
+  const grid   = document.getElementById(gridId);
+  const detail = document.getElementById(detailId);
+  let pinned = null;
+
+  // ruler
+  if (rulerId) {
+    const ruler = document.getElementById(rulerId);
+    ruler.style.gridTemplateColumns = `repeat(${cols},1fr)`;
+    for (let i = 0; i < cols; ++i) {
+      const s = document.createElement('span');
+      // one grid column == one byte, so the ruler labels the byte offset
+      // WITHIN a row; row r starts at byte cols × r.
+      s.textContent = i % 4 === 0 ? String(i) : '';
+      ruler.appendChild(s);
+    }
+  }
+
+  // legend
+  if (legendId) {
+    const legend = document.getElementById(legendId);
+    const seen = new Set();
+    fields.forEach(f => {
+      if (seen.has(f.cat)) return; seen.add(f.cat);
+      const el = document.createElement('span');
+      el.innerHTML = `<span class="sw" style="background:${CAT[f.cat].color}"></span>${CAT[f.cat].label}`;
+      legend.appendChild(el);
+    });
+  }
+
+  function showDetail(f) {
+    detail.innerHTML =
+      `<div class="fname">${f.name}</div>` +
+      `<div class="fmeta">offset ${f.off} · size ${f.size} B · ${f.type}` +
+      `${f.off + f.size <= 112 && f.off + f.size > 80 && f.off >= 80 ? ' · <span style="color:var(--c-hot)">concurrent field</span>' : ''}</div>` +
+      `<div>${f.desc}</div>`;
+  }
+
+  // one element per field segment; fields crossing a row boundary are split.
+  // explicit row+column placement: grid columns are global, so wrapping only
+  // works when each segment is positioned within its own row
+  const cells = [];
+  fields.forEach(f => {
+    let pos = f.off;
+    let first = true;
+    while (pos < f.off + f.size) {
+      const len = Math.min(f.size - (pos - f.off), cols - (pos % cols));
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.style.gridColumn = `${(pos % cols) + 1} / span ${len}`;
+      cell.style.gridRow = Math.floor(pos / cols) + 1;
+      cell.style.background = CAT[f.cat].color + (f.cat === 'res' ? '88' : 'cc');
+      if (first && f.size >= 2) {
+        const lbl = document.createElement('span');
+        lbl.className = 'lbl'; lbl.textContent = f.name;
+        if (f.size < 4) lbl.style.fontSize = '9px';
+        else if (f.size === 4) lbl.style.fontSize = '9.5px';
+        cell.appendChild(lbl);
+      }
+      cell.addEventListener('mouseenter', () => {
+        highlight(f, true);
+        if (!pinned) showDetail(f);
+      });
+      cell.addEventListener('mouseleave', () => highlight(f, false));
+      cell.addEventListener('click', () => {
+        if (pinned === f) { pinned = null; clearPins(); return; }
+        pinned = f; clearPins();
+        cells.filter(c => c._f === f).forEach(c => c.classList.add('pinned'));
+        showDetail(f);
+      });
+      cell._f = f;
+      cells.push(cell);
+      grid.appendChild(cell);
+      pos += len;
+      first = false;
+    }
+  });
+
+  function highlight(f, on) {
+    cells.forEach(c => { if (c._f === f) c.classList.toggle('hl', on); });
+  }
+  function clearPins() { cells.forEach(c => c.classList.remove('pinned')); }
+
+  // table
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  fields.forEach(f => {
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.innerHTML =
+      `<td class="num">${f.off}</td><td class="num">${f.size}</td>` +
+      `<td><span class="sw" style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${CAT[f.cat].color};margin-right:6px;"></span><code>${f.name}</code></td>` +
+      `<td class="mono">${f.type}</td><td>${f.desc}</td>`;
+    tr.addEventListener('mouseenter', () => highlight(f, true));
+    tr.addEventListener('mouseleave', () => highlight(f, false));
+    tr.addEventListener('click', () => showDetail(f));
+    tbody.appendChild(tr);
+  });
+}
+
+renderGrid('grid-hdr', 'ruler-hdr', 'legend-hdr', 'table-hdr', 'detail-hdr', HDR_FIELDS, 256, 32);
+renderGrid('grid-desc', null, 'legend-desc', 'table-desc', 'detail-desc', DESC_FIELDS, 64, 16);
+
+/* ============================================================
+ * Ring protocol simulator
+ * ============================================================ */
+(function () {
+  const slotsEl = document.getElementById('sim-slots');
+  const logEl   = document.getElementById('sim-log');
+  const ringSel = document.getElementById('sim-ring');
+  const spdSel  = document.getElementById('sim-speed');
+  const slowChk = document.getElementById('sim-slowreader');
+  const togBtn  = document.getElementById('sim-toggle');
+  const rstBtn  = document.getElementById('sim-reset');
+
+  let ring = +ringSel.value;
+  let speed = +spdSel.value;
+  let running = true;
+
+  // writer state
+  let writeSeq = 0;        // number of blocks published
+  let phase = 'claim';     // claim | fill | publish
+  let fillProgress = 0;
+
+  // reader state
+  let cursor = 0;
+  let readerChecking = 0;  // frames to display the "check desc" step
+  let readingSlot = -1;    // slot the reader is copying while readerChecking > 0
+  let published = 0, readCount = 0, dropped = 0;
+
+  // per-slot model
+  let slots = [];
+  function initSlots() {
+    slots = Array.from({length: ring}, () => ({ seq: null, busy: false, fill: 0, block: null }));
+  }
+  initSlots();
+
+  function buildDom() {
+    slotsEl.innerHTML = '';
+    slots.forEach((s, i) => {
+      const el = document.createElement('div');
+      el.className = 'slot';
+      el.innerHTML =
+        `<div class="title">slot ${i} <span style="float:right">seq % ${ring}</span></div>` +
+        `<div class="seqv">-</div>` +
+        `<div class="bar"><div></div></div>`;
+      slotsEl.appendChild(el);
+    });
+  }
+  buildDom();
+
+  function log(msg, cls) {
+    logEl.innerHTML = `<span class="${cls || ''}">${msg}</span>`;
+  }
+
+  function renderDom() {
+    const children = slotsEl.children;
+    const writerSlot = writeSeq % ring;              // slot the writer owns now
+    for (let i = 0; i < ring; ++i) {
+      const s = slots[i];
+      const el = children[i];
+      const seqv = el.querySelector('.seqv');
+      const bar = el.querySelector('.bar > div');
+      el.classList.toggle('busy', s.busy);
+      el.classList.toggle('reading', !s.busy && readerChecking > 0 && i === readingSlot);
+      if (s.busy) {
+        seqv.textContent = 'kSlotBusy';
+        seqv.className = 'seqv busy';
+      } else if (s.seq !== null) {
+        seqv.textContent = `seq = ${s.seq}`;
+        seqv.className = 'seqv';
+      } else {
+        seqv.textContent = '-';
+        seqv.className = 'seqv';
+      }
+      bar.style.width = (s.fill * 100) + '%';
+      bar.style.background = s.busy ? 'var(--c-hot)' : 'var(--c-meta)';
+    }
+    document.getElementById('st-writeseq').textContent = writeSeq;
+    document.getElementById('st-cursor').textContent = cursor;
+    document.getElementById('st-pub').textContent = published;
+    document.getElementById('st-read').textContent = readCount;
+    document.getElementById('st-drop').textContent = dropped;
+  }
+
+  // one writer tick: advance claim/fill/publish cycle
+  const FILL_STEPS = 14;
+  function writerTick() {
+    const slotIdx = writeSeq % ring;
+    const s = slots[slotIdx];
+    if (phase === 'claim') {
+      s.busy = true; s.fill = 0; s.seq = null;
+      phase = 'fill'; fillProgress = 0;
+      log(`writer claims slot ${slotIdx} - desc.seq ← kSlotBusy <i>(invalidates any copy in flight)</i>`);
+    } else if (phase === 'fill') {
+      fillProgress += 1;
+      s.fill = fillProgress / FILL_STEPS;
+      if (fillProgress >= FILL_STEPS) phase = 'publish';
+    } else { // publish
+      s.busy = false;
+      s.seq = writeSeq;
+      s.fill = 1;
+      writeSeq += 1;
+      published += 1;
+      phase = 'claim';
+      log(`writer publishes block ${writeSeq - 1} into slot ${slotIdx} - desc.seq ← ${writeSeq - 1}, writeSeq ← ${writeSeq}`);
+    }
+  }
+
+  // reader tick: cursor logic mirroring Reader::next()
+  function readerTick() {
+    if (readerChecking > 0) { readerChecking -= 1; if (readerChecking === 0) readingSlot = -1; return; }
+    if (cursor === writeSeq) return; // caught up
+
+    const window_ = ring - 1;
+    if (writeSeq - cursor > window_) {
+      const d = (writeSeq - cursor) - window_;
+      dropped += d;
+      log(`reader overrun: ${d} block(s) already recycled - counted as dropped, cursor snapped to oldest readable`, 'drop');
+      cursor = writeSeq - window_;
+      return;
+    }
+
+    const slotIdx = cursor % ring;
+    const s = slots[slotIdx];
+    if (s.seq !== cursor) {
+      // recycled or under construction (kSlotBusy): it is gone
+      dropped += 1;
+      log(`reader wanted block ${cursor}, slot ${slotIdx} holds ${s.busy ? 'kSlotBusy' : 'seq ' + s.seq} - discarded, move on`, 'drop');
+      cursor += 1;
+      return;
+    }
+    // check ok → copy → re-check ok (slot untouched during this tick)
+    readCount += 1;
+    cursor += 1;
+    readingSlot = slotIdx;
+    readerChecking = 3;
+    log(`reader copies block ${cursor - 1} from slot ${slotIdx}: check seq ✓ → copy planes → re-check seq ✓`, 'ok');
+  }
+
+  let acc = 0, racc = 0;
+  let last = performance.now();
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!running) { last = now; return; }
+    const dt = Math.min(now - last, 100);
+    last = now;
+
+    const wRate = 22 * speed;                 // writer ticks / s
+    const rRate = (slowChk.checked ? 5 : 16) * speed;
+    acc += dt / 1000 * wRate;
+    racc += dt / 1000 * rRate;
+    while (acc >= 1) { writerTick(); acc -= 1; }
+    while (racc >= 1) { readerTick(); racc -= 1; }
+    renderDom();
+  }
+  requestAnimationFrame(frame);
+
+  ringSel.addEventListener('change', () => { ring = +ringSel.value; reset(); });
+  spdSel.addEventListener('change', () => { speed = +spdSel.value; });
+  togBtn.addEventListener('click', () => {
+    running = !running;
+    togBtn.textContent = running ? '⏸ Pause' : '▶ Play';
+  });
+  rstBtn.addEventListener('click', reset);
+
+  function reset() {
+    writeSeq = 0; cursor = 0; published = 0; readCount = 0; dropped = 0;
+    phase = 'claim'; fillProgress = 0; readerChecking = 0; readingSlot = -1;
+    initSlots(); buildDom(); log('ring reset');
+    renderDom();
+  }
+})();
+</script>
+</body>
+</html>

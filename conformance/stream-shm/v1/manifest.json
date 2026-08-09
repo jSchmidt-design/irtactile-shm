@@ -1,0 +1,1495 @@
+{
+  "suite": "stream-shm",
+  "formatVersion": "1.0",
+  "schema": 2,
+  "generatedBy": "tools/mkvectors - do not hand-edit; regenerate and diff",
+  "conventions": {
+    "endianness": "little",
+    "blobPaths": "relative to this manifest's directory",
+    "sampleOrder": "planar channel-major: all of channel 0's samples, then channel 1, ...",
+    "samplesHash": "FNV-1a 64 (offset 14695981039346656037, prime 1099511628211) over the little-endian IEEE-754 bit patterns of the decoded float32 samples, in sampleOrder"
+  },
+  "cases": [
+    {
+      "id": "attach.zero_filled",
+      "summary": "zero-filled section is NotReady and retryable",
+      "blob": "decode/attach_zero_filled.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "NotReady",
+            "retry": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.bad_magic",
+      "summary": "wrong magic is Malformed and fatal (not retryable)",
+      "blob": "decode/attach_bad_magic.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.higher_version_major",
+      "summary": "a versionMajor the binding does not know is BadVersion",
+      "blob": "decode/attach_higher_version_major.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "BadVersion",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.higher_version_minor",
+      "summary": "a higher versionMinor is tolerated (additives live behind runtime offsets)",
+      "blob": "decode/attach_higher_version_minor.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false,
+            "fields": {
+              "channelCount": 4,
+              "samplesPerBlock": 8,
+              "ringBlocks": 2,
+              "sampleRateMilliHz": 3000000,
+              "sampleFormat": "Float32"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.unknown_sample_format",
+      "summary": "unknown sampleFormat is rejected (BadVersion), not defaulted",
+      "blob": "decode/attach_unknown_sample_format.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "BadVersion",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.unknown_channel_layout",
+      "summary": "unknown channelLayout is rejected (BadVersion), not defaulted",
+      "blob": "decode/attach_unknown_channel_layout.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "BadVersion",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.reserved_channel_layout",
+      "summary": "channelLayout=2 (Interleaved) is reserved: no v1 producer emits it; reject",
+      "blob": "decode/attach_reserved_channel_layout.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "BadVersion",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.offset_past_mapped",
+      "summary": "a section smaller than its header's totalBytes is Malformed",
+      "blob": "decode/attach_offset_past_mapped.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.hostile_samples_per_block",
+      "summary": "samplesPerBlock overrunning the channel plane is Malformed - the copy bound is validated once at attach, not clamped per block",
+      "blob": "decode/attach_hostile_samples_per_block.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.header_bytes_below_minimum",
+      "summary": "headerBytes smaller than the v1 minimum (64) is Malformed: the header cannot contain the fields the protocol needs",
+      "blob": "decode/attach_header_bytes_below_minimum.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.channel_count_out_of_range",
+      "summary": "channelCount above the normative maximum (32) is Malformed, not clamped",
+      "blob": "decode/attach_channel_count_out_of_range.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.ring_blocks_below_minimum",
+      "summary": "ringBlocks below the normative minimum (2) is Malformed: ring 1 offers the reader no protection at all",
+      "blob": "decode/attach_ring_blocks_below_minimum.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.zero_samples_per_block",
+      "summary": "samplesPerBlock == 0 is Malformed: the publish period is undefined",
+      "blob": "decode/attach_zero_samples_per_block.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.zero_sample_rate",
+      "summary": "sampleRateMilliHz == 0 is Malformed: period, wait timeout and staleness are all derived from it",
+      "blob": "decode/attach_zero_sample_rate.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.rate_divisor_out_of_range",
+      "summary": "rateDivisor outside 1..1024 is Malformed",
+      "blob": "decode/attach_rate_divisor_out_of_range.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.bytes_per_sample_mismatch",
+      "summary": "bytesPerSample disagreeing with sampleFormat is Malformed - a binding must not pick one and ignore the other",
+      "blob": "decode/attach_bytes_per_sample_mismatch.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.payload_overlaps_descriptor",
+      "summary": "slotPayloadOffset inside the descriptor (< 64) is Malformed: plane 0 would alias the block descriptor",
+      "blob": "decode/attach_payload_overlaps_descriptor.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.unaligned_slot_array_offset",
+      "summary": "slotArrayOffset not a multiple of bytesPerSample is Malformed: every plane in the section would be misaligned",
+      "blob": "decode/attach_unaligned_slot_array_offset.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.unaligned_slot_bytes",
+      "summary": "slotBytes not a multiple of bytesPerSample is Malformed: alignment would alternate from slot to slot",
+      "blob": "decode/attach_unaligned_slot_bytes.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.unaligned_payload_offset",
+      "summary": "slotPayloadOffset not a multiple of bytesPerSample is Malformed",
+      "blob": "decode/attach_unaligned_payload_offset.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.unaligned_channel_plane",
+      "summary": "channelPlaneBytes not a multiple of bytesPerSample is Malformed: alignment would alternate from channel to channel",
+      "blob": "decode/attach_unaligned_channel_plane.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.slot_bytes_below_planes",
+      "summary": "slotBytes smaller than slotPayloadOffset + channelCount x channelPlaneBytes is Malformed: the last plane would run into the next slot",
+      "blob": "decode/attach_slot_bytes_below_planes.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.slot_array_inside_header",
+      "summary": "slotArrayOffset below headerBytes is Malformed: slot 0 would overlap the header",
+      "blob": "decode/attach_slot_array_inside_header.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.slot_array_overruns_section",
+      "summary": "the composite bound, not just the parts: slotArrayOffset, ringBlocks and slotBytes are each in range while slotArrayOffset + ringBlocks x slotBytes runs past the mapping",
+      "blob": "decode/attach_slot_array_overruns_section.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Malformed",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.rewrite_in_progress",
+      "summary": "a section whose layoutSeq is odd is NotReady and retryable, never read torn; the completed rewrite then attaches with the new layout",
+      "blob": "decode/attach_rewrite_in_progress_torn.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "NotReady",
+            "retry": true
+          }
+        },
+        {
+          "op": "patch",
+          "blob": "decode/attach_rewrite_in_progress_done.bin"
+        },
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false,
+            "fields": {
+              "channelCount": 2,
+              "samplesPerBlock": 16,
+              "layoutSeq": 2,
+              "channelPlaneBytes": 64,
+              "slotBytes": 192
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.nonzero_reserved_tolerated",
+      "summary": "non-zero reserved bytes are ignored, not rejected",
+      "blob": "decode/attach_nonzero_reserved_tolerated.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.grown_header_tolerated",
+      "summary": "a larger future header (headerBytes > 256) is tolerated: clamp the snapshot, follow slotArrayOffset",
+      "blob": "decode/attach_grown_header_tolerated.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false,
+            "fields": {
+              "slotPayloadOffset": 64
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "attach.request_mismatch",
+      "summary": "a StreamRequest field the section cannot satisfy is Mismatch, not retryable",
+      "blob": "decode/attach_request_mismatch.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "request": {
+            "channelCount": 6
+          },
+          "expect": {
+            "result": "Mismatch",
+            "retry": false,
+            "mismatchDetailContains": "channelCount"
+          }
+        }
+      ]
+    },
+    {
+      "id": "read.float32_blocks",
+      "summary": "five float32 blocks decode sample-exact, in order, with no drops",
+      "blob": "decode/read_float32_blocks.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "rewindToOldest"
+        },
+        {
+          "op": "next",
+          "block": {
+            "seq": 0,
+            "firstSampleIndex": 0,
+            "timestampQpc": 1000,
+            "flags": 2,
+            "silentChannelMask": 0,
+            "channelCount": 4,
+            "sampleCount": 8,
+            "samples": {
+              "tolerance": 0.0,
+              "hash": "0x48446381ef7ccd78",
+              "spot": [
+                [
+                  0,
+                  0,
+                  0.0
+                ],
+                [
+                  0,
+                  7,
+                  7.0
+                ],
+                [
+                  1,
+                  0,
+                  1000.0
+                ],
+                [
+                  3,
+                  7,
+                  3007.0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "next",
+          "block": {
+            "seq": 1,
+            "firstSampleIndex": 8,
+            "timestampQpc": 2000,
+            "flags": 0,
+            "silentChannelMask": 0,
+            "channelCount": 4,
+            "sampleCount": 8,
+            "samples": {
+              "tolerance": 0.0,
+              "hash": "0xb656fcea971bb945",
+              "spot": [
+                [
+                  0,
+                  0,
+                  8.0
+                ],
+                [
+                  0,
+                  7,
+                  15.0
+                ],
+                [
+                  1,
+                  0,
+                  1008.0
+                ],
+                [
+                  3,
+                  7,
+                  3015.0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "next",
+          "block": {
+            "seq": 2,
+            "firstSampleIndex": 16,
+            "timestampQpc": 3000,
+            "flags": 0,
+            "silentChannelMask": 0,
+            "channelCount": 4,
+            "sampleCount": 8,
+            "samples": {
+              "tolerance": 0.0,
+              "hash": "0x7e204a8cc9a54595",
+              "spot": [
+                [
+                  0,
+                  0,
+                  16.0
+                ],
+                [
+                  0,
+                  7,
+                  23.0
+                ],
+                [
+                  1,
+                  0,
+                  1016.0
+                ],
+                [
+                  3,
+                  7,
+                  3023.0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "next",
+          "block": {
+            "seq": 3,
+            "firstSampleIndex": 24,
+            "timestampQpc": 4000,
+            "flags": 0,
+            "silentChannelMask": 0,
+            "channelCount": 4,
+            "sampleCount": 8,
+            "samples": {
+              "tolerance": 0.0,
+              "hash": "0xf94271ab74f05255",
+              "spot": [
+                [
+                  0,
+                  0,
+                  24.0
+                ],
+                [
+                  0,
+                  7,
+                  31.0
+                ],
+                [
+                  1,
+                  0,
+                  1024.0
+                ],
+                [
+                  3,
+                  7,
+                  3031.0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "next",
+          "block": {
+            "seq": 4,
+            "firstSampleIndex": 32,
+            "timestampQpc": 5000,
+            "flags": 0,
+            "silentChannelMask": 0,
+            "channelCount": 4,
+            "sampleCount": 8,
+            "samples": {
+              "tolerance": 0.0,
+              "hash": "0x8b95f7dbf40078d5",
+              "spot": [
+                [
+                  0,
+                  0,
+                  32.0
+                ],
+                [
+                  0,
+                  7,
+                  39.0
+                ],
+                [
+                  1,
+                  0,
+                  1032.0
+                ],
+                [
+                  3,
+                  7,
+                  3039.0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "droppedBlocks",
+          "expect": 0
+        }
+      ]
+    },
+    {
+      "id": "read.latest_wins",
+      "summary": "latest() returns the newest complete block and skips the rest; skipped blocks are not counted as drops, and a caught-up reader reports end",
+      "blob": "decode/read_latest_a.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "latest",
+          "expect": "end"
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_latest_b.bin"
+        },
+        {
+          "op": "latest",
+          "block": {
+            "seq": 4,
+            "firstSampleIndex": 32,
+            "timestampQpc": 5000,
+            "flags": 0,
+            "silentChannelMask": 0,
+            "channelCount": 4,
+            "sampleCount": 8,
+            "samples": {
+              "tolerance": 0.0,
+              "hash": "0x8b95f7dbf40078d5",
+              "spot": [
+                [
+                  0,
+                  0,
+                  32.0
+                ],
+                [
+                  0,
+                  7,
+                  39.0
+                ],
+                [
+                  1,
+                  0,
+                  1032.0
+                ],
+                [
+                  3,
+                  7,
+                  3039.0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "latest",
+          "expect": "end"
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_latest_c.bin"
+        },
+        {
+          "op": "latest",
+          "block": {
+            "seq": 7,
+            "firstSampleIndex": 56,
+            "timestampQpc": 8000,
+            "flags": 0,
+            "silentChannelMask": 0,
+            "channelCount": 4,
+            "sampleCount": 8,
+            "samples": {
+              "tolerance": 0.0,
+              "hash": "0xb4f5d1332c2db7c5",
+              "spot": [
+                [
+                  0,
+                  0,
+                  56.0
+                ],
+                [
+                  0,
+                  7,
+                  63.0
+                ],
+                [
+                  1,
+                  0,
+                  1056.0
+                ],
+                [
+                  3,
+                  7,
+                  3063.0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "droppedBlocks",
+          "expect": 0
+        }
+      ]
+    },
+    {
+      "id": "read.cursor_starts_at_write_seq",
+      "summary": "attach seeds the cursor at writeSeq: no phantom gap on the first read",
+      "blob": "decode/read_cursor_starts_at_write_seq.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "writeSeq",
+          "expect": 10000000
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "droppedBlocks",
+          "expect": 0
+        }
+      ]
+    },
+    {
+      "id": "read.overrun_ring2_one_past_cursor",
+      "summary": "ring 2, one block past the cursor: it delivers",
+      "blob": "decode/read_overrun_ring2_one_past_a.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_overrun_ring2_one_past_b.bin"
+        },
+        {
+          "op": "next",
+          "block": {
+            "seq": 0,
+            "firstSampleIndex": 0,
+            "timestampQpc": 1000,
+            "flags": 2,
+            "silentChannelMask": 0,
+            "channelCount": 4,
+            "sampleCount": 8,
+            "samples": {
+              "tolerance": 0.0,
+              "hash": "0x48446381ef7ccd78",
+              "spot": [
+                [
+                  0,
+                  0,
+                  0.0
+                ],
+                [
+                  0,
+                  7,
+                  7.0
+                ],
+                [
+                  1,
+                  0,
+                  1000.0
+                ],
+                [
+                  3,
+                  7,
+                  3007.0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "droppedBlocks",
+          "expect": 0
+        }
+      ]
+    },
+    {
+      "id": "read.overrun_ring2_two_past_cursor",
+      "summary": "ring 2, two blocks past the cursor: exactly the newest survives; the gap is counted",
+      "blob": "decode/read_overrun_ring2_two_past_a.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_overrun_ring2_two_past_b.bin"
+        },
+        {
+          "op": "next",
+          "block": {
+            "seq": 1,
+            "firstSampleIndex": 8,
+            "timestampQpc": 2000,
+            "flags": 0,
+            "silentChannelMask": 0,
+            "channelCount": 4,
+            "sampleCount": 8,
+            "samples": {
+              "tolerance": 0.0,
+              "hash": "0xb656fcea971bb945",
+              "spot": [
+                [
+                  0,
+                  0,
+                  8.0
+                ],
+                [
+                  0,
+                  7,
+                  15.0
+                ],
+                [
+                  1,
+                  0,
+                  1008.0
+                ],
+                [
+                  3,
+                  7,
+                  3015.0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "droppedBlocks",
+          "expect": 1
+        }
+      ]
+    },
+    {
+      "id": "read.slot_busy_ring2",
+      "summary": "a slot still carrying kSlotBusy is rejected, not decoded; the loss is counted",
+      "blob": "decode/read_slot_busy_ring2_a.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_slot_busy_ring2_b.bin"
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "droppedBlocks",
+          "expect": 1
+        }
+      ]
+    },
+    {
+      "id": "read.abandoned_block",
+      "summary": "an abandoned partial block advances firstSampleIndex by the samples discarded (gap = 12 - (0 + 8) = 4), not by zero",
+      "blob": "decode/read_abandoned_block.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "rewindToOldest"
+        },
+        {
+          "op": "next",
+          "block": {
+            "seq": 0,
+            "firstSampleIndex": 0,
+            "timestampQpc": 1000,
+            "flags": 2,
+            "silentChannelMask": 0,
+            "channelCount": 4,
+            "sampleCount": 8,
+            "samples": {
+              "tolerance": 0.0,
+              "hash": "0x48446381ef7ccd78",
+              "spot": [
+                [
+                  0,
+                  0,
+                  0.0
+                ],
+                [
+                  0,
+                  7,
+                  7.0
+                ],
+                [
+                  1,
+                  0,
+                  1000.0
+                ],
+                [
+                  3,
+                  7,
+                  3007.0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "next",
+          "block": {
+            "seq": 1,
+            "firstSampleIndex": 12,
+            "timestampQpc": 2000,
+            "flags": 0,
+            "silentChannelMask": 0,
+            "channelCount": 4,
+            "sampleCount": 8,
+            "samples": {
+              "tolerance": 0.0,
+              "hash": "0x72c6cb636ec1bd95",
+              "spot": [
+                [
+                  0,
+                  0,
+                  12.0
+                ],
+                [
+                  0,
+                  7,
+                  19.0
+                ],
+                [
+                  1,
+                  0,
+                  1012.0
+                ],
+                [
+                  3,
+                  7,
+                  3019.0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "droppedBlocks",
+          "expect": 0
+        }
+      ]
+    },
+    {
+      "id": "read.seqlock_geometry",
+      "summary": "a layoutSeq rewrite (odd -> fields change -> even) is picked up on the next refresh; an addressing change classifies as Geometry",
+      "blob": "decode/read_seqlock_geometry_a.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "header",
+          "expect": {
+            "channelCount": 4,
+            "layoutSeq": 0
+          }
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_seqlock_geometry_b.bin"
+        },
+        {
+          "op": "refreshSnapshot",
+          "expect": true
+        },
+        {
+          "op": "reconfigureKind",
+          "expect": "Geometry"
+        },
+        {
+          "op": "header",
+          "expect": {
+            "channelCount": 2,
+            "layoutSeq": 2,
+            "slotBytes": 128
+          }
+        }
+      ]
+    },
+    {
+      "id": "read.seqlock_cosmetic",
+      "summary": "a diagnostic-only rewrite classifies as Cosmetic; geometry accessors are unchanged",
+      "blob": "decode/read_seqlock_cosmetic_a.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_seqlock_cosmetic_b.bin"
+        },
+        {
+          "op": "refreshSnapshot",
+          "expect": true
+        },
+        {
+          "op": "reconfigureKind",
+          "expect": "Cosmetic"
+        },
+        {
+          "op": "header",
+          "expect": {
+            "channelCount": 4,
+            "rateDivisor": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "read.seqlock_retry_bound",
+      "summary": "a layoutSeq left odd is never snapshotted: the bounded retry gives up and detaches rather than spinning or reading the torn header",
+      "blob": "decode/read_seqlock_retry_bound_a.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "header",
+          "expect": {
+            "channelCount": 4,
+            "layoutSeq": 0
+          }
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_seqlock_retry_bound_b.bin"
+        },
+        {
+          "op": "refreshSnapshot",
+          "expect": false
+        },
+        {
+          "op": "attached",
+          "expect": false
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        }
+      ]
+    },
+    {
+      "id": "read.reconfigure_detach",
+      "summary": "a rewrite that fails validation (samplesPerBlock overruns the plane) detaches the reader rather than copying to the new bound",
+      "blob": "decode/read_reconfigure_detach_a.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_reconfigure_detach_b.bin"
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "attached",
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "read.reconfigure_unknown_sample_format",
+      "summary": "a rewrite to an unknown sampleFormat detaches the reader; bytesPerSample still agrees with Float32, so nothing but the enum check can catch it",
+      "blob": "decode/read_reconfigure_unknown_sample_format_a.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_reconfigure_unknown_sample_format_b.bin"
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "attached",
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "read.reconfigure_reserved_channel_layout",
+      "summary": "a rewrite to channelLayout=2 (Interleaved, reserved) detaches the reader rather than decoding interleaved samples with planar strides",
+      "blob": "decode/read_reconfigure_reserved_channel_layout_a.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_reconfigure_reserved_channel_layout_b.bin"
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "attached",
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "read.reconfigure_consumed_by_next",
+      "summary": "a geometry rewrite consumed by next()'s internal refresh is no longer reported by the reader's last-reconfigure-kind, but is still classifiable against a header watermark taken before it",
+      "blob": "decode/read_reconfigure_consumed_by_next_a.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "markHeader"
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_reconfigure_consumed_by_next_b.bin"
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "reconfigureKind",
+          "expect": "Geometry"
+        },
+        {
+          "op": "refreshSnapshot",
+          "expect": true
+        },
+        {
+          "op": "reconfigureKind",
+          "expect": "None"
+        },
+        {
+          "op": "reconfigureSince",
+          "expect": "Geometry"
+        }
+      ]
+    },
+    {
+      "id": "read.layout_epoch_mismatch",
+      "summary": "a block whose layoutEpoch differs from the snapshot's layoutSeq is discarded, not decoded with the wrong strides",
+      "blob": "decode/read_layout_epoch_mismatch.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "rewindToOldest"
+        },
+        {
+          "op": "next",
+          "expect": "end"
+        },
+        {
+          "op": "droppedBlocks",
+          "expect": 1
+        }
+      ]
+    },
+    {
+      "id": "read.inflated_offsets_honored",
+      "summary": "slotPayloadOffset, slotBytes and channelPlaneBytes larger than the v1 formula gives are honored as published; nothing is recomputed",
+      "blob": "decode/read_inflated_offsets_a.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false,
+            "fields": {
+              "slotPayloadOffset": 128,
+              "slotBytes": 192,
+              "channelPlaneBytes": 32
+            }
+          }
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_inflated_offsets_b.bin"
+        },
+        {
+          "op": "next",
+          "block": {
+            "seq": 0,
+            "firstSampleIndex": 0,
+            "timestampQpc": 1000,
+            "flags": 2,
+            "silentChannelMask": 0,
+            "channelCount": 2,
+            "sampleCount": 4,
+            "samples": {
+              "tolerance": 0.0,
+              "hash": "0xdd5ddd26fef72358",
+              "spot": [
+                [
+                  0,
+                  0,
+                  0.0
+                ],
+                [
+                  0,
+                  3,
+                  3.0
+                ],
+                [
+                  1,
+                  0,
+                  1000.0
+                ],
+                [
+                  1,
+                  3,
+                  1003.0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "droppedBlocks",
+          "expect": 0
+        }
+      ]
+    },
+    {
+      "id": "read.int16_round_trip",
+      "summary": "int16 decodes via the +/-32767 convention within 1 LSB; raw -32768 yields -1.0000305 (clamped encode, asymmetric decode - never a wrap)",
+      "blob": "decode/read_int16_round_trip.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false,
+            "fields": {
+              "sampleFormat": "Int16"
+            }
+          }
+        },
+        {
+          "op": "rewindToOldest"
+        },
+        {
+          "op": "next",
+          "block": {
+            "seq": 0,
+            "firstSampleIndex": 0,
+            "timestampQpc": 1000,
+            "flags": 2,
+            "silentChannelMask": 0,
+            "channelCount": 2,
+            "sampleCount": 4,
+            "samples": {
+              "tolerance": 1e-05,
+              "spot": [
+                [
+                  0,
+                  0,
+                  0.0
+                ],
+                [
+                  0,
+                  1,
+                  0.5000152587890625
+                ],
+                [
+                  0,
+                  2,
+                  -0.5000152587890625
+                ],
+                [
+                  0,
+                  3,
+                  1.0
+                ],
+                [
+                  1,
+                  0,
+                  -1.000030517578125
+                ],
+                [
+                  1,
+                  1,
+                  -1.0
+                ],
+                [
+                  1,
+                  2,
+                  0.37675100564956665
+                ],
+                [
+                  1,
+                  3,
+                  -0.37675100564956665
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "op": "droppedBlocks",
+          "expect": 0
+        }
+      ]
+    },
+    {
+      "id": "read.liveness_states",
+      "summary": "Active+stale is Stalled; Inactive and Closed are legitimate quiet however stale",
+      "blob": "decode/read_liveness_active.bin",
+      "steps": [
+        {
+          "op": "attach",
+          "expect": {
+            "result": "Ok",
+            "retry": false
+          }
+        },
+        {
+          "op": "state",
+          "nowQpc": 1001,
+          "expect": "Live"
+        },
+        {
+          "op": "state",
+          "nowQpc": 2001000,
+          "expect": "Stalled"
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_liveness_inactive.bin"
+        },
+        {
+          "op": "state",
+          "nowQpc": 2001000,
+          "expect": "Quiet"
+        },
+        {
+          "op": "patch",
+          "blob": "decode/read_liveness_closed.bin"
+        },
+        {
+          "op": "state",
+          "nowQpc": 2001000,
+          "expect": "Closed"
+        }
+      ]
+    }
+  ]
+}
