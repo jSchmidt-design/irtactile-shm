@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0 - Unreleased
+
+- `spec/telemetry-shm/` - the channel model: `channel_model.md` (kinds, flags,
+  name rules, append-only), `channels/core.json` and `channels/ext.json`
+  (the normative `core.*` / `ext.*` tables, `ConnectionStatus`, `ext::Surface`).
+  The telemetry-shm wire format itself is not part of this release.
+- `tools/gen_channels/` - generates the tables into `bindings/cpp/.../telemetry/`
+  and `bindings/csharp/.../Telemetry/`; the output is committed and CI fails if
+  regeneration differs (`.github/workflows/channels.yml`).
+- `bindings/cpp` - `irtactile::telemetry-model` (header-only):
+  `channel_model.h`, `core_channels.h`, `ext_channels.h`, with a doctest suite.
+- `bindings/csharp` - `IrTactile.Shm.Telemetry` (`ChannelModel`, `CoreChannels`,
+  `ExtChannels`) with xunit tests.
+- `spec/common/seqlock.md` generalized to a counter guarding a whole frame
+  (`frameSeq`); `spec/common/versioning.md` gains the channel-model
+  append-only rule.
+
 ## 1.0.0 - 2026-08-09
 
 First public release. The repository publishes the irTactile shared-memory

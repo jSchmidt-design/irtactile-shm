@@ -36,6 +36,13 @@ if(NOT TARGET irtactile::stream-shm)
     add_library(irtactile::stream-shm ALIAS irtactile_shm_stream)
 endif()
 
+if(NOT TARGET irtactile::telemetry-model)
+    add_library(irtactile_telemetry_model INTERFACE)
+    target_include_directories(irtactile_telemetry_model INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+    target_compile_features(irtactile_telemetry_model INTERFACE cxx_std_17)
+    add_library(irtactile::telemetry-model ALIAS irtactile_telemetry_model)
+endif()
+
 include(FetchContent)
 
 # nlohmann/json: the conformance runner parses manifest.json with it.
@@ -95,7 +102,19 @@ else()
     add_test(NAME stream-shm-format COMMAND stream_shm_tests)
 endif()
 
-foreach(target conformance_runner stream_shm_tests)
+# --- channel model tests -----------------------------------------------------
+add_executable(telemetry_model_tests
+    doctest_main.cpp
+    telemetry/ChannelModel_test.cpp
+)
+target_link_libraries(telemetry_model_tests PRIVATE irtactile::telemetry-model doctest::doctest)
+if(DEFINED doctest_SOURCE_DIR AND EXISTS "${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake")
+    doctest_discover_tests(telemetry_model_tests)
+else()
+    add_test(NAME telemetry-model COMMAND telemetry_model_tests)
+endif()
+
+foreach(target conformance_runner stream_shm_tests telemetry_model_tests)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /permissive-)
     else()

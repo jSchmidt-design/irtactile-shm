@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "namespace": "core",
+  "channels": [
+    { "name": "core.suspension.deflection.FL", "unit": "m",   "min": -0.2,  "max": 0.2,   "kind": "continuous" },
+    { "name": "core.suspension.deflection.FR", "unit": "m",   "min": -0.2,  "max": 0.2,   "kind": "continuous" },
+    { "name": "core.suspension.deflection.RL", "unit": "m",   "min": -0.2,  "max": 0.2,   "kind": "continuous" },
+    { "name": "core.suspension.deflection.RR", "unit": "m",   "min": -0.2,  "max": 0.2,   "kind": "continuous" },
+    { "name": "core.suspension.velocity.FL",   "unit": "m/s", "min": -2,    "max": 2,     "kind": "continuous" },
+    { "name": "core.suspension.velocity.FR",   "unit": "m/s", "min": -2,    "max": 2,     "kind": "continuous" },
+    { "name": "core.suspension.velocity.RL",   "unit": "m/s", "min": -2,    "max": 2,     "kind": "continuous" },
+    { "name": "core.suspension.velocity.RR",   "unit": "m/s", "min": -2,    "max": 2,     "kind": "continuous" },
+    { "name": "core.suspension.acceleration.FL", "unit": "m/s2", "min": -200, "max": 200, "kind": "continuous" },
+    { "name": "core.suspension.acceleration.FR", "unit": "m/s2", "min": -200, "max": 200, "kind": "continuous" },
+    { "name": "core.suspension.acceleration.RL", "unit": "m/s2", "min": -200, "max": 200, "kind": "continuous" },
+    { "name": "core.suspension.acceleration.RR", "unit": "m/s2", "min": -200, "max": 200, "kind": "continuous" },
+    { "name": "core.gforce.X", "unit": "m/s2", "min": -50, "max": 50, "kind": "continuous" },
+    { "name": "core.gforce.Y", "unit": "m/s2", "min": -50, "max": 50, "kind": "continuous" },
+    { "name": "core.gforce.Z", "unit": "m/s2", "min": -50, "max": 50, "kind": "continuous" },
+    { "name": "core.input.throttle", "unit": "",  "min": 0,  "max": 1, "kind": "continuous" },
+    { "name": "core.input.brake",    "unit": "",  "min": 0,  "max": 1, "kind": "continuous" },
+    { "name": "core.input.clutch",   "unit": "",  "min": 0,  "max": 1, "kind": "continuous" },
+    { "name": "core.input.steering", "unit": "",  "min": -1, "max": 1, "kind": "continuous" },
+    { "name": "core.engine.rpm",               "unit": "rpm", "min": 0, "max": 20000, "kind": "continuous" },
+    { "name": "core.engine.manifold_pressure", "unit": "bar", "min": 0, "max": 5,     "kind": "continuous" },
+    { "name": "core.engine.ignition", "unit": "", "min": 0, "max": 1, "kind": "discrete" },
+    { "name": "core.engine.starter",  "unit": "", "min": 0, "max": 1, "kind": "discrete" },
+    { "name": "core.engine.limiter",  "unit": "", "min": 0, "max": 1, "kind": "discrete" },
+    { "name": "core.vehicle.velocity",  "unit": "m/s", "min": 0, "max": 120, "kind": "continuous" },
+    { "name": "core.vehicle.abs_level", "unit": "",    "min": 0, "max": 1,   "kind": "continuous" },
+    { "name": "core.steering.torque",        "unit": "Nm", "min": 0,   "max": 50, "kind": "continuous" },
+    { "name": "core.steering.torque_signed", "unit": "Nm", "min": -50, "max": 50, "kind": "continuous" },
+    { "name": "core.drivetrain.gear", "unit": "", "min": -1, "max": 10, "kind": "discrete" },
+    { "name": "core.session.status",  "unit": "", "min": 0,  "max": 4,  "kind": "discrete" }
+  ],
+  "enums": {
+    "ConnectionStatus": {
+      "doc": "Values of core.session.status.",
+      "values": { "Unknown": 0, "Disconnected": 1, "Connected": 2, "Driving": 3, "DrivingDataLoss": 4 }
+    }
+  }
+}

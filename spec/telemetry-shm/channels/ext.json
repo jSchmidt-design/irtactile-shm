@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "namespace": "ext",
+  "channels": [
+    { "name": "ext.tyre.temp.FL", "unit": "degC", "min": 0, "max": 150, "kind": "continuous" },
+    { "name": "ext.tyre.temp.FR", "unit": "degC", "min": 0, "max": 150, "kind": "continuous" },
+    { "name": "ext.tyre.temp.RL", "unit": "degC", "min": 0, "max": 150, "kind": "continuous" },
+    { "name": "ext.tyre.temp.RR", "unit": "degC", "min": 0, "max": 150, "kind": "continuous" },
+    { "name": "ext.brake.temp.FL", "unit": "degC", "min": 0, "max": 1000, "kind": "continuous" },
+    { "name": "ext.brake.temp.FR", "unit": "degC", "min": 0, "max": 1000, "kind": "continuous" },
+    { "name": "ext.brake.temp.RL", "unit": "degC", "min": 0, "max": 1000, "kind": "continuous" },
+    { "name": "ext.brake.temp.RR", "unit": "degC", "min": 0, "max": 1000, "kind": "continuous" },
+    { "name": "ext.wheel.speed.FL", "unit": "rad/s", "min": -50, "max": 500, "kind": "continuous" },
+    { "name": "ext.wheel.speed.FR", "unit": "rad/s", "min": -50, "max": 500, "kind": "continuous" },
+    { "name": "ext.wheel.speed.RL", "unit": "rad/s", "min": -50, "max": 500, "kind": "continuous" },
+    { "name": "ext.wheel.speed.RR", "unit": "rad/s", "min": -50, "max": 500, "kind": "continuous" },
+    { "name": "ext.wheel.surface.FL", "unit": "ext::Surface", "min": 0, "max": 15, "kind": "discrete" },
+    { "name": "ext.wheel.surface.FR", "unit": "ext::Surface", "min": 0, "max": 15, "kind": "discrete" },
+    { "name": "ext.wheel.surface.RL", "unit": "ext::Surface", "min": 0, "max": 15, "kind": "discrete" },
+    { "name": "ext.wheel.surface.RR", "unit": "ext::Surface", "min": 0, "max": 15, "kind": "discrete" },
+    { "name": "ext.engine.turbo_boost", "unit": "bar", "min": 0, "max": 3, "kind": "continuous" },
+    { "name": "ext.hybrid.deploy",      "unit": "",    "min": 0, "max": 1, "kind": "continuous" },
+    { "name": "ext.aero.drs",           "unit": "",    "min": 0, "max": 1, "kind": "discrete" }
+  ],
+  "arrays": [
+    { "name": "ext.suspension.deflection", "capacity": 8, "unit": "m",   "min": -0.2, "max": 0.2,   "kind": "continuous" },
+    { "name": "ext.suspension.velocity",   "capacity": 8, "unit": "m/s", "min": -2,   "max": 2,     "kind": "continuous" },
+    { "name": "ext.wheel.load",            "capacity": 8, "unit": "N",   "min": 0,    "max": 20000, "kind": "continuous" }
+  ],
+  "enums": {
+    "Surface": {
+      "doc": "Values of ext.wheel.surface.*. Append-only; 12..15 are reserved for additions.",
+      "values": { "Other": 0, "Asphalt": 1, "Concrete": 2, "Kerb": 3, "Grass": 4, "Gravel": 5,
+                  "Sand": 6, "Dirt": 7, "Snow": 8, "Ice": 9, "Cobbles": 10, "Water": 11 },
+      "reserved": [12, 15]
+    }
+  }
+}

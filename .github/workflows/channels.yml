@@ -1,0 +1,15 @@
+name: channels
+
+on:
+  push:
+    paths: ['spec/telemetry-shm/**', 'tools/gen_channels/**', 'bindings/**/telemetry/**', 'bindings/**/Telemetry/**']
+  pull_request:
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # The generated tables are committed; regenerating must change nothing.
+      - run: uv run tools/gen_channels/gen_channels.py --check

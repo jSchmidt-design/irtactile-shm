@@ -10,6 +10,7 @@ project(irtactile_shm_cpp LANGUAGES CXX)
 # Targets:
 #   irtactile::shm-common   - common/atomic.h (+ future common/version.h)
 #   irtactile::stream-shm   - stream/*, depends on shm-common
+#   irtactile::telemetry-model - telemetry/*: channel model + core/ext tables
 #   irtactile::shm          - umbrella convenience target
 # A telemetry-shm target joins here once that contract lands; it will depend
 # on shm-common exactly like stream-shm does.
@@ -24,12 +25,22 @@ target_compile_features(irtactile_shm_common INTERFACE cxx_std_17)
 add_library(irtactile_shm_stream INTERFACE)
 target_link_libraries(irtactile_shm_stream INTERFACE irtactile_shm_common)
 
+# Channel model (kinds, flags, name rules, core.* / ext.* tables). Header-only,
+# independent of shm-common: it carries no wire layout, only vocabulary.
+add_library(irtactile_telemetry_model INTERFACE)
+target_include_directories(irtactile_telemetry_model INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_features(irtactile_telemetry_model INTERFACE cxx_std_17)
+
 add_library(irtactile_shm INTERFACE)
-target_link_libraries(irtactile_shm INTERFACE irtactile_shm_common irtactile_shm_stream)
+target_link_libraries(irtactile_shm INTERFACE irtactile_shm_common irtactile_shm_stream irtactile_telemetry_model)
 
 add_library(irtactile::shm-common ALIAS irtactile_shm_common)
 add_library(irtactile::stream-shm ALIAS irtactile_shm_stream)
 add_library(irtactile::shm        ALIAS irtactile_shm)
+add_library(irtactile::telemetry-model ALIAS irtactile_telemetry_model)
 
 # Make the headers visible in IDE project trees; they are the whole deliverable.
 if(MSVC)
@@ -39,6 +50,9 @@ if(MSVC)
         include/irtactile/shm/stream/reader.h
         include/irtactile/shm/stream/win32.h
         include/irtactile/shm/stream.h
+        include/irtactile/telemetry/channel_model.h
+        include/irtactile/telemetry/core_channels.h
+        include/irtactile/telemetry/ext_channels.h
     )
     set_target_properties(irtactile_shm_headers PROPERTIES FOLDER "irtactile-shm")
 endif()

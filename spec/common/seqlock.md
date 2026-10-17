@@ -48,3 +48,45 @@ acquire loads, never from a snapshot.
 The per-read protocol that consumes the snapshot is in
 [../stream-shm/v1/README.md](../stream-shm/v1/README.md) - "The reader
 protocol".
+
+## Generalization: a counter that guards a whole frame
+
+`layoutSeq` guards the layout fields of a header that is otherwise written
+concurrently. The same protocol also guards a **whole frame** - a block that is
+rewritten as one unit on every publish (telemetry values, a descriptor table
+plus values). Such a section has no concurrent range: *every* byte is protected
+by the counter. Nothing in the protocol changes except the scope, so a format
+that needs it names its counter `frameSeq` (a section may carry both).
+
+Writer:
+
+```
+frameSeq += 1            // odd: write in progress     (release)
+write the frame fields
+frameSeqEnd = frameSeq + 1                              (release)
+frameSeq += 1            // even: stable
+```
+
+Reader (bounded retries):
+
+```
+for (try = 0; try < N; ++try) {
+    s1 = acquire_load(frameSeq);
+    if (s1 & 1) continue;                 // write in progress
+    copy the frame bytes you need;
+    s2 = acquire_load(frameSeqEnd);       // acquire fence before re-reading
+    if (s1 == s2 && acquire_load(frameSeq) == s1) return OK;
+}
+return KEEP_PREVIOUS_FRAME;
+```
+
+Rules that differ from `layoutSeq`:
+
+- **Bounded retries.** A reader on a real-time thread never spins unboundedly;
+  after N failed tries it keeps its previous frame and tries again next cycle.
+- **A partial copy is allowed** when the section lets the reader find the bytes
+  it needs without the rest (offsets live in the header, which is part of the
+  frame). The retry condition is the same: the counters must match after the
+  copy.
+- **Latest value only.** A frame section carries one frame; there is no queue.
+  A reader that falls behind loses frames, never reads a mix of two.

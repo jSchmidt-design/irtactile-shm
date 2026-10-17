@@ -37,3 +37,18 @@ may change between producer builds with no version bump and nothing observable
 to mark it. Depend on what the header asserts, not on what the current producer
 happens to do.
 
+
+## Channel model: append-only
+
+The channel model ([../telemetry-shm/channel_model.md](../telemetry-shm/channel_model.md))
+is versioned by its contents, not by a field:
+
+- A release may add channels, add enum values and use reserved values.
+- A release never removes, renames or changes the unit, kind, flags or meaning of
+  a published channel name. A retired name stays in the table (`"retired": true`)
+  so it is never re-used.
+- A reader resolves channels by **name**; table order and any producer-chosen
+  slot are not part of the contract.
+- A reader meets unknown names without error (they are simply not bound), and
+  must tolerate known names being absent (the channel is `OPTIONAL` or the
+  producer does not provide it).
