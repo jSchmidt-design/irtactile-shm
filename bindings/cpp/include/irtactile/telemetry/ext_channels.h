@@ -35,9 +35,15 @@ enum class Id : uint32_t {
     EngineTurboBoost,
     HybridDeploy,
     AeroDrs,
+    InputHandbrake,
+    VehicleTcActive,
+    TyrePressureFL,
+    TyrePressureFR,
+    TyrePressureRL,
+    TyrePressureRR,
 };
 
-inline constexpr uint32_t kCount = 19;
+inline constexpr uint32_t kCount = 25;
 
 inline constexpr ChannelDef kChannels[kCount] = {
     {"ext.tyre.temp.FL", "degC", 0.0f, 150.0f, Kind::Continuous, kFlagOptional, 0},
@@ -59,6 +65,12 @@ inline constexpr ChannelDef kChannels[kCount] = {
     {"ext.engine.turbo_boost", "bar", 0.0f, 3.0f, Kind::Continuous, kFlagOptional, 0},
     {"ext.hybrid.deploy", "", 0.0f, 1.0f, Kind::Continuous, kFlagOptional, 0},
     {"ext.aero.drs", "", 0.0f, 1.0f, Kind::Discrete, kFlagOptional, 0},
+    {"ext.input.handbrake", "", 0.0f, 1.0f, Kind::Continuous, kFlagOptional, 0},
+    {"ext.vehicle.tc_active", "", 0.0f, 1.0f, Kind::Discrete, kFlagOptional, 0},
+    {"ext.tyre.pressure.FL", "kPa", 0.0f, 400.0f, Kind::Continuous, kFlagOptional, 0},
+    {"ext.tyre.pressure.FR", "kPa", 0.0f, 400.0f, Kind::Continuous, kFlagOptional, 0},
+    {"ext.tyre.pressure.RL", "kPa", 0.0f, 400.0f, Kind::Continuous, kFlagOptional, 0},
+    {"ext.tyre.pressure.RR", "kPa", 0.0f, 400.0f, Kind::Continuous, kFlagOptional, 0},
 };
 
 /// Array tables: `name` is the base name, elements are `name[0..arrayCapacity)`.

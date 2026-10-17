@@ -104,6 +104,9 @@ TEST_CASE("generated tables: counts and enums agree") {
     CHECK(std::string(core::kChannels[static_cast<uint32_t>(core::Id::SuspensionDeflectionFL)].name) ==
           "core.suspension.deflection.FL");
     CHECK(std::string(ext::kChannels[static_cast<uint32_t>(ext::Id::AeroDrs)].name) == "ext.aero.drs");
+    CHECK(std::string(ext::kChannels[static_cast<uint32_t>(ext::Id::InputHandbrake)].name) == "ext.input.handbrake");
+    CHECK(std::string(ext::kChannels[static_cast<uint32_t>(ext::Id::TyrePressureRR)].name) == "ext.tyre.pressure.RR");
+    CHECK(ext::Id::AeroDrs < ext::Id::InputHandbrake); // additions are appended: earlier ids keep their numbers
     CHECK(std::string(ext::kArrays[static_cast<uint32_t>(ext::ArrayId::WheelLoad)].name) == "ext.wheel.load");
 }
 

@@ -4,7 +4,9 @@
 
 - `spec/telemetry-shm/` - the channel model: `channel_model.md` (kinds, flags,
   name rules, append-only), `channels/core.json` and `channels/ext.json`
-  (the normative `core.*` / `ext.*` tables, `ConnectionStatus`, `ext::Surface`).
+  (the normative `core.*` / `ext.*` tables, `ConnectionStatus`, `ext::Surface`);
+  `ext.*` also carries `input.handbrake`, `vehicle.tc_active` and
+  `tyre.pressure.{FL,FR,RL,RR}` (appended, ids of earlier channels unchanged).
   The telemetry-shm wire format itself is not part of this release.
 - `tools/gen_channels/` - generates the tables into `bindings/cpp/.../telemetry/`
   and `bindings/csharp/.../Telemetry/`; the output is committed and CI fails if

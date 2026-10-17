@@ -25,6 +25,12 @@ public enum ExtChannel : uint
     EngineTurboBoost,
     HybridDeploy,
     AeroDrs,
+    InputHandbrake,
+    VehicleTcActive,
+    TyrePressureFL,
+    TyrePressureFR,
+    TyrePressureRL,
+    TyrePressureRR,
 }
 
 public enum ExtArray : uint
@@ -74,6 +80,12 @@ public static class ExtChannels
         new("ext.engine.turbo_boost", "bar", 0.0f, 3.0f, SignalKind.Continuous, ChannelFlags.Optional, 0),
         new("ext.hybrid.deploy", "", 0.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 0),
         new("ext.aero.drs", "", 0.0f, 1.0f, SignalKind.Discrete, ChannelFlags.Optional, 0),
+        new("ext.input.handbrake", "", 0.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 0),
+        new("ext.vehicle.tc_active", "", 0.0f, 1.0f, SignalKind.Discrete, ChannelFlags.Optional, 0),
+        new("ext.tyre.pressure.FL", "kPa", 0.0f, 400.0f, SignalKind.Continuous, ChannelFlags.Optional, 0),
+        new("ext.tyre.pressure.FR", "kPa", 0.0f, 400.0f, SignalKind.Continuous, ChannelFlags.Optional, 0),
+        new("ext.tyre.pressure.RL", "kPa", 0.0f, 400.0f, SignalKind.Continuous, ChannelFlags.Optional, 0),
+        new("ext.tyre.pressure.RR", "kPa", 0.0f, 400.0f, SignalKind.Continuous, ChannelFlags.Optional, 0),
     };
 
     /// <summary>Base names; elements are <c>name[0..ArrayCapacity)</c>.</summary>
