@@ -180,6 +180,34 @@ compiled by CI but not exercised by it. The two targets share every source file
 and differ in one `#if` (`Client.IsWindows`), so the gap is narrow - but it is a
 gap, and closing it means multi-targeting the test project to `net8.0;net48`.
 
+## telemetry-shm: your first producer
+
+`IrTactile.Shm.Telemetry.TelemetryProducer` / `TelemetrySection` implement the producer side of the
+[telemetry-shm v1 format](../../spec/telemetry-shm/v1/README.md) (Windows; the section is a named file mapping).
+
+```csharp
+using IrTactile.Shm.Telemetry;
+
+using var s = TelemetrySection.Create(TelemetrySection.NameFromEnvironment("mysim"), 256,
+                                      new ProducerIdentity { SimName = "My Sim" });
+TelemetryProducer p = s.Producer;
+int rpm  = p.Declare(CoreChannels.All[(int)CoreChannel.EngineRpm]);
+int pump = p.DeclareLocal("pump_pressure", "bar", 0, 10, SignalKind.Continuous);   // -> sim.<sourceId>.pump_pressure
+p.CommitLayout();
+p.SetState(ProducerState.Active, TelemetryClock.Now);
+
+while (running)
+{
+    p.BeginFrame();
+    p.Set(rpm, 6500f);
+    p.Set(pump, 4.2f);
+    p.EndFrame(TelemetryClock.Now, TelemetryClock.Now);
+}
+```
+
+`samples/TelemetryDemoProducer` is the full example. The test suite replays the `encode` vectors of
+`conformance/telemetry-shm/v1` and compares the section bytes with the C++ binding's output.
+
 ## License
 
 MIT - see [LICENSE](../../LICENSE).

@@ -121,3 +121,45 @@ For a worked producer that is not irTactile, read
 [`tools/mkvectors/mkvectors.cpp`](../../tools/mkvectors/mkvectors.cpp): it
 builds every conformance vector from `layout.h`'s arithmetic alone, and
 deliberately never includes `reader.h`, so a reader bug cannot bless itself.
+
+## telemetry-shm: your first producer
+
+The C++ binding for the [telemetry-shm v1 format](../../spec/telemetry-shm/v1/README.md):
+you publish telemetry, irTactile reads it as a source. Header-only, namespace
+`irtactile::shm::telemetry`, target `irtactile::telemetry-shm`.
+
+| Header | Content |
+|---|---|
+| `irtactile/shm/telemetry/layout.h` | Wire structs, offsets, validation, section names. |
+| `irtactile/shm/telemetry/producer.h` | `Producer`: `declare`, `commitLayout`, `beginFrame / set / event / endFrame`, `setState`. Portable (works on any aligned buffer). |
+| `irtactile/shm/telemetry/reader.h` | `Reader` (consumer), `ReturnReader` (producer reads the masks), `ReturnWriter` (irTactile). Portable. |
+| `irtactile/shm/telemetry/win32.h` | `ProducerSection`, `ConsumerSection`, `ReturnSection`, QPC, `sectionNameFromEnvironment()`. Windows only. |
+| `examples/telemetry_demo_producer` | The whole thing in ~100 lines. |
+
+```cpp
+using namespace irtactile::shm::telemetry;
+namespace tele = irt::telemetry;
+
+ProducerSection s;
+s.create(sectionNameFromEnvironment("mysim"), /*capacity*/ 256, Identity{/*simId*/ "", "My Sim"});
+Producer& p = s.producer();
+
+int rpm  = p.declare(tele::core::Id::EngineRpm);                    // properties come from the table
+int pump = p.declareLocal("pump_pressure", "bar", 0, 10, tele::Kind::Continuous);  // -> sim.<sourceId>.pump_pressure
+p.commitLayout();                                                    // the section becomes visible here
+p.setState(ProducerState::Active, qpcNow());
+
+for (;;) {
+    p.beginFrame();
+    p.set(rpm, 6500.f);
+    p.set(pump, 4.2f);
+    p.endFrame(/*sample*/ qpcNow(), /*publish*/ qpcNow());
+}
+```
+
+- Declare every channel before `commitLayout()`; changing the set later is another `commitLayout()` (a layout
+  rewrite). `setCar()` after the commit is one too.
+- Use `Inactive` while the sim is not running; keep calling `setState(Inactive, qpcNow())` as a heartbeat.
+- `ProducerSection::pollReturn()` shows which channels irTactile `accepted` (name and properties matched the
+  table) and `demanded` (something consumes them). Skipping undemanded channels is optional.
+- `tests/telemetry_conformance_runner` runs the vectors in `conformance/telemetry-shm/v1`.

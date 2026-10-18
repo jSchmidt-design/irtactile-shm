@@ -28,7 +28,7 @@ case.
 | Contract | Spec | Status |
 |---|---|---|
 | **stream-shm** - irTactile publishes the per-device audio stream it drives; consumers read blocks of samples | [spec/stream-shm/v1](spec/stream-shm/v1/README.md) | v1.0 |
-| **telemetry-shm** - a third-party bridge writes telemetry from a game irTactile has no native support for, and irTactile drives effects from it (planned) | - | not yet published |
+| **telemetry-shm** - a third-party bridge writes telemetry from a game irTactile has no native support for, and irTactile drives effects from it | [spec/telemetry-shm/v1](spec/telemetry-shm/v1/README.md) | v1.0 |
 
 **What v1 promises.** The v1 layout is frozen. Minor versions are additive only -
 new enum values, previously reserved space, a grown header - and a consumer written

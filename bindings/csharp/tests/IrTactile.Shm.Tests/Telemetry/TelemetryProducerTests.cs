@@ -1,0 +1,142 @@
+// telemetry-shm v1 producer: the encode cases of the conformance suite
+// (conformance/telemetry-shm/v1) must reproduce the golden section bytes. The golden bytes come
+// from the C++ binding, so a pass proves two independent implementations write the same layout.
+//
+// SPDX-License-Identifier: MIT
+
+using System.Runtime.InteropServices;
+using System.Text.Json;
+using IrTactile.Shm.Telemetry;
+
+namespace IrTactile.Shm.Tests.Telemetry;
+
+public unsafe class TelemetryProducerTests
+{
+    private static string FindDir()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            string candidate = Path.Combine(dir.FullName, "conformance", "telemetry-shm", "v1");
+            if (File.Exists(Path.Combine(candidate, "manifest.json"))) return candidate;
+            dir = dir.Parent;
+        }
+        throw new FileNotFoundException("conformance/telemetry-shm/v1 not found");
+    }
+
+    private static readonly string Dir = FindDir();
+
+    public static IEnumerable<object[]> EncodeCases()
+    {
+        using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(Dir, "manifest.json")));
+        foreach (JsonElement c in doc.RootElement.GetProperty("cases").EnumerateArray())
+        {
+            if (c.GetProperty("op").GetString() == "encode") yield return new object[] { c.GetProperty("name").GetString()! };
+        }
+    }
+
+    private static ChannelDef FindDef(string name)
+    {
+        foreach (var d in CoreChannels.All) if (d.Name == name) return d;
+        foreach (var d in ExtChannels.All) if (d.Name == name) return d;
+        foreach (var d in ExtChannels.Arrays) if (d.Name == name) return d;
+        throw new InvalidOperationException("unknown channel " + name);
+    }
+
+    private static SignalKind KindOf(string s) => s switch
+    {
+        "continuous" => SignalKind.Continuous,
+        "discrete" => SignalKind.Discrete,
+        "event" => SignalKind.Event,
+        _ => throw new InvalidOperationException(s),
+    };
+
+    [Theory]
+    [MemberData(nameof(EncodeCases))]
+    public void Encode_ReproducesGoldenBytes(string name)
+    {
+        using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(Dir, "manifest.json")));
+        JsonElement c = doc.RootElement.GetProperty("cases").EnumerateArray()
+            .Single(e => e.GetProperty("name").GetString() == name);
+
+        int bytes = c.GetProperty("bytes").GetInt32();
+        var buffer = new byte[bytes + 8];                 // +8: room to align
+        var pin = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        try
+        {
+            byte* raw = (byte*)pin.AddrOfPinnedObject();
+            byte* aligned = (byte*)(((long)raw + 7) & ~7L);
+            var section = new Span<byte>(aligned, bytes);
+            if (c.TryGetProperty("initial", out JsonElement init))
+            {
+                File.ReadAllBytes(Path.Combine(Dir, init.GetString()!)).AsSpan(0, bytes).CopyTo(section);
+            }
+
+            var p = new TelemetryProducer();
+            foreach (JsonElement op in c.GetProperty("script").EnumerateArray())
+            {
+                switch (op.GetProperty("op").GetString())
+                {
+                    case "open":
+                        Assert.Equal(TelemetryOpenResult.Ok, p.Open(aligned, bytes, op.GetProperty("capacity").GetInt32(),
+                            new ProducerIdentity
+                            {
+                                SimId = op.TryGetProperty("simId", out var si) ? si.GetString()! : "",
+                                SimName = op.TryGetProperty("simName", out var sn) ? sn.GetString()! : "",
+                                QpcFrequency = op.TryGetProperty("qpcFrequency", out var qf) ? qf.GetUInt64() : 10_000_000UL,
+                                Pid = op.TryGetProperty("pid", out var pid) ? pid.GetUInt32() : 4242u,
+                            }));
+                        break;
+                    case "declare":
+                        Assert.NotEqual(TelemetryProducer.InvalidSlot, p.Declare(FindDef(op.GetProperty("name").GetString()!)));
+                        break;
+                    case "declareLocal":
+                        Assert.NotEqual(TelemetryProducer.InvalidSlot, p.DeclareLocal(
+                            op.GetProperty("name").GetString()!,
+                            op.TryGetProperty("unit", out var u) ? u.GetString()! : "",
+                            op.TryGetProperty("min", out var mn) ? mn.GetSingle() : 0f,
+                            op.TryGetProperty("max", out var mx) ? mx.GetSingle() : 1f,
+                            KindOf(op.TryGetProperty("kind", out var k) ? k.GetString()! : "continuous"),
+                            op.TryGetProperty("flags", out var fl) ? (ChannelFlags)fl.GetUInt32() : ChannelFlags.None));
+                        break;
+                    case "car":
+                        p.SetCar(op.GetProperty("id").GetString()!, op.TryGetProperty("name", out var cn) ? cn.GetString()! : "");
+                        break;
+                    case "commit":
+                        Assert.True(p.CommitLayout());
+                        break;
+                    case "state":
+                        p.SetState(op.GetProperty("state").GetString() switch
+                        {
+                            "inactive" => ProducerState.Inactive,
+                            "active" => ProducerState.Active,
+                            _ => ProducerState.Closed,
+                        }, op.TryGetProperty("now", out var now) ? now.GetUInt64() : 0UL);
+                        break;
+                    case "frame":
+                        p.BeginFrame();
+                        if (op.TryGetProperty("set", out var set))
+                            foreach (var kv in set.EnumerateObject()) p.Set(int.Parse(kv.Name), kv.Value.GetSingle());
+                        if (op.TryGetProperty("event", out var ev))
+                            foreach (var kv in ev.EnumerateObject()) p.Event(int.Parse(kv.Name), kv.Value.GetSingle());
+                        p.EndFrame(op.TryGetProperty("frameQpc", out var fq) ? fq.GetUInt64() : 0UL,
+                                   op.TryGetProperty("now", out var nw) ? nw.GetUInt64() : 0UL);
+                        break;
+                    default:
+                        throw new InvalidOperationException("unknown op " + op.GetProperty("op").GetString());
+                }
+            }
+
+            byte[] golden = File.ReadAllBytes(Path.Combine(Dir, c.GetProperty("file").GetString()!));
+            Assert.Equal(bytes, golden.Length);
+            for (int i = 0; i < bytes; i++)
+            {
+                if (section[i] != golden[i]) Assert.Fail($"byte {i}: got {section[i]}, want {golden[i]}");
+            }
+        }
+        finally
+        {
+            pin.Free();
+        }
+    }
+}

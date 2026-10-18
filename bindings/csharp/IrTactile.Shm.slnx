@@ -2,6 +2,7 @@
   <Folder Name="/samples/">
     <Project Path="samples/StreamReader/StreamReader.csproj" />
     <Project Path="samples/StreamViewer/StreamViewer.csproj" />
+    <Project Path="samples/TelemetryDemoProducer/TelemetryDemoProducer.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/IrTactile.Shm/IrTactile.Shm.csproj" />

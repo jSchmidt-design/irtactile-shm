@@ -1,0 +1,750 @@
+{
+  "api": "telemetry-shm",
+  "cases": [
+    {
+      "expect": {
+        "attach": "Ok",
+        "capacity": 64,
+        "carId": "car_a",
+        "carName": "Car A",
+        "channelCount": 14,
+        "descNames": [
+          "core.engine.rpm",
+          "core.vehicle.velocity",
+          "core.drivetrain.gear",
+          "demo_wave",
+          "demo_bump",
+          "ext.tyre.temp.FL",
+          "ext.wheel.load[0]",
+          "ext.wheel.load[1]"
+        ],
+        "descs": [
+          {
+            "arrayCapacity": 0,
+            "flags": 0,
+            "kind": 0,
+            "slot": 0,
+            "unit": "rpm"
+          },
+          {
+            "kind": 1,
+            "slot": 2
+          },
+          {
+            "flags": 0,
+            "kind": 2,
+            "slot": 4
+          },
+          {
+            "flags": 2,
+            "slot": 5
+          },
+          {
+            "arrayCapacity": 8,
+            "arrayIndex": 1,
+            "flags": 2,
+            "name": "ext.wheel.load[1]",
+            "slot": 7
+          }
+        ],
+        "layoutSeq": 2,
+        "simId": "demo",
+        "simName": "Demo Sim"
+      },
+      "file": "decode/attach_valid_basic.bin",
+      "name": "attach_valid_basic",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "NotReady"
+      },
+      "file": "decode/attach_magic_zero.bin",
+      "name": "attach_magic_zero",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_bad_magic.bin",
+      "name": "attach_bad_magic",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "BadVersion"
+      },
+      "file": "decode/attach_higher_version_major.bin",
+      "name": "attach_higher_version_major",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok"
+      },
+      "file": "decode/attach_higher_version_minor_tolerated.bin",
+      "name": "attach_higher_version_minor_tolerated",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok"
+      },
+      "file": "decode/attach_nonzero_reserved_tolerated.bin",
+      "name": "attach_nonzero_reserved_tolerated",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_header_bytes_below_minimum.bin",
+      "name": "attach_header_bytes_below_minimum",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_total_bytes_exceeds_mapped.bin",
+      "mappedBytes": 8960,
+      "name": "attach_total_bytes_exceeds_mapped",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_capacity_not_multiple_of_64.bin",
+      "name": "attach_capacity_not_multiple_of_64",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_capacity_below_minimum.bin",
+      "name": "attach_capacity_below_minimum",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_capacity_above_maximum.bin",
+      "name": "attach_capacity_above_maximum",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_channel_count_exceeds_capacity.bin",
+      "name": "attach_channel_count_exceeds_capacity",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_desc_offset_unaligned.bin",
+      "name": "attach_desc_offset_unaligned",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_desc_offset_inside_header.bin",
+      "name": "attach_desc_offset_inside_header",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_values_array_overruns.bin",
+      "name": "attach_values_array_overruns",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_unknown_producer_state.bin",
+      "name": "attach_unknown_producer_state",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_sim_id_reserved.bin",
+      "name": "attach_sim_id_reserved",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_sim_id_invalid_chars.bin",
+      "name": "attach_sim_id_invalid_chars",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_sim_id_without_nul.bin",
+      "name": "attach_sim_id_without_nul",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_car_id_without_nul.bin",
+      "name": "attach_car_id_without_nul",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "NotReady"
+      },
+      "file": "decode/attach_layout_seq_odd.bin",
+      "name": "attach_layout_seq_odd",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "simId": "lmu"
+      },
+      "file": "decode/attach_sim_id_builtin_allowed.bin",
+      "name": "attach_sim_id_builtin_allowed",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "simId": ""
+      },
+      "file": "decode/attach_sim_id_empty.bin",
+      "name": "attach_sim_id_empty",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "eventCounts": {
+          "4": 1
+        },
+        "frameQpc": 2000,
+        "frameSeq": 2,
+        "lastPublishQpc": 2001,
+        "producerState": "active",
+        "result": "NewFrame",
+        "validSlots": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "values": {
+          "0": 6500.0,
+          "1": 42.5,
+          "2": 3.0,
+          "3": -0.5,
+          "4": 0.75
+        }
+      },
+      "file": "decode/frame_new.bin",
+      "name": "frame_new",
+      "op": "frame"
+    },
+    {
+      "expect": {
+        "result": "NoNewFrame"
+      },
+      "file": "decode/frame_no_new.bin",
+      "lastSeen": 2,
+      "name": "frame_no_new",
+      "op": "frame"
+    },
+    {
+      "expect": {
+        "producerState": "active",
+        "result": "NoNewFrame"
+      },
+      "file": "decode/frame_before_first.bin",
+      "name": "frame_before_first",
+      "op": "frame"
+    },
+    {
+      "expect": {
+        "result": "Torn"
+      },
+      "file": "decode/frame_odd_frame_seq_torn.bin",
+      "name": "frame_odd_frame_seq_torn",
+      "op": "frame"
+    },
+    {
+      "expect": {
+        "result": "Torn"
+      },
+      "file": "decode/frame_seq_end_mismatch_torn.bin",
+      "name": "frame_seq_end_mismatch_torn",
+      "op": "frame"
+    },
+    {
+      "expect": {
+        "producerState": "inactive",
+        "result": "NewFrame"
+      },
+      "file": "decode/frame_producer_inactive.bin",
+      "name": "frame_producer_inactive",
+      "op": "frame"
+    },
+    {
+      "expect": {
+        "producerState": "closed",
+        "result": "NewFrame"
+      },
+      "file": "decode/frame_producer_closed.bin",
+      "name": "frame_producer_closed",
+      "op": "frame"
+    },
+    {
+      "expect": {
+        "eventCounts": {
+          "4": 4294967295
+        },
+        "result": "NewFrame"
+      },
+      "file": "decode/frame_event_counter_wrap.bin",
+      "name": "frame_event_counter_wrap",
+      "op": "frame"
+    },
+    {
+      "expect": {
+        "frameSeq": 2,
+        "result": "NewFrame"
+      },
+      "file": "decode/frame_values_nan_passes_through.bin",
+      "name": "frame_values_nan_passes_through",
+      "op": "frame"
+    },
+    {
+      "expect": {
+        "accepted": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "attach": "Ok",
+        "capacity": 64,
+        "consumerState": "active",
+        "demanded": [
+          0,
+          4,
+          6
+        ],
+        "forLayoutSeq": 2,
+        "lastConsumeQpc": 3000,
+        "read": true
+      },
+      "file": "decode/return_valid_active.bin",
+      "name": "return_valid_active",
+      "op": "return"
+    },
+    {
+      "expect": {
+        "accepted": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "attach": "Ok",
+        "consumerState": "idle",
+        "demanded": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "read": true
+      },
+      "file": "decode/return_idle_everything_accepted_is_demanded.bin",
+      "name": "return_idle_everything_accepted_is_demanded",
+      "op": "return"
+    },
+    {
+      "expect": {
+        "attach": "NotReady"
+      },
+      "file": "decode/return_magic_zero.bin",
+      "name": "return_magic_zero",
+      "op": "return"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/return_bad_magic.bin",
+      "name": "return_bad_magic",
+      "op": "return"
+    },
+    {
+      "expect": {
+        "attach": "BadVersion"
+      },
+      "file": "decode/return_version_major_2.bin",
+      "name": "return_version_major_2",
+      "op": "return"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "read": false
+      },
+      "file": "decode/return_torn_odd_ret_seq.bin",
+      "name": "return_torn_odd_ret_seq",
+      "op": "return"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/return_capacity_invalid.bin",
+      "name": "return_capacity_invalid",
+      "op": "return"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/return_unknown_consumer_state.bin",
+      "name": "return_unknown_consumer_state",
+      "op": "return"
+    },
+    {
+      "bytes": 8968,
+      "expect": {},
+      "file": "encode/basic.bin",
+      "name": "encode_basic",
+      "op": "encode",
+      "script": [
+        {
+          "capacity": 64,
+          "op": "open",
+          "pid": 4242,
+          "qpcFrequency": 10000000,
+          "simId": "demo",
+          "simName": "Demo Sim"
+        },
+        {
+          "name": "core.engine.rpm",
+          "op": "declare"
+        },
+        {
+          "name": "core.vehicle.velocity",
+          "op": "declare"
+        },
+        {
+          "name": "core.drivetrain.gear",
+          "op": "declare"
+        },
+        {
+          "max": 1.0,
+          "min": -1.0,
+          "name": "demo_wave",
+          "op": "declareLocal"
+        },
+        {
+          "kind": "event",
+          "max": 1.0,
+          "min": 0.0,
+          "name": "demo_bump",
+          "op": "declareLocal"
+        },
+        {
+          "name": "ext.tyre.temp.FL",
+          "op": "declare"
+        },
+        {
+          "name": "ext.wheel.load",
+          "op": "declare"
+        },
+        {
+          "id": "car_a",
+          "name": "Car A",
+          "op": "car"
+        },
+        {
+          "op": "commit"
+        },
+        {
+          "now": 1000,
+          "op": "state",
+          "state": "active"
+        },
+        {
+          "event": {
+            "4": 0.75
+          },
+          "frameQpc": 2000,
+          "now": 2001,
+          "op": "frame",
+          "set": {
+            "0": 6500.0,
+            "1": 42.5,
+            "2": 3.0,
+            "3": -0.5
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 8968,
+      "expect": {},
+      "file": "encode/no_frames.bin",
+      "name": "encode_no_frames",
+      "op": "encode",
+      "script": [
+        {
+          "capacity": 64,
+          "op": "open",
+          "pid": 4242,
+          "qpcFrequency": 10000000,
+          "simId": "demo",
+          "simName": "Demo Sim"
+        },
+        {
+          "name": "core.engine.rpm",
+          "op": "declare"
+        },
+        {
+          "name": "core.vehicle.velocity",
+          "op": "declare"
+        },
+        {
+          "name": "core.drivetrain.gear",
+          "op": "declare"
+        },
+        {
+          "max": 1.0,
+          "min": -1.0,
+          "name": "demo_wave",
+          "op": "declareLocal"
+        },
+        {
+          "kind": "event",
+          "max": 1.0,
+          "min": 0.0,
+          "name": "demo_bump",
+          "op": "declareLocal"
+        },
+        {
+          "name": "ext.tyre.temp.FL",
+          "op": "declare"
+        },
+        {
+          "name": "ext.wheel.load",
+          "op": "declare"
+        },
+        {
+          "id": "car_a",
+          "name": "Car A",
+          "op": "car"
+        },
+        {
+          "op": "commit"
+        },
+        {
+          "now": 1000,
+          "op": "state",
+          "state": "active"
+        }
+      ]
+    },
+    {
+      "bytes": 8968,
+      "expect": {},
+      "file": "encode/event_counter.bin",
+      "name": "encode_event_counter",
+      "op": "encode",
+      "script": [
+        {
+          "capacity": 64,
+          "op": "open",
+          "pid": 4242,
+          "qpcFrequency": 10000000,
+          "simId": "demo",
+          "simName": "Demo Sim"
+        },
+        {
+          "name": "core.engine.rpm",
+          "op": "declare"
+        },
+        {
+          "name": "core.vehicle.velocity",
+          "op": "declare"
+        },
+        {
+          "name": "core.drivetrain.gear",
+          "op": "declare"
+        },
+        {
+          "max": 1.0,
+          "min": -1.0,
+          "name": "demo_wave",
+          "op": "declareLocal"
+        },
+        {
+          "kind": "event",
+          "max": 1.0,
+          "min": 0.0,
+          "name": "demo_bump",
+          "op": "declareLocal"
+        },
+        {
+          "name": "ext.tyre.temp.FL",
+          "op": "declare"
+        },
+        {
+          "name": "ext.wheel.load",
+          "op": "declare"
+        },
+        {
+          "id": "car_a",
+          "name": "Car A",
+          "op": "car"
+        },
+        {
+          "op": "commit"
+        },
+        {
+          "now": 1000,
+          "op": "state",
+          "state": "active"
+        },
+        {
+          "event": {
+            "4": 0.5
+          },
+          "frameQpc": 100,
+          "now": 101,
+          "op": "frame",
+          "set": {
+            "0": 1000.0
+          }
+        },
+        {
+          "event": {
+            "4": 0.5
+          },
+          "frameQpc": 101,
+          "now": 102,
+          "op": "frame",
+          "set": {
+            "0": 1001.0
+          }
+        },
+        {
+          "event": {
+            "4": 0.5
+          },
+          "frameQpc": 102,
+          "now": 103,
+          "op": "frame",
+          "set": {
+            "0": 1002.0
+          }
+        },
+        {
+          "frameQpc": 200,
+          "now": 201,
+          "op": "frame",
+          "set": {
+            "0": 1.0
+          }
+        }
+      ]
+    },
+    {
+      "bytes": 8968,
+      "expect": {},
+      "file": "encode/layout_rewrite_restart.bin",
+      "initial": "encode/basic.bin",
+      "name": "encode_layout_rewrite_restart",
+      "op": "encode",
+      "script": [
+        {
+          "capacity": 64,
+          "op": "open",
+          "pid": 4343,
+          "qpcFrequency": 10000000,
+          "simId": "demo",
+          "simName": "Demo Sim"
+        },
+        {
+          "name": "core.engine.rpm",
+          "op": "declare"
+        },
+        {
+          "max": 10.0,
+          "min": 0.0,
+          "name": "other",
+          "op": "declareLocal"
+        },
+        {
+          "id": "car_b",
+          "name": "Car B",
+          "op": "car"
+        },
+        {
+          "op": "commit"
+        }
+      ]
+    },
+    {
+      "bytes": 8968,
+      "expect": {},
+      "file": "encode/restart_after_crash.bin",
+      "initial": "encode/crashed.bin",
+      "name": "encode_restart_after_crash",
+      "op": "encode",
+      "script": [
+        {
+          "capacity": 64,
+          "op": "open",
+          "pid": 4242,
+          "qpcFrequency": 10000000,
+          "simId": "demo",
+          "simName": "Demo Sim"
+        },
+        {
+          "name": "core.engine.rpm",
+          "op": "declare"
+        },
+        {
+          "op": "commit"
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "version": 1
+}

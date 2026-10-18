@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.2.0 - Unreleased
+
+- `spec/telemetry-shm/v1/` - the telemetry-shm wire format: an inbound region the
+  producer creates (header, descriptor table, one latest-value frame with a
+  frame seqlock) and a return region irTactile creates (`accepted[]`,
+  `demanded[]`, consumer liveness). Names `irTactile_Telemetry_<sourceId>` /
+  `irTactile_TelemetryReturn_<sourceId>`; the producer reads its identity from
+  `IRTACTILE_TELEMETRY_SOURCE` / `IRTACTILE_TELEMETRY_SECTION`.
+- `conformance/telemetry-shm/v1/` - 45 vector cases (attach, frame, return region
+  decode; byte-exact producer encode), emitted by `tools/mkvectors_telemetry`.
+- `bindings/cpp` - `irtactile::telemetry-shm` (header-only): `Producer`, `Reader`,
+  `ReturnWriter` / `ReturnReader`, Win32 sections (`ProducerSection`,
+  `ConsumerSection`, `ReturnSection`); doctest suite and conformance runner;
+  `examples/telemetry_demo_producer`.
+- `bindings/csharp` - `TelemetryProducer` / `TelemetrySection`; the encode vectors
+  must reproduce the C++ bytes; `samples/TelemetryDemoProducer`.
+
 ## 1.1.0 - Unreleased
 
 - `spec/telemetry-shm/` - the channel model: `channel_model.md` (kinds, flags,

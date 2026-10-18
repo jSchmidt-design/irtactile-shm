@@ -12,8 +12,7 @@ project(irtactile_shm_cpp LANGUAGES CXX)
 #   irtactile::stream-shm   - stream/*, depends on shm-common
 #   irtactile::telemetry-model - telemetry/*: channel model + core/ext tables
 #   irtactile::shm          - umbrella convenience target
-# A telemetry-shm target joins here once that contract lands; it will depend
-# on shm-common exactly like stream-shm does.
+#   irtactile::telemetry-shm   - telemetry-shm v1: producer, reader, return region
 
 add_library(irtactile_shm_common INTERFACE)
 target_include_directories(irtactile_shm_common INTERFACE
@@ -34,12 +33,18 @@ target_include_directories(irtactile_telemetry_model INTERFACE
 )
 target_compile_features(irtactile_telemetry_model INTERFACE cxx_std_17)
 
+# telemetry-shm v1 wire format (producer + reader + return region). Header-only,
+# depends on shm-common (atomics) and the channel model.
+add_library(irtactile_shm_telemetry INTERFACE)
+target_link_libraries(irtactile_shm_telemetry INTERFACE irtactile_shm_common irtactile_telemetry_model)
+
 add_library(irtactile_shm INTERFACE)
-target_link_libraries(irtactile_shm INTERFACE irtactile_shm_common irtactile_shm_stream irtactile_telemetry_model)
+target_link_libraries(irtactile_shm INTERFACE irtactile_shm_common irtactile_shm_stream irtactile_shm_telemetry irtactile_telemetry_model)
 
 add_library(irtactile::shm-common ALIAS irtactile_shm_common)
 add_library(irtactile::stream-shm ALIAS irtactile_shm_stream)
 add_library(irtactile::shm        ALIAS irtactile_shm)
+add_library(irtactile::telemetry-shm ALIAS irtactile_shm_telemetry)
 add_library(irtactile::telemetry-model ALIAS irtactile_telemetry_model)
 
 # Make the headers visible in IDE project trees; they are the whole deliverable.
@@ -50,11 +55,27 @@ if(MSVC)
         include/irtactile/shm/stream/reader.h
         include/irtactile/shm/stream/win32.h
         include/irtactile/shm/stream.h
+        include/irtactile/shm/telemetry.h
+        include/irtactile/shm/telemetry/layout.h
+        include/irtactile/shm/telemetry/producer.h
+        include/irtactile/shm/telemetry/reader.h
+        include/irtactile/shm/telemetry/win32.h
         include/irtactile/telemetry/channel_model.h
         include/irtactile/telemetry/core_channels.h
         include/irtactile/telemetry/ext_channels.h
     )
     set_target_properties(irtactile_shm_headers PROPERTIES FOLDER "irtactile-shm")
+endif()
+
+# Examples (telemetry-shm demo producer). Opt-in for consumers, on for a standalone checkout.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(irtactile_shm_build_examples_default ON)
+else()
+    set(irtactile_shm_build_examples_default OFF)
+endif()
+option(IRTACTILE_SHM_BUILD_EXAMPLES "Build the telemetry-shm demo producer" ${irtactile_shm_build_examples_default})
+if(IRTACTILE_SHM_BUILD_EXAMPLES AND WIN32)
+    add_subdirectory(examples/telemetry_demo_producer)
 endif()
 
 # Tests: the conformance runner (tests/conformance_runner.cpp, see

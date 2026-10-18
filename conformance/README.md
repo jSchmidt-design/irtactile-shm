@@ -22,9 +22,10 @@ conformance/
 
 Direction is per API and, for bidirectional APIs, per region. stream-shm flows one
 way, so it has `decode/` only. telemetry-shm's **inbound** region (third party writes)
-will need `encode/` vectors - byte-identical output catches padding and endianness
-mistakes a decode test cannot - and its **return** region `decode/` again. Those land
-with the telemetry spec; the repo currently ships the stream-shm v1 decode suite alone.
+needs `encode/` vectors - byte-identical output catches padding and endianness
+mistakes a decode test cannot - and its **return** region `decode/` again. Both ship in
+`conformance/telemetry-shm/v1` (manifest schema 1, its own op set: `attach`, `frame`,
+`return`, `encode`; emitted by `tools/mkvectors_telemetry`).
 
 ## How a binding runs the suite
 

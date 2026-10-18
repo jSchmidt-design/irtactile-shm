@@ -43,6 +43,12 @@ if(NOT TARGET irtactile::telemetry-model)
     add_library(irtactile::telemetry-model ALIAS irtactile_telemetry_model)
 endif()
 
+if(NOT TARGET irtactile::telemetry-shm)
+    add_library(irtactile_shm_telemetry INTERFACE)
+    target_link_libraries(irtactile_shm_telemetry INTERFACE irtactile::shm-common irtactile::telemetry-model)
+    add_library(irtactile::telemetry-shm ALIAS irtactile_shm_telemetry)
+endif()
+
 include(FetchContent)
 
 # nlohmann/json: the conformance runner parses manifest.json with it.
@@ -114,7 +120,27 @@ else()
     add_test(NAME telemetry-model COMMAND telemetry_model_tests)
 endif()
 
-foreach(target conformance_runner stream_shm_tests telemetry_model_tests)
+# --- telemetry-shm v1 -------------------------------------------------------
+add_executable(telemetry_shm_tests
+    doctest_main.cpp
+    telemetry/TelemetryShm_test.cpp
+)
+target_link_libraries(telemetry_shm_tests PRIVATE irtactile::telemetry-shm doctest::doctest)
+if(DEFINED doctest_SOURCE_DIR AND EXISTS "${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake")
+    doctest_discover_tests(telemetry_shm_tests)
+else()
+    add_test(NAME telemetry-shm COMMAND telemetry_shm_tests)
+endif()
+
+# The C++ leg of the telemetry-shm vector suite (conformance/telemetry-shm/v1).
+add_executable(telemetry_conformance_runner telemetry_conformance_runner.cpp)
+target_link_libraries(telemetry_conformance_runner PRIVATE irtactile::telemetry-shm nlohmann_json::nlohmann_json)
+add_test(
+    NAME conformance-telemetry-shm-v1
+    COMMAND telemetry_conformance_runner ${CMAKE_CURRENT_SOURCE_DIR}/../../../conformance/telemetry-shm/v1/manifest.json
+)
+
+foreach(target conformance_runner stream_shm_tests telemetry_model_tests telemetry_shm_tests telemetry_conformance_runner)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /permissive-)
     else()
