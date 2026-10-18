@@ -33,7 +33,7 @@ are UTF-8, NUL-terminated within the field, tail zeroed. **Class** is the concur
 | 120 | 32 | `simName` | layout | display name of the simulator / source |
 | 152 | 64 | `carId` | layout | a change is a layout rewrite |
 | 216 | 32 | `carName` | layout | display name of the car |
-| 248 | 8 | `reserved1` | layout | producer zeroes, reader ignores |
+| 248 | 8 | `wheelsPerAxle` | layout | `uint8_t[8]`: wheels per axle, front to back (car `2,2`; truck `2,4,4`). The first `0` ends the list; all zero = unknown. Reject (`Malformed`) an entry above 8 or a non-zero entry after a zero. Defines the element order of `wheel` arrays and the element count of `axle` arrays; a change (car change) is a layout rewrite |
 
 The concurrent range of this format is `[80, 120)` (it contains the frame words; `frameQpc` is the first
 frame-guarded field).
@@ -49,8 +49,10 @@ frame-guarded field).
 | 88 | 4 | `kind` | `0` CONTINUOUS, `1` DISCRETE, `2` EVENT; reject others |
 | 92 | 4 | `flags` | bit 1 `OPTIONAL`; bit 0 and all others reserved (producer zeroes, reader ignores) |
 | 96 | 2 | `arrayIndex` | element index, `0` for scalars |
-| 98 | 2 | `arrayCapacity` | `0` = scalar, else declared max element count |
-| 100 | 28 | `reserved` | producer zeroes, reader ignores |
+| 98 | 2 | `arrayCapacity` | `0` = scalar, else the number of elements the producer declares (at most the table capacity for a `std.*` array); `arrayIndex` must be below it |
+| 100 | 1 | `provenance` | `0` unspecified (read as native), `1` native, `2` derived, `3` estimated; a descriptor with a larger value is rejected (that channel only) |
+| 101 | 1 | `layout` | array element layout: `0` index, `1` wheel, `2` axle; scalars carry `0`. A larger value, or a non-zero value on a scalar, rejects that descriptor. For a `std.*` array it must equal the table entry |
+| 102 | 26 | `reserved` | producer zeroes, reader ignores |
 
 A descriptor with an empty `name` is an unused slot.
 

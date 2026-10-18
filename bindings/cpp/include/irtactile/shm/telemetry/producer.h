@@ -10,7 +10,7 @@
 //
 //     Producer p;
 //     p.open(base, bytes, Producer::requiredBytes(256) ...);
-//     const int rpm = p.declare(core::Id::EngineRpm);
+//     const int rpm = p.declare(standard::Id::EngineRpm);
 //     const int wave = p.declareLocal("demo_wave", "", -1.f, 1.f, Kind::Continuous);
 //     p.commitLayout();
 //     p.setState(ProducerState::Active, qpcNow);
@@ -22,13 +22,13 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <initializer_list>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include <irtactile/shm/common/atomic.h>
-#include <irtactile/telemetry/core_channels.h>
-#include <irtactile/telemetry/ext_channels.h>
+#include <irtactile/telemetry/std_channels.h>
 
 #include "layout.h"
 
@@ -86,40 +86,66 @@ public:
     // --- declaration (staged until commitLayout) ----------------------------
 
     /// A scalar from a generated table. Properties are copied from the table, so they always match.
-    int declare(const irt::telemetry::ChannelDef& def)
+    int declare(const irt::telemetry::ChannelDef& def, irt::telemetry::Provenance provenance = irt::telemetry::Provenance::Unspecified)
     {
-        if (def.arrayCapacity != 0) return declareArray(def);
-        return addDesc(def.name, def.unit, def.rangeMin, def.rangeMax, def.kind, def.flags, 0, 0);
+        if (def.arrayCapacity != 0) return declareArray(def, 0, provenance);
+        return addDesc(def.name, def.unit, def.rangeMin, def.rangeMax, def.kind, def.flags, 0, 0, def.layout, provenance);
     }
-    int declare(irt::telemetry::core::Id id) { return declare(irt::telemetry::core::kChannels[static_cast<uint32_t>(id)]); }
-    int declare(irt::telemetry::ext::Id id) { return declare(irt::telemetry::ext::kChannels[static_cast<uint32_t>(id)]); }
-
-    /// All elements of an array table entry; returns the slot of element 0, elements are consecutive.
-    int declareArray(const irt::telemetry::ChannelDef& def)
+    int declare(irt::telemetry::standard::Id id, irt::telemetry::Provenance provenance = irt::telemetry::Provenance::Unspecified)
     {
-        if (def.arrayCapacity == 0) return declare(def);
-        if (m_stage.size() + def.arrayCapacity > m_capacity) return kInvalidSlot;
+        return declare(irt::telemetry::standard::kChannels[static_cast<uint32_t>(id)], provenance);
+    }
+
+    /// The first `count` elements of an array table entry (0 = the table capacity); the descriptors carry `count` as
+    /// their arrayCapacity. Returns the slot of element 0, elements are consecutive.
+    int declareArray(const irt::telemetry::ChannelDef& def, uint16_t count = 0,
+                     irt::telemetry::Provenance provenance = irt::telemetry::Provenance::Unspecified)
+    {
+        if (def.arrayCapacity == 0) return declare(def, provenance);
+        if (count == 0) count = def.arrayCapacity;
+        if (count > def.arrayCapacity) return kInvalidSlot;
+        if (m_stage.size() + count > m_capacity) return kInvalidSlot;
         int first = kInvalidSlot;
-        for (uint16_t i = 0; i < def.arrayCapacity; ++i) {
+        for (uint16_t i = 0; i < count; ++i) {
             const std::string name = std::string(def.name) + "[" + std::to_string(i) + "]";
-            const int s = addDesc(name, def.unit, def.rangeMin, def.rangeMax, def.kind, def.flags, i, def.arrayCapacity);
+            const int s = addDesc(name, def.unit, def.rangeMin, def.rangeMax, def.kind, def.flags, i, count, def.layout, provenance);
             if (s == kInvalidSlot) return kInvalidSlot;
             if (first == kInvalidSlot) first = s;
         }
         return first;
     }
-    int declareArray(irt::telemetry::ext::ArrayId id)
+    int declareArray(irt::telemetry::standard::ArrayId id, uint16_t count = 0,
+                     irt::telemetry::Provenance provenance = irt::telemetry::Provenance::Unspecified)
     {
-        return declareArray(irt::telemetry::ext::kArrays[static_cast<uint32_t>(id)]);
+        return declareArray(irt::telemetry::standard::kArrays[static_cast<uint32_t>(id)], count, provenance);
     }
 
     /// A producer-specific channel; the consumer publishes it as `sim.<simId>.<name>`.
     int declareLocal(std::string_view name, std::string_view unit, float rangeMin, float rangeMax,
-                     irt::telemetry::Kind kind, uint32_t flags = irt::telemetry::kFlagNone)
+                     irt::telemetry::Kind kind, uint32_t flags = irt::telemetry::kFlagNone,
+                     irt::telemetry::Provenance provenance = irt::telemetry::Provenance::Unspecified)
     {
         if (name.empty() || name.size() > irt::telemetry::kNameMax) return kInvalidSlot;
         if (!irt::telemetry::isValidChannelName(std::string("sim.x.") + std::string(name))) return kInvalidSlot;
-        return addDesc(name, unit, rangeMin, rangeMax, kind, flags, 0, 0);
+        return addDesc(name, unit, rangeMin, rangeMax, kind, flags, 0, 0, irt::telemetry::ArrayLayout::Index, provenance);
+    }
+
+    /// Wheels per axle, front to back (car `{2,2}`, motorcycle `{1,1}`). Empty = unknown. Entries are 1..8, at most 8
+    /// axles; an invalid list is stored as unknown. A change after commitLayout() is published immediately.
+    void setWheelLayout(const uint8_t* wheelsPerAxle, size_t axles)
+    {
+        uint8_t w[kMaxAxles] = {};
+        if (axles <= kMaxAxles) {
+            for (size_t i = 0; i < axles; ++i) w[i] = wheelsPerAxle[i];
+        }
+        if (!validWheelsPerAxle(w)) std::memset(w, 0, sizeof(w));
+        std::memcpy(m_wheelsPerAxle, w, sizeof(w));
+        if (m_committed) commitLayout();
+    }
+
+    void setWheelLayout(std::initializer_list<uint8_t> wheelsPerAxle)
+    {
+        setWheelLayout(wheelsPerAxle.begin(), wheelsPerAxle.size());
     }
 
     /// Session identity; a change after commitLayout() is a layout rewrite and is published immediately.
@@ -166,6 +192,7 @@ public:
         setString(h->simName, sizeof(h->simName), m_identity.simName);
         setString(h->carId, sizeof(h->carId), m_carId);
         setString(h->carName, sizeof(h->carName), m_carName);
+        std::memcpy(h->wheelsPerAxle, m_wheelsPerAxle, sizeof(m_wheelsPerAxle));
 
         ChannelDesc* descs = reinterpret_cast<ChannelDesc*>(m_base + l.descOffset);
         std::memset(descs, 0, static_cast<size_t>(m_capacity) * kDescBytes);
@@ -237,7 +264,9 @@ private:
     }
 
     int addDesc(std::string_view name, std::string_view unit, float rangeMin, float rangeMax,
-                irt::telemetry::Kind kind, uint32_t flags, uint16_t arrayIndex, uint16_t arrayCapacity)
+                irt::telemetry::Kind kind, uint32_t flags, uint16_t arrayIndex, uint16_t arrayCapacity,
+                irt::telemetry::ArrayLayout layout = irt::telemetry::ArrayLayout::Index,
+                irt::telemetry::Provenance provenance = irt::telemetry::Provenance::Unspecified)
     {
         if (m_stage.size() >= m_capacity || name.size() > irt::telemetry::kNameMax || unit.size() >= sizeof(ChannelDesc::unit)) {
             return kInvalidSlot;
@@ -251,6 +280,8 @@ private:
         d.flags = flags;
         d.arrayIndex = arrayIndex;
         d.arrayCapacity = arrayCapacity;
+        d.provenance = static_cast<uint8_t>(provenance);
+        d.layout = static_cast<uint8_t>(layout);
         m_stage.push_back(d);
         return static_cast<int>(m_stage.size() - 1);
     }
@@ -263,6 +294,7 @@ private:
     Identity                 m_identity;
     std::string              m_carId;
     std::string              m_carName;
+    uint8_t                  m_wheelsPerAxle[kMaxAxles] = {};
     std::vector<ChannelDesc> m_stage;
 };
 

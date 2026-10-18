@@ -191,7 +191,9 @@ using IrTactile.Shm.Telemetry;
 using var s = TelemetrySection.Create(TelemetrySection.NameFromEnvironment("mysim"), 256,
                                       new ProducerIdentity { SimName = "My Sim" });
 TelemetryProducer p = s.Producer;
-int rpm  = p.Declare(CoreChannels.All[(int)CoreChannel.EngineRpm]);
+int rpm  = p.Declare(Std.All[(int)StdChannel.EngineRpm], Provenance.Native);
+int defl = p.DeclareArray(Std.Arrays[(int)StdArray.SuspensionDeflection], 4);   // 4 of the table's 8 elements
+p.SetWheelLayout(2, 2);                                                         // wheels per axle, front to back
 int pump = p.DeclareLocal("pump_pressure", "bar", 0, 10, SignalKind.Continuous);   // -> sim.<sourceId>.pump_pressure
 p.CommitLayout();
 p.SetState(ProducerState.Active, TelemetryClock.Now);

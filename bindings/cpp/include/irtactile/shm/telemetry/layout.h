@@ -32,6 +32,8 @@ inline constexpr uint32_t kMinCapacity    = 64;
 inline constexpr uint32_t kMaxCapacity    = 8192;
 inline constexpr uint32_t kDescBytes      = 128;
 inline constexpr uint32_t kSimIdBytes     = 24;
+inline constexpr uint32_t kMaxAxles       = 8;             ///< entries of Header::wheelsPerAxle
+inline constexpr uint32_t kMaxWheelsPerAxle = 8;
 inline constexpr uint32_t kMaxFrameRetries = 4;
 
 enum class ProducerState : uint32_t { Inactive = 0, Active = 1, Closed = 2 };
@@ -69,7 +71,7 @@ struct Header {
     char     simName[32];
     char     carId[64];
     char     carName[32];
-    uint8_t  reserved1[8];
+    uint8_t  wheelsPerAxle[kMaxAxles];   ///< front -> back; first 0 ends the list; all 0 = unknown
 };
 
 /// Channel descriptor, 128 bytes.
@@ -82,7 +84,9 @@ struct ChannelDesc {
     uint32_t flags;
     uint16_t arrayIndex;
     uint16_t arrayCapacity;
-    uint8_t  reserved[28];
+    uint8_t  provenance;     ///< irt::telemetry::Provenance
+    uint8_t  layout;         ///< irt::telemetry::ArrayLayout
+    uint8_t  reserved[26];
 };
 
 /// Return header, 128 bytes.
@@ -111,7 +115,8 @@ static_assert(sizeof(Header) == kHeaderBytes, "inbound header is 256 bytes");
 static_assert(sizeof(ChannelDesc) == kDescBytes, "descriptor is 128 bytes");
 static_assert(sizeof(ReturnHeader) == kReturnHeaderBytes, "return header is 128 bytes");
 static_assert(offsetof(Header, frameSeq) == 80 && offsetof(Header, frameQpc) == 112, "concurrent range");
-static_assert(offsetof(Header, simName) == 120 && offsetof(Header, reserved1) == 248, "identity block");
+static_assert(offsetof(Header, simName) == 120 && offsetof(Header, wheelsPerAxle) == 248, "identity block");
+static_assert(offsetof(ChannelDesc, provenance) == 100 && offsetof(ChannelDesc, layout) == 101, "descriptor tail");
 static_assert(offsetof(ReturnHeader, retSeq) == 32 && offsetof(ReturnHeader, consumerPid) == 64, "return layout");
 
 /// Offsets for a given capacity. `valid` first keeps every array 8-byte aligned.
@@ -205,7 +210,7 @@ inline bool fieldString(const char* field, size_t n, std::string_view& out) noex
 
 inline bool isReservedSimId(std::string_view id) noexcept
 {
-    return id == "core" || id == "ext" || id == "sim" || id == "plugin" || id == "irtactile";
+    return id == "std" || id == "sim" || id == "plugin" || id == "irtactile";
 }
 
 namespace detail {
@@ -216,6 +221,17 @@ constexpr bool arrayFits(uint32_t offset, uint64_t bytes, uint32_t headerBytes, 
 }
 
 }  // namespace detail
+
+/// The wheels-per-axle list: entries <= kMaxWheelsPerAxle, no non-zero entry after a zero.
+inline bool validWheelsPerAxle(const uint8_t (&w)[kMaxAxles]) noexcept
+{
+    bool ended = false;
+    for (uint8_t n : w) {
+        if (n == 0) { ended = true; continue; }
+        if (ended || n > kMaxWheelsPerAxle) return false;
+    }
+    return true;
+}
 
 /// Validates a header copy against the size the OS reports for the mapping.
 /// Pass the snapshot that will be used for addressing, never the live header.
@@ -243,6 +259,7 @@ inline AttachResult validateHeader(const Header& h, size_t mappedBytes) noexcept
     if (!fieldString(h.simName, sizeof(h.simName), s)) return AttachResult::Malformed;
     if (!fieldString(h.carId, sizeof(h.carId), s)) return AttachResult::Malformed;
     if (!fieldString(h.carName, sizeof(h.carName), s)) return AttachResult::Malformed;
+    if (!validWheelsPerAxle(h.wheelsPerAxle)) return AttachResult::Malformed;
     return AttachResult::Ok;
 }
 
@@ -264,14 +281,30 @@ inline AttachResult validateReturnHeader(const ReturnHeader& h, size_t mappedByt
     return AttachResult::Ok;
 }
 
-/// Properties of a descriptor must equal the table entry of a core.* / ext.* name.
+/// Per-descriptor sanity: provenance and layout in range, layout only on arrays, index below capacity.
+/// A consumer drops a descriptor that fails this (not the whole layout).
+inline bool validateDescriptor(const ChannelDesc& d) noexcept
+{
+    if (d.provenance > static_cast<uint8_t>(irt::telemetry::Provenance::Estimated)) return false;
+    if (d.layout > static_cast<uint8_t>(irt::telemetry::ArrayLayout::Axle)) return false;
+    if (d.arrayCapacity == 0) return d.layout == static_cast<uint8_t>(irt::telemetry::ArrayLayout::Index) && d.arrayIndex == 0;
+    return d.arrayIndex < d.arrayCapacity;
+}
+
+/// Properties of a descriptor must equal the table entry of a std.* name. A producer may declare an array with
+/// a smaller capacity than the table (`1 <= arrayCapacity <= def.arrayCapacity`); provenance is not compared.
 inline bool matchesTable(const ChannelDesc& d, const irt::telemetry::ChannelDef& def, uint32_t arrayElement) noexcept
 {
     std::string_view unit;
     if (!fieldString(d.unit, sizeof(d.unit), unit) || unit != def.unit) return false;
-    return d.rangeMin == def.rangeMin && d.rangeMax == def.rangeMax &&
-           d.kind == static_cast<uint32_t>(def.kind) && d.flags == def.flags &&
-           d.arrayCapacity == def.arrayCapacity && d.arrayIndex == (def.arrayCapacity != 0 ? arrayElement : 0u);
+    if (d.rangeMin != def.rangeMin || d.rangeMax != def.rangeMax ||
+        d.kind != static_cast<uint32_t>(def.kind) || d.flags != def.flags ||
+        d.layout != static_cast<uint8_t>(def.layout)) {
+        return false;
+    }
+    if (def.arrayCapacity == 0) return d.arrayCapacity == 0 && d.arrayIndex == 0;
+    return d.arrayCapacity >= 1 && d.arrayCapacity <= def.arrayCapacity &&
+           d.arrayIndex < d.arrayCapacity && d.arrayIndex == arrayElement;
 }
 
 }  // namespace telemetry

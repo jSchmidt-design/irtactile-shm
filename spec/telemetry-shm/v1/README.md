@@ -68,11 +68,10 @@ consumer - channels are resolved **by name**.
 
 | Descriptor `name` | Meaning |
 |---|---|
-| a `core.*` or `ext.*` table name (`core.engine.rpm`, `ext.tyre.temp.FL`) | the standard channel. `unit`, `rangeMin`, `rangeMax`, `kind`, `flags` and `arrayCapacity` **must equal the table entry**; the bindings' `declare()` fills them from the table. |
+| a `std.*` table name (`std.engine.rpm`, `std.suspension.deflection[2]`) | the standard channel. `unit`, `rangeMin`, `rangeMax`, `kind`, `flags` and `layout` **must equal the table entry**; for an array element `1 <= arrayCapacity <= table capacity` and `arrayIndex < arrayCapacity` (the producer declares the elements it fills, see [channel_model.md](../channel_model.md#arrays)). `provenance` is the producer's statement and is not compared. The bindings' `declare()` fills all of it from the table. |
 | a *local* name (`demo_wave`, `pump[2]`) | a producer-specific channel; the consumer publishes it as `sim.<simId>.<name>` with the descriptor as given. `[a-z0-9_]` in every segment, last segment may also use upper case, optional `[i]` suffix. |
 
-Everything else is **rejected per channel** (not per source): a `plugin.*` or `sim.*` name, an unknown `core.*` /
-`ext.*` name, a table name whose properties contradict the table, invalid syntax, a duplicate name, an unknown
+Everything else is **rejected per channel** (not per source): a `plugin.*` or `sim.*` name, an unknown `std.*` name, a table name whose properties contradict the table, invalid syntax, a duplicate name, an unknown
 `kind`. A rejected channel stays invalid on the consumer side and its bit in `accepted[]` (return region) is clear.
 
 ### Header validation (consumer)
@@ -87,7 +86,8 @@ rejects the source (`Malformed`) when:
 - any of `descOffset`, `validOffset`, `eventCountOffset`, `valuesOffset` is not 8-byte aligned, lies before
   `headerBytes`, or its array does not end inside `totalBytes`;
 - `producerState` is not `Inactive`, `Active` or `Closed`;
-- `simId` is not empty and not a valid owner id, or is `core`, `ext`, `sim`, `plugin` or `irtactile`
+- `wheelsPerAxle` has an entry above 8, or a non-zero entry after a zero;
+- `simId` is not empty and not a valid owner id, or is `std`, `sim`, `plugin` or `irtactile`
   (a built-in simulator id is allowed - the source then extends that simulator's `sim.*` namespace).
 
 An empty `simId` means "use the `sourceId`". Strings are NUL-terminated within their field; a field without a NUL

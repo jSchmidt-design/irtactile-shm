@@ -2,13 +2,20 @@
 
 ## 1.2.0 - Unreleased
 
+- Descriptor `provenance` (offset 100) and `layout` (offset 101) take two bytes of `reserved`; header
+  `reserved1` becomes `wheelsPerAxle[8]` (offset 248). Both are in v1 in place (`versionMinor` stays 0): v1 was
+  never published. A table array may be declared with fewer elements than the table capacity
+  (`1 <= arrayCapacity <= table capacity`), so raising a capacity later breaks no producer. Bindings: `Provenance`,
+  `ArrayLayout`, `declare(..., provenance)`, `declareArray(def, count, provenance)`, `setWheelLayout()`,
+  `validateDescriptor()`; vectors for the wheel layout, descriptor rules and a smaller-capacity array.
+
 - `spec/telemetry-shm/v1/` - the telemetry-shm wire format: an inbound region the
   producer creates (header, descriptor table, one latest-value frame with a
   frame seqlock) and a return region irTactile creates (`accepted[]`,
   `demanded[]`, consumer liveness). Names `irTactile_Telemetry_<sourceId>` /
   `irTactile_TelemetryReturn_<sourceId>`; the producer reads its identity from
   `IRTACTILE_TELEMETRY_SOURCE` / `IRTACTILE_TELEMETRY_SECTION`.
-- `conformance/telemetry-shm/v1/` - 45 vector cases (attach, frame, return region
+- `conformance/telemetry-shm/v1/` - 60 vector cases (attach, frame, return region
   decode; byte-exact producer encode), emitted by `tools/mkvectors_telemetry`.
 - `bindings/cpp` - `irtactile::telemetry-shm` (header-only): `Producer`, `Reader`,
   `ReturnWriter` / `ReturnReader`, Win32 sections (`ProducerSection`,
@@ -20,18 +27,18 @@
 ## 1.1.0 - Unreleased
 
 - `spec/telemetry-shm/` - the channel model: `channel_model.md` (kinds, flags,
-  name rules, append-only), `channels/core.json` and `channels/ext.json`
-  (the normative `core.*` / `ext.*` tables, `ConnectionStatus`, `ext::Surface`);
-  `ext.*` also carries `input.handbrake`, `vehicle.tc_active` and
-  `tyre.pressure.{FL,FR,RL,RR}` (appended, ids of earlier channels unchanged).
+  array layouts, provenance, name rules, append-only) and `channels/std.json`
+  (the normative `std.*` table: 35 scalars, 17 wheel arrays of capacity 8 and one
+  axle array of capacity 4, `std::ConnectionStatus`, `std::Surface`). It replaces
+  the unreleased `core.json` / `ext.json` split; every `std.*` channel is
+  `OPTIONAL`.
   The telemetry-shm wire format itself is not part of this release.
 - `tools/gen_channels/` - generates the tables into `bindings/cpp/.../telemetry/`
   and `bindings/csharp/.../Telemetry/`; the output is committed and CI fails if
   regeneration differs (`.github/workflows/channels.yml`).
 - `bindings/cpp` - `irtactile::telemetry-model` (header-only):
-  `channel_model.h`, `core_channels.h`, `ext_channels.h`, with a doctest suite.
-- `bindings/csharp` - `IrTactile.Shm.Telemetry` (`ChannelModel`, `CoreChannels`,
-  `ExtChannels`) with xunit tests.
+  `channel_model.h`, `std_channels.h` (namespace `irt::telemetry::standard`), with a doctest suite.
+- `bindings/csharp` - `IrTactile.Shm.Telemetry` (`ChannelModel`, `Std`) with xunit tests.
 - `spec/common/seqlock.md` generalized to a counter guarding a whole frame
   (`frameSeq`); `spec/common/versioning.md` gains the channel-model
   append-only rule.

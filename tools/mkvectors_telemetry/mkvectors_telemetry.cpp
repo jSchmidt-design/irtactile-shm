@@ -43,13 +43,14 @@ json baseScript(bool withFrame = true)
 {
     json s = json::array({
         {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}},
-        {{"op", "declare"}, {"name", "core.engine.rpm"}},                  // 0
-        {{"op", "declare"}, {"name", "core.vehicle.velocity"}},            // 1
-        {{"op", "declare"}, {"name", "core.drivetrain.gear"}},             // 2
+        {{"op", "declare"}, {"name", "std.engine.rpm"}, {"provenance", 1}},  // 0
+        {{"op", "declare"}, {"name", "std.vehicle.speed"}},                // 1
+        {{"op", "declare"}, {"name", "std.drivetrain.gear"}},              // 2
         {{"op", "declareLocal"}, {"name", "demo_wave"}, {"min", -1.0}, {"max", 1.0}},                      // 3
         {{"op", "declareLocal"}, {"name", "demo_bump"}, {"min", 0.0}, {"max", 1.0}, {"kind", "event"}},    // 4
-        {{"op", "declare"}, {"name", "ext.tyre.temp.FL"}},                 // 5
-        {{"op", "declare"}, {"name", "ext.wheel.load"}},                   // 6..13
+        {{"op", "declare"}, {"name", "std.input.throttle"}},               // 5
+        {{"op", "declare"}, {"name", "std.wheel.load"}},                   // 6..13
+        {{"op", "wheels"}, {"list", json::array({2, 2})}},
         {{"op", "car"}, {"id", "car_a"}, {"name", "Car A"}},
         {{"op", "commit"}},
         {{"op", "state"}, {"state", "active"}, {"now", 1000}},
@@ -91,21 +92,21 @@ int main(int argc, char** argv)
 
     const size_t total = kL.totalBytes;
     const auto good = makeSection(baseScript());
-    const json names = json::array({"core.engine.rpm", "core.vehicle.velocity", "core.drivetrain.gear", "demo_wave",
-                                    "demo_bump", "ext.tyre.temp.FL", "ext.wheel.load[0]", "ext.wheel.load[7]"});
-
     // --- attach -------------------------------------------------------------
     {
         json ex = {{"attach", "Ok"}, {"capacity", 64}, {"channelCount", 14}, {"simId", "demo"}, {"simName", "Demo Sim"},
                    {"carId", "car_a"}, {"carName", "Car A"}, {"layoutSeq", 2}};
-        ex["descNames"] = json::array({"core.engine.rpm", "core.vehicle.velocity", "core.drivetrain.gear", "demo_wave",
-                                       "demo_bump", "ext.tyre.temp.FL", "ext.wheel.load[0]", "ext.wheel.load[1]"});
+        ex["wheelsPerAxle"] = json::array({2, 2, 0, 0, 0, 0, 0, 0});
+        ex["descNames"] = json::array({"std.engine.rpm", "std.vehicle.speed", "std.drivetrain.gear", "demo_wave",
+                                       "demo_bump", "std.input.throttle", "std.wheel.load[0]", "std.wheel.load[1]"});
         ex["descs"] = json::array({
-            {{"slot", 0}, {"unit", "rpm"}, {"kind", 0}, {"flags", 0}, {"arrayCapacity", 0}},
-            {{"slot", 2}, {"kind", 1}},
-            {{"slot", 4}, {"kind", 2}, {"flags", 0}},
+            {{"slot", 0}, {"unit", "rpm"}, {"kind", 0}, {"flags", 2}, {"arrayCapacity", 0}, {"provenance", 1}, {"layout", 0},
+             {"valid", true}, {"tableMatch", true}},
+            {{"slot", 2}, {"kind", 1}, {"provenance", 0}},
+            {{"slot", 4}, {"kind", 2}, {"flags", 0}, {"valid", true}},
             {{"slot", 5}, {"flags", 2}},
-            {{"slot", 7}, {"name", "ext.wheel.load[1]"}, {"arrayIndex", 1}, {"arrayCapacity", 8}, {"flags", 2}},
+            {{"slot", 7}, {"name", "std.wheel.load[1]"}, {"arrayIndex", 1}, {"arrayCapacity", 8}, {"flags", 2}, {"layout", 1},
+             {"valid", true}, {"tableMatch", true}},
         });
         s.section("attach_valid_basic", "attach", good, total, ex);
     }
@@ -123,7 +124,7 @@ int main(int argc, char** argv)
     attach("attach_bad_magic", "Malformed", [](auto& b) { poke<uint32_t>(b, 0, 0x12345678); });
     attach("attach_higher_version_major", "BadVersion", [](auto& b) { poke<uint16_t>(b, 4, 2); });
     attach("attach_higher_version_minor_tolerated", "Ok", [](auto& b) { poke<uint16_t>(b, 6, 9); });
-    attach("attach_nonzero_reserved_tolerated", "Ok", [](auto& b) { poke<uint32_t>(b, 52, 0xDEADBEEF); poke<uint8_t>(b, 248, 7); });
+    attach("attach_nonzero_reserved_tolerated", "Ok", [](auto& b) { poke<uint32_t>(b, 52, 0xDEADBEEF); });
     attach("attach_header_bytes_below_minimum", "Malformed", [](auto& b) { poke<uint32_t>(b, 8, 128); });
     attach("attach_total_bytes_exceeds_mapped", "Malformed", [](auto&) {}, {{"mappedBytes", total - 8}});
     attach("attach_capacity_not_multiple_of_64", "Malformed", [](auto& b) { poke<uint32_t>(b, 16, 100); });
@@ -134,7 +135,7 @@ int main(int argc, char** argv)
     attach("attach_desc_offset_inside_header", "Malformed", [](auto& b) { poke<uint32_t>(b, 24, 64); });
     attach("attach_values_array_overruns", "Malformed", [](auto& b) { poke<uint32_t>(b, 36, kL.totalBytes - 4); });
     attach("attach_unknown_producer_state", "Malformed", [](auto& b) { poke<uint32_t>(b, 96, 3); });
-    attach("attach_sim_id_reserved", "Malformed", [](auto& b) { std::memcpy(reinterpret_cast<uint8_t*>(b.data()) + 56, "core\0", 5); });
+    attach("attach_sim_id_reserved", "Malformed", [](auto& b) { std::memcpy(reinterpret_cast<uint8_t*>(b.data()) + 56, "std\0", 4); });
     attach("attach_sim_id_invalid_chars", "Malformed", [](auto& b) { std::memcpy(reinterpret_cast<uint8_t*>(b.data()) + 56, "Bad-Id\0", 7); });
     attach("attach_sim_id_without_nul", "Malformed", [](auto& b) { std::memset(reinterpret_cast<uint8_t*>(b.data()) + 56, 'a', 24); });
     attach("attach_car_id_without_nul", "Malformed", [](auto& b) { std::memset(reinterpret_cast<uint8_t*>(b.data()) + 152, 'x', 64); });
@@ -145,6 +146,65 @@ int main(int argc, char** argv)
     s.section("attach_sim_id_empty", "attach",
               mutated([](auto& b) { std::memset(reinterpret_cast<uint8_t*>(b.data()) + 56, 0, 24); }),
               total, {{"attach", "Ok"}, {"simId", ""}});
+
+    // wheelsPerAxle at header offset 248.
+    auto setWheels = [](std::vector<uint64_t>& b, std::initializer_list<uint8_t> w) {
+        uint8_t* p = reinterpret_cast<uint8_t*>(b.data()) + offsetof(Header, wheelsPerAxle);
+        std::memset(p, 0, kMaxAxles);
+        size_t i = 0;
+        for (uint8_t n : w) p[i++] = n;
+    };
+    s.section("attach_wheel_layout_valid", "attach", mutated([&](auto& b) { setWheels(b, {2, 4, 4}); }), total,
+              {{"attach", "Ok"}, {"wheelsPerAxle", json::array({2, 4, 4, 0, 0, 0, 0, 0})}});
+    s.section("attach_wheel_layout_unknown", "attach", mutated([&](auto& b) { setWheels(b, {}); }), total,
+              {{"attach", "Ok"}, {"wheelsPerAxle", json::array({0, 0, 0, 0, 0, 0, 0, 0})}});
+    s.section("attach_wheel_layout_eight_axles", "attach", mutated([&](auto& b) { setWheels(b, {1, 1, 1, 1, 1, 1, 1, 8}); }), total,
+              {{"attach", "Ok"}});
+    attach("attach_wheel_layout_gap", "Malformed", [&](auto& b) { setWheels(b, {0, 2}); });
+    attach("attach_wheel_layout_too_many_wheels", "Malformed", [&](auto& b) { setWheels(b, {9}); });
+    attach("attach_wheel_layout_entry_after_zero", "Malformed", [&](auto& b) { setWheels(b, {2, 2, 0, 0, 0, 0, 0, 2}); });
+
+    // Descriptor-level rules: the header stays valid, the descriptor is judged on its own.
+    auto descOf = [&](uint32_t slot) { return static_cast<size_t>(kL.descOffset) + slot * kDescBytes; };
+    s.section("attach_desc_bad_layout", "attach",
+              mutated([&](auto& b) { poke<uint8_t>(b, descOf(7) + offsetof(ChannelDesc, layout), 3); }), total,
+              {{"attach", "Ok"}, {"descs", json::array({{{"slot", 7}, {"valid", false}, {"tableMatch", false}}, {{"slot", 6}, {"valid", true}}})}});
+    s.section("attach_desc_bad_provenance", "attach",
+              mutated([&](auto& b) { poke<uint8_t>(b, descOf(0) + offsetof(ChannelDesc, provenance), 4); }), total,
+              {{"attach", "Ok"}, {"descs", json::array({{{"slot", 0}, {"valid", false}}})}});
+    s.section("attach_desc_scalar_with_layout", "attach",
+              mutated([&](auto& b) { poke<uint8_t>(b, descOf(1) + offsetof(ChannelDesc, layout), 1); }), total,
+              {{"attach", "Ok"}, {"descs", json::array({{{"slot", 1}, {"valid", false}, {"tableMatch", false}}})}});
+    s.section("attach_desc_array_index_not_below_capacity", "attach",
+              mutated([&](auto& b) { poke<uint16_t>(b, descOf(6) + offsetof(ChannelDesc, arrayCapacity), 4);
+                                     poke<uint16_t>(b, descOf(6) + offsetof(ChannelDesc, arrayIndex), 4); }), total,
+              {{"attach", "Ok"}, {"descs", json::array({{{"slot", 6}, {"valid", false}, {"tableMatch", false}}})}});
+    s.section("attach_desc_capacity_above_table", "attach",
+              mutated([&](auto& b) { poke<uint16_t>(b, descOf(6) + offsetof(ChannelDesc, arrayCapacity), 9); }), total,
+              {{"attach", "Ok"}, {"descs", json::array({{{"slot", 6}, {"valid", true}, {"tableMatch", false}}})}});
+    s.section("attach_desc_capacity_zero_on_table_array", "attach",
+              mutated([&](auto& b) { poke<uint16_t>(b, descOf(6) + offsetof(ChannelDesc, arrayCapacity), 0); }), total,
+              {{"attach", "Ok"}, {"descs", json::array({{{"slot", 6}, {"tableMatch", false}}})}});
+    s.section("attach_desc_layout_mismatch_with_table", "attach",
+              mutated([&](auto& b) { poke<uint8_t>(b, descOf(6) + offsetof(ChannelDesc, layout), 2); }), total,
+              {{"attach", "Ok"}, {"descs", json::array({{{"slot", 6}, {"valid", true}, {"tableMatch", false}}})}});
+    {
+        // A producer built against a smaller capacity: 4 of the table's 8 elements.
+        const auto small = makeSection(json::array({
+            {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}},
+            {{"op", "declare"}, {"name", "std.suspension.deflection"}, {"count", 4}, {"provenance", 1}},
+            {{"op", "wheels"}, {"list", json::array({2, 2})}},
+            {{"op", "commit"}},
+        }));
+        s.section("attach_desc_smaller_capacity_accepted", "attach", small, total,
+                  {{"attach", "Ok"}, {"channelCount", 4},
+                   {"descs", json::array({
+                       {{"slot", 0}, {"name", "std.suspension.deflection[0]"}, {"arrayIndex", 0}, {"arrayCapacity", 4}, {"layout", 1},
+                        {"provenance", 1}, {"valid", true}, {"tableMatch", true}},
+                       {{"slot", 3}, {"name", "std.suspension.deflection[3]"}, {"arrayIndex", 3}, {"arrayCapacity", 4}, {"valid", true},
+                        {"tableMatch", true}},
+                   })}});
+    }
 
     // --- frame --------------------------------------------------------------
     {
@@ -233,7 +293,7 @@ int main(int argc, char** argv)
     }
     encode("layout_rewrite_restart", json::array({
         {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4343}},
-        {{"op", "declare"}, {"name", "core.engine.rpm"}},
+        {{"op", "declare"}, {"name", "std.engine.rpm"}},
         {{"op", "declareLocal"}, {"name", "other"}, {"min", 0.0}, {"max", 10.0}},
         {{"op", "car"}, {"id", "car_b"}, {"name", "Car B"}},
         {{"op", "commit"}},
@@ -246,10 +306,19 @@ int main(int argc, char** argv)
         writeFile(s.dir / "encode" / "crashed.bin", crashed, total);
         encode("restart_after_crash", json::array({
             {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}},
-            {{"op", "declare"}, {"name", "core.engine.rpm"}},
+            {{"op", "declare"}, {"name", "std.engine.rpm"}},
             {{"op", "commit"}},
         }), "encode/crashed.bin");
     }
+    encode("wheel_layout", json::array({
+        {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}},
+        {{"op", "declare"}, {"name", "std.engine.rpm"}, {"provenance", 1}},
+        {{"op", "declare"}, {"name", "std.suspension.deflection"}, {"count", 4}, {"provenance", 2}},
+        {{"op", "declare"}, {"name", "std.suspension.third"}, {"count", 2}, {"provenance", 3}},
+        {{"op", "wheels"}, {"list", json::array({2, 4, 4})}},
+        {{"op", "commit"}},
+        {{"op", "wheels"}, {"list", json::array({1, 1})}},      // car change after the first commit: a layout rewrite
+    }));
 
     json manifest = {{"schema", 1}, {"api", "telemetry-shm"}, {"version", 1}, {"cases", s.cases}};
     std::ofstream(s.dir / "manifest.json") << manifest.dump(2) << "\n";

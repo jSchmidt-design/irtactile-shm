@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 //
 // Publishes at 100 Hz:
-//   core.engine.rpm, core.vehicle.velocity, core.drivetrain.gear   (required table channels)
-//   ext.tyre.temp.FL                                               (optional table channel)
+//   std.input.throttle, std.engine.rpm                             (table scalars)
+//   std.suspension.deflection[0..3]                                (table array: 4 of 8 elements, layout wheel, wheels {2,2})
 //   demo_wave                                                      (local channel -> sim.<simId>.demo_wave)
 //   demo_bump                                                      (EVENT, one every 2 s)
 // Keys: 'a' toggles Active / Inactive (sim running vs. sitting in a menu), 'q' quits.
@@ -40,10 +40,10 @@ int main()
     }
     Producer& p = s.producer();
 
-    const int rpm  = p.declare(tele::core::Id::EngineRpm);
-    const int vel  = p.declare(tele::core::Id::VehicleVelocity);
-    const int gear = p.declare(tele::core::Id::DrivetrainGear);
-    const int tyre = p.declare(tele::ext::Id::TyreTempFL);
+    const int thr  = p.declare(tele::standard::Id::InputThrottle, tele::Provenance::Native);
+    const int rpm  = p.declare(tele::standard::Id::EngineRpm, tele::Provenance::Native);
+    const int defl = p.declareArray(tele::standard::ArrayId::SuspensionDeflection, 4, tele::Provenance::Native);
+    p.setWheelLayout({2, 2});
     const int wave = p.declareLocal("demo_wave", "", -1.0f, 1.0f, tele::Kind::Continuous);
     const int bump = p.declareLocal("demo_bump", "", 0.0f, 1.0f, tele::Kind::Event);
     p.setCar("demo_car", "Demo Car");
@@ -76,9 +76,8 @@ int main()
         if (active) {
             p.beginFrame();
             p.set(rpm, static_cast<float>(3000.0 + 2500.0 * std::sin(t * 0.8)));
-            p.set(vel, static_cast<float>(40.0 + 30.0 * std::sin(t * 0.3)));
-            p.set(gear, 3.0f);
-            p.set(tyre, static_cast<float>(80.0 + 10.0 * std::sin(t * 0.1)));
+            p.set(thr, static_cast<float>(0.5 + 0.5 * std::sin(t * 0.3)));
+            for (int i = 0; i < 4; ++i) p.set(defl + i, static_cast<float>(0.02 * std::sin(t * 2.0 + i)));
             p.set(wave, static_cast<float>(std::sin(t * 6.2831853)));
             if (now >= nextBump) {
                 p.event(bump, 1.0f);

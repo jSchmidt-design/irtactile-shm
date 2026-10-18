@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: MIT
 //
-// Hand-written (the generated tables are core_channels.h / ext_channels.h).
+// Hand-written (the generated table is std_channels.h).
 // Header-only, no dependencies beyond the standard library.
 
 #ifndef IRTACTILE_TELEMETRY_CHANNEL_MODEL_H
@@ -27,6 +27,21 @@ enum class Kind : uint32_t {
 inline constexpr uint32_t kFlagNone     = 0;
 inline constexpr uint32_t kFlagOptional = 1u << 1;  ///< producer may leave the channel invalid
 
+/// Element order and labelling of an array (channel_model.md, "Arrays").
+enum class ArrayLayout : uint8_t {
+    Index = 0,   ///< free index; also the layout of every scalar
+    Wheel = 1,   ///< axle by axle front -> back, left -> right within an axle
+    Axle  = 2,   ///< front -> back
+};
+
+/// Who computed a value (descriptor field `provenance`). Values equal the plugin SDK `irt_provenance`.
+enum class Provenance : uint8_t {
+    Unspecified = 0,   ///< not stated; consumers read it as Native
+    Native      = 1,   ///< delivered by the sim API
+    Derived     = 2,   ///< exact computation from native values
+    Estimated   = 3,   ///< approximation
+};
+
 /// Descriptor name field size, including the terminating NUL.
 inline constexpr uint32_t kNameLen = 64;
 /// Longest channel name (kNameLen - 1).
@@ -38,7 +53,7 @@ inline constexpr uint32_t kArrayIndexMax = 65535;
 
 /// One entry of a generated channel table. For an array table entry `name` is
 /// the base name (without `[i]`) and `arrayCapacity` is the element count;
-/// scalars have `arrayCapacity == 0`.
+/// scalars have `arrayCapacity == 0` and `layout == ArrayLayout::Index`.
 struct ChannelDef {
     const char* name;
     const char* unit;
@@ -47,6 +62,7 @@ struct ChannelDef {
     Kind        kind;
     uint32_t    flags;
     uint16_t    arrayCapacity;
+    ArrayLayout layout;
 };
 
 namespace detail {
@@ -69,12 +85,12 @@ constexpr bool isValidOwnerId(std::string_view id) {
     return true;
 }
 
-/// True for ids no external source or plugin may claim: the four namespaces,
+/// True for ids no external source or plugin may claim: the three namespaces,
 /// `irtactile`, and the built-in simulator ids. (An external source may still
 /// declare a built-in simulator id as its simId; see channel_model.md.)
 constexpr bool isReservedOwnerId(std::string_view id) {
     constexpr std::string_view kReserved[] = {
-        "core", "ext", "sim", "plugin", "irtactile",
+        "std", "sim", "plugin", "irtactile",
         "iracing", "ams2", "lmu", "rf2", "ac", "acc", "ac_evo", "ac_rally", "rbr",
     };
     for (std::string_view r : kReserved) {
@@ -125,7 +141,7 @@ constexpr bool isValidChannelName(std::string_view name) {
         start = dot + 1;
     }
 
-    if (first == "core" || first == "ext") return segments >= 2;
+    if (first == "std") return segments >= 2;
     if (first == "sim" || first == "plugin") return segments >= 3;
     return false;
 }

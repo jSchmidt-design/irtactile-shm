@@ -9,7 +9,7 @@
 //     using var s = TelemetrySection.Create(TelemetrySection.NameFromEnvironment("demo"), 256,
 //                                           new ProducerIdentity { SimName = "My Sim" });
 //     TelemetryProducer p = s.Producer;
-//     int rpm = p.Declare(CoreChannels.All[(int)CoreChannel.EngineRpm]);
+//     int rpm = p.Declare(Std.All[(int)StdChannel.EngineRpm]);
 //     p.CommitLayout();
 //     p.SetState(ProducerState.Active, TelemetryClock.Now);
 //     p.BeginFrame(); p.Set(rpm, 5000f); p.EndFrame(TelemetryClock.Now, TelemetryClock.Now);
@@ -108,7 +108,13 @@ public static class TelemetryLayout
     internal const int OffEventCountOffset = 32, OffValuesOffset = 36, OffQpcFrequency = 40, OffProducerPid = 48;
     internal const int OffSimId = 56, OffFrameSeq = 80, OffLastPublishQpc = 88, OffProducerState = 96;
     internal const int OffLayoutSeq = 100, OffFrameSeqEnd = 104, OffFrameQpc = 112, OffSimName = 120;
-    internal const int OffCarId = 152, OffCarName = 216;
+    internal const int OffCarId = 152, OffCarName = 216, OffWheelsPerAxle = 248;
+
+    /// <summary>Entries of the header's wheels-per-axle list.</summary>
+    public const int MaxAxles = 8;
+
+    /// <summary>Most wheels one axle entry may hold.</summary>
+    public const int MaxWheelsPerAxle = 8;
 
     // Return header offsets.
     internal const int ROffCapacity = 16, ROffAccepted = 20, ROffDemanded = 24, ROffRetSeq = 32, ROffRetSeqEnd = 40;
@@ -137,7 +143,19 @@ public static class TelemetryLayout
     }
 
     internal static bool IsReservedSimId(string id) =>
-        id == "core" || id == "ext" || id == "sim" || id == "plugin" || id == "irtactile";
+        id == "std" || id == "sim" || id == "plugin" || id == "irtactile";
+
+    /// <summary>The wheels-per-axle list: entries at most 8, no non-zero entry after a zero.</summary>
+    public static bool IsValidWheelsPerAxle(ReadOnlySpan<byte> wheels)
+    {
+        bool ended = false;
+        foreach (byte n in wheels)
+        {
+            if (n == 0) { ended = true; continue; }
+            if (ended || n > MaxWheelsPerAxle) return false;
+        }
+        return true;
+    }
 }
 
 /// <summary>
@@ -156,6 +174,7 @@ public sealed unsafe class TelemetryProducer
     private ProducerIdentity _identity = new();
     private string _carId = "";
     private string _carName = "";
+    private readonly byte[] _wheelsPerAxle = new byte[TelemetryLayout.MaxAxles];
     private readonly List<byte[]> _stage = new();
 
     /// <summary>Slots the bound layout holds.</summary>
@@ -194,21 +213,26 @@ public sealed unsafe class TelemetryProducer
     }
 
     /// <summary>Declares a scalar from a generated table (properties copied from the table).</summary>
-    public int Declare(ChannelDef def)
+    public int Declare(ChannelDef def, Provenance provenance = Provenance.Unspecified)
     {
-        if (def.ArrayCapacity != 0) return DeclareArray(def);
-        return AddDesc(def.Name, def.Unit, def.RangeMin, def.RangeMax, def.Kind, def.Flags, 0, 0);
+        if (def.ArrayCapacity != 0) return DeclareArray(def, 0, provenance);
+        return AddDesc(def.Name, def.Unit, def.RangeMin, def.RangeMax, def.Kind, def.Flags, 0, 0, def.Layout, provenance);
     }
 
-    /// <summary>Declares every element of an array table entry; returns the slot of element 0.</summary>
-    public int DeclareArray(ChannelDef def)
+    /// <summary>
+    /// Declares the first <paramref name="count"/> elements of an array table entry (0 = the table capacity); the
+    /// descriptors carry <paramref name="count"/> as their arrayCapacity. Returns the slot of element 0.
+    /// </summary>
+    public int DeclareArray(ChannelDef def, int count = 0, Provenance provenance = Provenance.Unspecified)
     {
-        if (def.ArrayCapacity == 0) return Declare(def);
-        if (_stage.Count + def.ArrayCapacity > _capacity) return InvalidSlot;
+        if (def.ArrayCapacity == 0) return Declare(def, provenance);
+        if (count == 0) count = def.ArrayCapacity;
+        if (count < 0 || count > def.ArrayCapacity) return InvalidSlot;
+        if (_stage.Count + count > _capacity) return InvalidSlot;
         int first = InvalidSlot;
-        for (int i = 0; i < def.ArrayCapacity; i++)
+        for (int i = 0; i < count; i++)
         {
-            int s = AddDesc(def.Name + "[" + i + "]", def.Unit, def.RangeMin, def.RangeMax, def.Kind, def.Flags, i, def.ArrayCapacity);
+            int s = AddDesc(def.Name + "[" + i + "]", def.Unit, def.RangeMin, def.RangeMax, def.Kind, def.Flags, i, count, def.Layout, provenance);
             if (s == InvalidSlot) return InvalidSlot;
             if (first == InvalidSlot) first = s;
         }
@@ -217,11 +241,25 @@ public sealed unsafe class TelemetryProducer
 
     /// <summary>A producer-specific channel; the consumer publishes it as <c>sim.&lt;simId&gt;.&lt;name&gt;</c>.</summary>
     public int DeclareLocal(string name, string unit, float rangeMin, float rangeMax, SignalKind kind,
-                            ChannelFlags flags = ChannelFlags.None)
+                            ChannelFlags flags = ChannelFlags.None, Provenance provenance = Provenance.Unspecified)
     {
         if (string.IsNullOrEmpty(name) || name.Length > ChannelModel.NameMax) return InvalidSlot;
         if (!ChannelModel.IsValidChannelName("sim.x." + name)) return InvalidSlot;
-        return AddDesc(name, unit, rangeMin, rangeMax, kind, flags, 0, 0);
+        return AddDesc(name, unit, rangeMin, rangeMax, kind, flags, 0, 0, ArrayLayout.Index, provenance);
+    }
+
+    /// <summary>
+    /// Wheels per axle, front to back (car <c>{2,2}</c>, motorcycle <c>{1,1}</c>); empty = unknown. Entries are 1..8,
+    /// at most 8 axles; an invalid list is stored as unknown. After <see cref="CommitLayout"/> this is a layout rewrite.
+    /// </summary>
+    public void SetWheelLayout(params byte[] wheelsPerAxle)
+    {
+        Array.Clear(_wheelsPerAxle);
+        if (wheelsPerAxle.Length <= TelemetryLayout.MaxAxles && TelemetryLayout.IsValidWheelsPerAxle(wheelsPerAxle))
+        {
+            wheelsPerAxle.CopyTo(_wheelsPerAxle, 0);
+        }
+        if (_committed) CommitLayout();
     }
 
     /// <summary>Session identity; after <see cref="CommitLayout"/> this is a layout rewrite published immediately.</summary>
@@ -271,6 +309,7 @@ public sealed unsafe class TelemetryProducer
         SetString(TelemetryLayout.OffSimName, 32, _identity.SimName ?? "");
         SetString(TelemetryLayout.OffCarId, 64, _carId);
         SetString(TelemetryLayout.OffCarName, 32, _carName);
+        _wheelsPerAxle.CopyTo(new Span<byte>(_base + TelemetryLayout.OffWheelsPerAxle, TelemetryLayout.MaxAxles));
 
         new Span<byte>(_base + descOffset, cap * TelemetryLayout.DescBytes).Clear();
         for (int i = 0; i < _stage.Count; i++)
@@ -353,7 +392,8 @@ public sealed unsafe class TelemetryProducer
     }
 
     private int AddDesc(string name, string unit, float rangeMin, float rangeMax, SignalKind kind, ChannelFlags flags,
-                        int arrayIndex, int arrayCapacity)
+                        int arrayIndex, int arrayCapacity, ArrayLayout layout = ArrayLayout.Index,
+                        Provenance provenance = Provenance.Unspecified)
     {
         byte[] nameBytes = Encoding.UTF8.GetBytes(name);
         byte[] unitBytes = Encoding.UTF8.GetBytes(unit ?? "");
@@ -367,6 +407,8 @@ public sealed unsafe class TelemetryProducer
         BitConverter.GetBytes((uint)flags).CopyTo(d, 92);
         BitConverter.GetBytes((ushort)arrayIndex).CopyTo(d, 96);
         BitConverter.GetBytes((ushort)arrayCapacity).CopyTo(d, 98);
+        d[100] = (byte)provenance;
+        d[101] = (byte)layout;
         _stage.Add(d);
         return _stage.Count - 1;
     }

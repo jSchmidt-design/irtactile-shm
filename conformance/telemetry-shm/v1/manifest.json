@@ -9,31 +9,37 @@
         "carName": "Car A",
         "channelCount": 14,
         "descNames": [
-          "core.engine.rpm",
-          "core.vehicle.velocity",
-          "core.drivetrain.gear",
+          "std.engine.rpm",
+          "std.vehicle.speed",
+          "std.drivetrain.gear",
           "demo_wave",
           "demo_bump",
-          "ext.tyre.temp.FL",
-          "ext.wheel.load[0]",
-          "ext.wheel.load[1]"
+          "std.input.throttle",
+          "std.wheel.load[0]",
+          "std.wheel.load[1]"
         ],
         "descs": [
           {
             "arrayCapacity": 0,
-            "flags": 0,
+            "flags": 2,
             "kind": 0,
+            "layout": 0,
+            "provenance": 1,
             "slot": 0,
-            "unit": "rpm"
+            "tableMatch": true,
+            "unit": "rpm",
+            "valid": true
           },
           {
             "kind": 1,
+            "provenance": 0,
             "slot": 2
           },
           {
             "flags": 0,
             "kind": 2,
-            "slot": 4
+            "slot": 4,
+            "valid": true
           },
           {
             "flags": 2,
@@ -43,13 +49,26 @@
             "arrayCapacity": 8,
             "arrayIndex": 1,
             "flags": 2,
-            "name": "ext.wheel.load[1]",
-            "slot": 7
+            "layout": 1,
+            "name": "std.wheel.load[1]",
+            "slot": 7,
+            "tableMatch": true,
+            "valid": true
           }
         ],
         "layoutSeq": 2,
         "simId": "demo",
-        "simName": "Demo Sim"
+        "simName": "Demo Sim",
+        "wheelsPerAxle": [
+          2,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
       },
       "file": "decode/attach_valid_basic.bin",
       "name": "attach_valid_basic",
@@ -232,6 +251,210 @@
       },
       "file": "decode/attach_sim_id_empty.bin",
       "name": "attach_sim_id_empty",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "wheelsPerAxle": [
+          2,
+          4,
+          4,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "file": "decode/attach_wheel_layout_valid.bin",
+      "name": "attach_wheel_layout_valid",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "wheelsPerAxle": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "file": "decode/attach_wheel_layout_unknown.bin",
+      "name": "attach_wheel_layout_unknown",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok"
+      },
+      "file": "decode/attach_wheel_layout_eight_axles.bin",
+      "name": "attach_wheel_layout_eight_axles",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_wheel_layout_gap.bin",
+      "name": "attach_wheel_layout_gap",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_wheel_layout_too_many_wheels.bin",
+      "name": "attach_wheel_layout_too_many_wheels",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_wheel_layout_entry_after_zero.bin",
+      "name": "attach_wheel_layout_entry_after_zero",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "descs": [
+          {
+            "slot": 7,
+            "tableMatch": false,
+            "valid": false
+          },
+          {
+            "slot": 6,
+            "valid": true
+          }
+        ]
+      },
+      "file": "decode/attach_desc_bad_layout.bin",
+      "name": "attach_desc_bad_layout",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "descs": [
+          {
+            "slot": 0,
+            "valid": false
+          }
+        ]
+      },
+      "file": "decode/attach_desc_bad_provenance.bin",
+      "name": "attach_desc_bad_provenance",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "descs": [
+          {
+            "slot": 1,
+            "tableMatch": false,
+            "valid": false
+          }
+        ]
+      },
+      "file": "decode/attach_desc_scalar_with_layout.bin",
+      "name": "attach_desc_scalar_with_layout",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "descs": [
+          {
+            "slot": 6,
+            "tableMatch": false,
+            "valid": false
+          }
+        ]
+      },
+      "file": "decode/attach_desc_array_index_not_below_capacity.bin",
+      "name": "attach_desc_array_index_not_below_capacity",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "descs": [
+          {
+            "slot": 6,
+            "tableMatch": false,
+            "valid": true
+          }
+        ]
+      },
+      "file": "decode/attach_desc_capacity_above_table.bin",
+      "name": "attach_desc_capacity_above_table",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "descs": [
+          {
+            "slot": 6,
+            "tableMatch": false
+          }
+        ]
+      },
+      "file": "decode/attach_desc_capacity_zero_on_table_array.bin",
+      "name": "attach_desc_capacity_zero_on_table_array",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "descs": [
+          {
+            "slot": 6,
+            "tableMatch": false,
+            "valid": true
+          }
+        ]
+      },
+      "file": "decode/attach_desc_layout_mismatch_with_table.bin",
+      "name": "attach_desc_layout_mismatch_with_table",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "channelCount": 4,
+        "descs": [
+          {
+            "arrayCapacity": 4,
+            "arrayIndex": 0,
+            "layout": 1,
+            "name": "std.suspension.deflection[0]",
+            "provenance": 1,
+            "slot": 0,
+            "tableMatch": true,
+            "valid": true
+          },
+          {
+            "arrayCapacity": 4,
+            "arrayIndex": 3,
+            "name": "std.suspension.deflection[3]",
+            "slot": 3,
+            "tableMatch": true,
+            "valid": true
+          }
+        ]
+      },
+      "file": "decode/attach_desc_smaller_capacity_accepted.bin",
+      "name": "attach_desc_smaller_capacity_accepted",
       "op": "attach"
     },
     {
@@ -455,15 +678,16 @@
           "simName": "Demo Sim"
         },
         {
-          "name": "core.engine.rpm",
+          "name": "std.engine.rpm",
+          "op": "declare",
+          "provenance": 1
+        },
+        {
+          "name": "std.vehicle.speed",
           "op": "declare"
         },
         {
-          "name": "core.vehicle.velocity",
-          "op": "declare"
-        },
-        {
-          "name": "core.drivetrain.gear",
+          "name": "std.drivetrain.gear",
           "op": "declare"
         },
         {
@@ -480,12 +704,19 @@
           "op": "declareLocal"
         },
         {
-          "name": "ext.tyre.temp.FL",
+          "name": "std.input.throttle",
           "op": "declare"
         },
         {
-          "name": "ext.wheel.load",
+          "name": "std.wheel.load",
           "op": "declare"
+        },
+        {
+          "list": [
+            2,
+            2
+          ],
+          "op": "wheels"
         },
         {
           "id": "car_a",
@@ -532,15 +763,16 @@
           "simName": "Demo Sim"
         },
         {
-          "name": "core.engine.rpm",
+          "name": "std.engine.rpm",
+          "op": "declare",
+          "provenance": 1
+        },
+        {
+          "name": "std.vehicle.speed",
           "op": "declare"
         },
         {
-          "name": "core.vehicle.velocity",
-          "op": "declare"
-        },
-        {
-          "name": "core.drivetrain.gear",
+          "name": "std.drivetrain.gear",
           "op": "declare"
         },
         {
@@ -557,12 +789,19 @@
           "op": "declareLocal"
         },
         {
-          "name": "ext.tyre.temp.FL",
+          "name": "std.input.throttle",
           "op": "declare"
         },
         {
-          "name": "ext.wheel.load",
+          "name": "std.wheel.load",
           "op": "declare"
+        },
+        {
+          "list": [
+            2,
+            2
+          ],
+          "op": "wheels"
         },
         {
           "id": "car_a",
@@ -595,15 +834,16 @@
           "simName": "Demo Sim"
         },
         {
-          "name": "core.engine.rpm",
+          "name": "std.engine.rpm",
+          "op": "declare",
+          "provenance": 1
+        },
+        {
+          "name": "std.vehicle.speed",
           "op": "declare"
         },
         {
-          "name": "core.vehicle.velocity",
-          "op": "declare"
-        },
-        {
-          "name": "core.drivetrain.gear",
+          "name": "std.drivetrain.gear",
           "op": "declare"
         },
         {
@@ -620,12 +860,19 @@
           "op": "declareLocal"
         },
         {
-          "name": "ext.tyre.temp.FL",
+          "name": "std.input.throttle",
           "op": "declare"
         },
         {
-          "name": "ext.wheel.load",
+          "name": "std.wheel.load",
           "op": "declare"
+        },
+        {
+          "list": [
+            2,
+            2
+          ],
+          "op": "wheels"
         },
         {
           "id": "car_a",
@@ -700,7 +947,7 @@
           "simName": "Demo Sim"
         },
         {
-          "name": "core.engine.rpm",
+          "name": "std.engine.rpm",
           "op": "declare"
         },
         {
@@ -736,11 +983,63 @@
           "simName": "Demo Sim"
         },
         {
-          "name": "core.engine.rpm",
+          "name": "std.engine.rpm",
           "op": "declare"
         },
         {
           "op": "commit"
+        }
+      ]
+    },
+    {
+      "bytes": 8968,
+      "expect": {},
+      "file": "encode/wheel_layout.bin",
+      "name": "encode_wheel_layout",
+      "op": "encode",
+      "script": [
+        {
+          "capacity": 64,
+          "op": "open",
+          "pid": 4242,
+          "qpcFrequency": 10000000,
+          "simId": "demo",
+          "simName": "Demo Sim"
+        },
+        {
+          "name": "std.engine.rpm",
+          "op": "declare",
+          "provenance": 1
+        },
+        {
+          "count": 4,
+          "name": "std.suspension.deflection",
+          "op": "declare",
+          "provenance": 2
+        },
+        {
+          "count": 2,
+          "name": "std.suspension.third",
+          "op": "declare",
+          "provenance": 3
+        },
+        {
+          "list": [
+            2,
+            4,
+            4
+          ],
+          "op": "wheels"
+        },
+        {
+          "op": "commit"
+        },
+        {
+          "list": [
+            1,
+            1
+          ],
+          "op": "wheels"
         }
       ]
     }

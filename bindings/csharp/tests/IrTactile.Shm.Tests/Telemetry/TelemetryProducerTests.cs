@@ -37,9 +37,8 @@ public unsafe class TelemetryProducerTests
 
     private static ChannelDef FindDef(string name)
     {
-        foreach (var d in CoreChannels.All) if (d.Name == name) return d;
-        foreach (var d in ExtChannels.All) if (d.Name == name) return d;
-        foreach (var d in ExtChannels.Arrays) if (d.Name == name) return d;
+        foreach (var d in Std.All) if (d.Name == name) return d;
+        foreach (var d in Std.Arrays) if (d.Name == name) return d;
         throw new InvalidOperationException("unknown channel " + name);
     }
 
@@ -88,7 +87,14 @@ public unsafe class TelemetryProducerTests
                             }));
                         break;
                     case "declare":
-                        Assert.NotEqual(TelemetryProducer.InvalidSlot, p.Declare(FindDef(op.GetProperty("name").GetString()!)));
+                        var def = FindDef(op.GetProperty("name").GetString()!);
+                        var prov = (Provenance)(op.TryGetProperty("provenance", out var pv) ? pv.GetInt32() : 0);
+                        int count = op.TryGetProperty("count", out var cnt) ? cnt.GetInt32() : 0;
+                        Assert.NotEqual(TelemetryProducer.InvalidSlot,
+                            def.ArrayCapacity != 0 ? p.DeclareArray(def, count, prov) : p.Declare(def, prov));
+                        break;
+                    case "wheels":
+                        p.SetWheelLayout(op.GetProperty("list").EnumerateArray().Select(e => e.GetByte()).ToArray());
                         break;
                     case "declareLocal":
                         Assert.NotEqual(TelemetryProducer.InvalidSlot, p.DeclareLocal(

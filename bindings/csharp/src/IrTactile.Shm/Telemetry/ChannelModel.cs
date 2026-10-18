@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 //
-// Normative text: spec/telemetry-shm/channel_model.md. The generated tables are
-// CoreChannels.g.cs / ExtChannels.g.cs.
+// Normative text: spec/telemetry-shm/channel_model.md. The generated table is
+// StdChannels.g.cs.
 
 namespace IrTactile.Shm.Telemetry;
 
@@ -30,6 +30,35 @@ public enum ChannelFlags : uint
     Optional = 1u << 1,
 }
 
+/// <summary>Element order and labelling of an array.</summary>
+public enum ArrayLayout : byte
+{
+    /// <summary>Free index; also the layout of every scalar.</summary>
+    Index = 0,
+
+    /// <summary>Axle by axle front to back, left to right within an axle.</summary>
+    Wheel = 1,
+
+    /// <summary>Front to back.</summary>
+    Axle = 2,
+}
+
+/// <summary>Who computed a value (descriptor field <c>provenance</c>); equals the plugin SDK <c>irt_provenance</c>.</summary>
+public enum Provenance : byte
+{
+    /// <summary>Not stated; consumers read it as <see cref="Native"/>.</summary>
+    Unspecified = 0,
+
+    /// <summary>Delivered by the sim API.</summary>
+    Native = 1,
+
+    /// <summary>Exact computation from native values.</summary>
+    Derived = 2,
+
+    /// <summary>Approximation.</summary>
+    Estimated = 3,
+}
+
 /// <summary>One entry of a generated channel table.</summary>
 /// <param name="Name">Full name; for array entries the base name without <c>[i]</c>.</param>
 /// <param name="Unit">Physical unit, free text (may be empty).</param>
@@ -38,9 +67,10 @@ public enum ChannelFlags : uint
 /// <param name="Kind">Signal kind.</param>
 /// <param name="Flags">Channel flags.</param>
 /// <param name="ArrayCapacity">Element count for arrays, 0 for scalars.</param>
+/// <param name="Layout">Element layout for arrays, <see cref="ArrayLayout.Index"/> for scalars.</param>
 public readonly record struct ChannelDef(
     string Name, string Unit, float RangeMin, float RangeMax,
-    SignalKind Kind, ChannelFlags Flags, int ArrayCapacity);
+    SignalKind Kind, ChannelFlags Flags, int ArrayCapacity, ArrayLayout Layout = ArrayLayout.Index);
 
 /// <summary>Name rules of the channel model.</summary>
 public static class ChannelModel
@@ -59,7 +89,7 @@ public static class ChannelModel
 
     private static readonly string[] Reserved =
     {
-        "core", "ext", "sim", "plugin", "irtactile",
+        "std", "sim", "plugin", "irtactile",
         "iracing", "ams2", "lmu", "rf2", "ac", "acc", "ac_evo", "ac_rally", "rbr",
     };
 
@@ -118,7 +148,7 @@ public static class ChannelModel
         }
 
         string first = segments[0];
-        if (first == "core" || first == "ext") return segments.Length >= 2;
+        if (first == "std") return segments.Length >= 2;
         if (first == "sim" || first == "plugin") return segments.Length >= 3;
         return false;
     }

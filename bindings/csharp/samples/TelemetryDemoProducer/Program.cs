@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 //
-// Publishes core.engine.rpm, core.vehicle.velocity, core.drivetrain.gear, ext.tyre.temp.FL, a local
+// Publishes std.input.throttle, std.engine.rpm, std.suspension.deflection[0..3] (4 of 8 elements, wheels {2,2}), a local
 // channel (demo_wave -> sim.<sourceId>.demo_wave) and an event (demo_bump, every 2 s) at 100 Hz.
 // 'a' toggles Active / Inactive, 'q' quits. The source id comes from IRTACTILE_TELEMETRY_SOURCE
 // (set by irTactile when it launches the exe as a companion), else "demo".
@@ -13,10 +13,10 @@ string name = TelemetrySection.NameFromEnvironment("demo");
 using var section = TelemetrySection.Create(name, 256, new ProducerIdentity { SimName = "telemetry_demo_cs" });
 TelemetryProducer p = section.Producer;
 
-int rpm = p.Declare(CoreChannels.All[(int)CoreChannel.EngineRpm]);
-int vel = p.Declare(CoreChannels.All[(int)CoreChannel.VehicleVelocity]);
-int gear = p.Declare(CoreChannels.All[(int)CoreChannel.DrivetrainGear]);
-int tyre = p.Declare(ExtChannels.All[(int)ExtChannel.TyreTempFL]);
+int thr = p.Declare(Std.All[(int)StdChannel.InputThrottle], Provenance.Native);
+int rpm = p.Declare(Std.All[(int)StdChannel.EngineRpm], Provenance.Native);
+int defl = p.DeclareArray(Std.Arrays[(int)StdArray.SuspensionDeflection], 4, Provenance.Native);
+p.SetWheelLayout(2, 2);
 int wave = p.DeclareLocal("demo_wave", "", -1f, 1f, SignalKind.Continuous);
 int bump = p.DeclareLocal("demo_bump", "", 0f, 1f, SignalKind.Event);
 p.SetCar("demo_car", "Demo Car");
@@ -52,9 +52,8 @@ while (true)
     {
         p.BeginFrame();
         p.Set(rpm, (float)(3000 + 2500 * Math.Sin(t * 0.8)));
-        p.Set(vel, (float)(40 + 30 * Math.Sin(t * 0.3)));
-        p.Set(gear, 3f);
-        p.Set(tyre, (float)(80 + 10 * Math.Sin(t * 0.1)));
+        p.Set(thr, (float)(0.5 + 0.5 * Math.Sin(t * 0.3)));
+        for (int i = 0; i < 4; i++) p.Set(defl + i, (float)(0.02 * Math.Sin(t * 2 + i)));
         p.Set(wave, (float)Math.Sin(t * 2 * Math.PI));
         if (now >= nextBump)
         {

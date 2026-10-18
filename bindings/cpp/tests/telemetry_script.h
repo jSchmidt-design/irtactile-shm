@@ -3,7 +3,7 @@
 // script is a JSON array of ops that drive a Producer over a byte buffer; the resulting bytes are
 // the golden section.
 //
-// Ops: open{capacity,simId,simName,qpcFrequency,pid} · declare{name} · declareLocal{name,unit,min,max,kind,flags}
+// Ops: open{capacity,simId,simName,qpcFrequency,pid} · declare{name,count?,provenance?} · wheels{list} · declareLocal{name,unit,min,max,kind,flags}
 //      car{id,name} · commit · state{state,now} · frame{frameQpc,now,set:{slot:v},event:{slot:amp}}
 //      raw{offset,u32|u64|u8: value}   (byte surgery, used by the generator for torn / hostile states)
 
@@ -27,9 +27,8 @@ namespace sh = irtactile::shm::telemetry;
 
 inline const tele::ChannelDef* findDef(const std::string& name)
 {
-    for (const auto& d : tele::core::kChannels) if (name == d.name) return &d;
-    for (const auto& d : tele::ext::kChannels) if (name == d.name) return &d;
-    for (const auto& d : tele::ext::kArrays) if (name == d.name) return &d;
+    for (const auto& d : tele::standard::kChannels) if (name == d.name) return &d;
+    for (const auto& d : tele::standard::kArrays) if (name == d.name) return &d;
     return nullptr;
 }
 
@@ -69,7 +68,14 @@ inline void run(const json& script, std::vector<uint64_t>& buffer)
             }
         } else if (kind == "declare") {
             const tele::ChannelDef* d = findDef(op.at("name"));
-            if (!d || producer.declare(*d) == sh::Producer::kInvalidSlot) throw std::runtime_error("declare failed");
+            const auto prov = static_cast<tele::Provenance>(op.value("provenance", 0u));
+            const int slot = d && d->arrayCapacity != 0
+                                 ? producer.declareArray(*d, op.value("count", uint16_t{0}), prov)
+                                 : (d ? producer.declare(*d, prov) : sh::Producer::kInvalidSlot);
+            if (slot == sh::Producer::kInvalidSlot) throw std::runtime_error("declare failed");
+        } else if (kind == "wheels") {
+            const std::vector<uint8_t> w = op.at("list").get<std::vector<uint8_t>>();
+            producer.setWheelLayout(w.data(), w.size());
         } else if (kind == "declareLocal") {
             if (producer.declareLocal(op.at("name").get<std::string>(), op.value("unit", ""), op.value("min", 0.0f),
                                       op.value("max", 1.0f), kindOf(op.value("kind", "continuous")),

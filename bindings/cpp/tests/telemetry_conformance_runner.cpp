@@ -87,6 +87,10 @@ void checkAttach(const Reader& r, const json& ex, Failures& f)
     if (ex.contains("simName")) f.eq("simName", std::string(r.header().simName), ex["simName"].get<std::string>());
     if (ex.contains("carId")) f.eq("carId", std::string(r.header().carId), ex["carId"].get<std::string>());
     if (ex.contains("carName")) f.eq("carName", std::string(r.header().carName), ex["carName"].get<std::string>());
+    if (ex.contains("wheelsPerAxle")) {
+        std::vector<uint8_t> got(r.header().wheelsPerAxle, r.header().wheelsPerAxle + kMaxAxles);
+        if (got != ex["wheelsPerAxle"].get<std::vector<uint8_t>>()) f.fail("wheelsPerAxle");
+    }
     if (ex.contains("layoutSeq")) f.eq("layoutSeq", r.snapshotLayoutSeq(), ex["layoutSeq"].get<uint32_t>());
     if (ex.contains("descNames")) {
         const auto& names = ex["descNames"];
@@ -105,6 +109,18 @@ void checkAttach(const Reader& r, const json& ex, Failures& f)
             if (d.contains("flags")) f.eq((tag + "flags").c_str(), got.flags, d["flags"].get<uint32_t>());
             if (d.contains("arrayIndex")) f.eq((tag + "arrayIndex").c_str(), uint32_t{got.arrayIndex}, d["arrayIndex"].get<uint32_t>());
             if (d.contains("arrayCapacity")) f.eq((tag + "arrayCapacity").c_str(), uint32_t{got.arrayCapacity}, d["arrayCapacity"].get<uint32_t>());
+            if (d.contains("provenance")) f.eq((tag + "provenance").c_str(), uint32_t{got.provenance}, d["provenance"].get<uint32_t>());
+            if (d.contains("layout")) f.eq((tag + "layout").c_str(), uint32_t{got.layout}, d["layout"].get<uint32_t>());
+            if (d.contains("valid")) f.eq((tag + "valid").c_str(), validateDescriptor(got) ? 1 : 0, d["valid"].get<bool>() ? 1 : 0);
+            if (d.contains("tableMatch")) {
+                // The base name (without [i]) is looked up in the std table; the element is the descriptor's own index.
+                std::string base = got.name;
+                const size_t br = base.find('[');
+                if (br != std::string::npos) base.resize(br);
+                const irt::telemetry::ChannelDef* def = telemetry_script::findDef(base);
+                const bool match = def != nullptr && matchesTable(got, *def, got.arrayIndex);
+                f.eq((tag + "tableMatch").c_str(), match ? 1 : 0, d["tableMatch"].get<bool>() ? 1 : 0);
+            }
         }
     }
 }

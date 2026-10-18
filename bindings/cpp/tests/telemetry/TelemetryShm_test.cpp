@@ -54,6 +54,9 @@ TEST_CASE("header, descriptor and return header have the specified size and offs
     CHECK(offsetof(Header, carId) == 152);
     CHECK(offsetof(ChannelDesc, kind) == 88);
     CHECK(offsetof(ChannelDesc, arrayCapacity) == 98);
+    CHECK(offsetof(ChannelDesc, provenance) == 100);
+    CHECK(offsetof(ChannelDesc, layout) == 101);
+    CHECK(offsetof(Header, wheelsPerAxle) == 248);
 }
 
 TEST_CASE("layoutFor keeps every array 8-byte aligned and inside totalBytes")
@@ -97,13 +100,13 @@ TEST_CASE("a fresh section is NotReady until the first commitLayout")
 
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    p.declare(tele::core::Id::EngineRpm);
+    p.declare(tele::standard::Id::EngineRpm);
     CHECK(r.attach(s.data(), s.size) == AttachResult::NotReady);   // still staged
     REQUIRE(p.commitLayout());
     CHECK(r.attach(s.data(), s.size) == AttachResult::Ok);
     CHECK(r.header().layoutSeq % 2 == 0);
     CHECK(r.header().channelCount == 1);
-    CHECK(std::string(r.descriptors()[0].name) == "core.engine.rpm");
+    CHECK(std::string(r.descriptors()[0].name) == "std.engine.rpm");
 }
 
 TEST_CASE("table declarations copy the table properties; arrays declare every element")
@@ -111,8 +114,8 @@ TEST_CASE("table declarations copy the table properties; arrays declare every el
     Section s(Producer::requiredBytes(128));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 128, identity()) == OpenResult::Ok);
-    const int rpm = p.declare(tele::core::Id::EngineRpm);
-    const int arr = p.declareArray(tele::ext::ArrayId::WheelLoad);
+    const int rpm = p.declare(tele::standard::Id::EngineRpm);
+    const int arr = p.declareArray(tele::standard::ArrayId::WheelLoad);
     const int local = p.declareLocal("demo_wave", "", -1.f, 1.f, tele::Kind::Continuous);
     REQUIRE(p.commitLayout());
     CHECK(rpm == 0);
@@ -122,11 +125,11 @@ TEST_CASE("table declarations copy the table properties; arrays declare every el
     Reader r;
     REQUIRE(r.attach(s.data(), s.size) == AttachResult::Ok);
     const auto& d = r.descriptors();
-    CHECK(matchesTable(d[rpm], tele::core::kChannels[static_cast<uint32_t>(tele::core::Id::EngineRpm)], 0));
-    CHECK(std::string(d[arr + 3].name) == "ext.wheel.load[3]");
+    CHECK(matchesTable(d[rpm], tele::standard::kChannels[static_cast<uint32_t>(tele::standard::Id::EngineRpm)], 0));
+    CHECK(std::string(d[arr + 3].name) == "std.wheel.load[3]");
     CHECK(d[arr + 3].arrayIndex == 3);
     CHECK(d[arr + 3].arrayCapacity == 8);
-    CHECK(matchesTable(d[arr + 3], tele::ext::kArrays[static_cast<uint32_t>(tele::ext::ArrayId::WheelLoad)], 3));
+    CHECK(matchesTable(d[arr + 3], tele::standard::kArrays[static_cast<uint32_t>(tele::standard::ArrayId::WheelLoad)], 3));
     CHECK(std::string(d[local].name) == "demo_wave");
 }
 
@@ -150,8 +153,8 @@ TEST_CASE("frames round-trip values, valid bits, events and QPC")
     Section s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    const int rpm = p.declare(tele::core::Id::EngineRpm);
-    const int gear = p.declare(tele::core::Id::DrivetrainGear);
+    const int rpm = p.declare(tele::standard::Id::EngineRpm);
+    const int gear = p.declare(tele::standard::Id::DrivetrainGear);
     const int bump = p.declareLocal("bump", "", 0, 1, tele::Kind::Event);
     REQUIRE(p.commitLayout());
     p.setState(ProducerState::Active, 1000);
@@ -191,7 +194,7 @@ TEST_CASE("a frame being written is Torn, never a mix")
     Section s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    p.declare(tele::core::Id::EngineRpm);
+    p.declare(tele::standard::Id::EngineRpm);
     REQUIRE(p.commitLayout());
     Reader r;
     REQUIRE(r.attach(s.data(), s.size) == AttachResult::Ok);
@@ -205,7 +208,7 @@ TEST_CASE("layout rewrite: readers see LayoutChanged, then the new descriptors")
     Section s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    p.declare(tele::core::Id::EngineRpm);
+    p.declare(tele::standard::Id::EngineRpm);
     p.setCar("car_a", "Car A");
     REQUIRE(p.commitLayout());
     Reader r;
@@ -228,7 +231,7 @@ TEST_CASE("a layout rewrite that crashed mid-way leaves an odd layoutSeq: NotRea
     Section s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    p.declare(tele::core::Id::EngineRpm);
+    p.declare(tele::standard::Id::EngineRpm);
     REQUIRE(p.commitLayout());
     Reader r;
     REQUIRE(r.attach(s.data(), s.size) == AttachResult::Ok);
@@ -240,7 +243,7 @@ TEST_CASE("a layout rewrite that crashed mid-way leaves an odd layoutSeq: NotRea
 
     Producer q;                  // the restarted producer
     REQUIRE(q.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    q.declare(tele::core::Id::EngineRpm);
+    q.declare(tele::standard::Id::EngineRpm);
     REQUIRE(q.commitLayout());
     CHECK(s.header().layoutSeq % 2 == 0);
     CHECK(s.header().layoutSeq > odd);
@@ -253,7 +256,7 @@ TEST_CASE("a restart into an existing section keeps the pinned fields and refuse
     {
         Producer p;
         REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-        p.declare(tele::core::Id::EngineRpm);
+        p.declare(tele::standard::Id::EngineRpm);
         REQUIRE(p.commitLayout());
     }
     const uint32_t total = s.header().totalBytes;
@@ -270,7 +273,7 @@ TEST_CASE("open rejects a section that is too small and a bad simId")
     Producer p;
     CHECK(p.open(tiny.data(), tiny.size, 64, identity()) == OpenResult::TooSmall);
     Section s(Producer::requiredBytes(64));
-    CHECK(p.open(s.data(), s.size, 64, identity("core")) == OpenResult::BadIdentity);
+    CHECK(p.open(s.data(), s.size, 64, identity("std")) == OpenResult::BadIdentity);
     CHECK(p.open(s.data(), s.size, 64, identity("Bad-Id")) == OpenResult::BadIdentity);
     CHECK(p.open(s.data(), s.size, 64, identity("lmu")) == OpenResult::Ok);   // a built-in simId is allowed
     CHECK(p.open(s.data(), s.size, 64, identity("")) == OpenResult::Ok);      // empty = sourceId
@@ -281,7 +284,7 @@ TEST_CASE("validateHeader rejections")
     Section s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    p.declare(tele::core::Id::EngineRpm);
+    p.declare(tele::standard::Id::EngineRpm);
     REQUIRE(p.commitLayout());
     const Header good = s.header();
     REQUIRE(validateHeader(good, s.size) == AttachResult::Ok);
@@ -295,7 +298,7 @@ TEST_CASE("validateHeader rejections")
     CHECK(with([](Header& h) { h.magic = 0x12345678; }) == AttachResult::Malformed);
     CHECK(with([](Header& h) { h.versionMajor = 2; }) == AttachResult::BadVersion);
     CHECK(with([](Header& h) { h.versionMinor = 9; }) == AttachResult::Ok);          // tolerated
-    CHECK(with([](Header& h) { h.reserved1[0] = 7; h.reserved0 = 9; }) == AttachResult::Ok);
+    CHECK(with([](Header& h) { h.reserved0 = 9; }) == AttachResult::Ok);
     CHECK(with([](Header& h) { h.headerBytes = 128; }) == AttachResult::Malformed);
     CHECK(with([&](Header& h) { h.totalBytes = static_cast<uint32_t>(s.size) + 8; }) == AttachResult::Malformed);
     CHECK(with([](Header& h) { h.capacity = 100; }) == AttachResult::Malformed);
@@ -305,10 +308,25 @@ TEST_CASE("validateHeader rejections")
     CHECK(with([](Header& h) { h.descOffset = 64; }) == AttachResult::Malformed);    // inside the header
     CHECK(with([](Header& h) { h.valuesOffset = h.totalBytes - 4; }) == AttachResult::Malformed);
     CHECK(with([](Header& h) { h.producerState = 3; }) == AttachResult::Malformed);
-    CHECK(with([](Header& h) { std::memcpy(h.simId, "core", 5); }) == AttachResult::Malformed);
+    CHECK(with([](Header& h) { std::memcpy(h.simId, "std", 4); }) == AttachResult::Malformed);
     CHECK(with([](Header& h) { std::memcpy(h.simId, "Bad-Id", 7); }) == AttachResult::Malformed);
     CHECK(with([](Header& h) { std::memset(h.carId, 'x', sizeof(h.carId)); }) == AttachResult::Malformed);
     CHECK(validateHeader(good, 64) == AttachResult::Malformed);                      // mapped smaller than totalBytes
+
+    auto wheels = [&](std::initializer_list<uint8_t> w) {
+        return with([&](Header& h) {
+            std::memset(h.wheelsPerAxle, 0, sizeof(h.wheelsPerAxle));
+            size_t i = 0;
+            for (uint8_t n : w) h.wheelsPerAxle[i++] = n;
+        });
+    };
+    CHECK(wheels({}) == AttachResult::Ok);                 // unknown
+    CHECK(wheels({2, 2}) == AttachResult::Ok);
+    CHECK(wheels({2, 4, 4}) == AttachResult::Ok);
+    CHECK(wheels({1, 1, 1, 1, 1, 1, 1, 8}) == AttachResult::Ok);
+    CHECK(wheels({0, 2}) == AttachResult::Malformed);      // gap
+    CHECK(wheels({2, 2, 0, 2}) == AttachResult::Malformed);
+    CHECK(wheels({9}) == AttachResult::Malformed);         // more than 8 wheels on an axle
 }
 
 TEST_CASE("return region round trip: masks, forLayoutSeq, consumer state")
@@ -362,4 +380,88 @@ TEST_CASE("return region: absent, torn and malformed")
     h->consumerState = 9;
     ReturnReader rr2;
     CHECK(rr2.attach(ret.data(), ret.size) == AttachResult::Malformed);
+}
+
+TEST_CASE("the producer writes provenance, layout and the wheel layout")
+{
+    Section s(Producer::requiredBytes(64));
+    Producer p;
+    REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
+    const int rpm = p.declare(tele::standard::Id::EngineRpm, tele::Provenance::Native);
+    const int defl = p.declareArray(tele::standard::ArrayId::SuspensionDeflection, 4, tele::Provenance::Derived);
+    const int third = p.declareArray(tele::standard::ArrayId::SuspensionThird, 2);
+    const int local = p.declareLocal("demo_wave", "", -1.f, 1.f, tele::Kind::Continuous, tele::kFlagNone, tele::Provenance::Estimated);
+    CHECK(p.declareArray(tele::standard::ArrayId::SuspensionThird, 5) == Producer::kInvalidSlot);   // above the table capacity
+    p.setWheelLayout({2, 2});
+    REQUIRE(p.commitLayout());
+
+    Reader r;
+    REQUIRE(r.attach(s.data(), s.size) == AttachResult::Ok);
+    const auto& d = r.descriptors();
+    CHECK(d[rpm].provenance == 1);
+    CHECK(d[rpm].layout == 0);
+    CHECK(d[defl].provenance == 2);
+    CHECK(d[defl].layout == 1);
+    CHECK(d[defl + 3].arrayCapacity == 4);
+    CHECK(d[third].layout == 2);
+    CHECK(d[third].provenance == 0);
+    CHECK(d[local].provenance == 3);
+    const uint8_t want[8] = {2, 2, 0, 0, 0, 0, 0, 0};
+    CHECK(std::memcmp(r.header().wheelsPerAxle, want, 8) == 0);
+
+    // A change after the first commit is a layout rewrite.
+    const uint32_t seq = r.snapshotLayoutSeq();
+    p.setWheelLayout({2, 4, 4});
+    CHECK(r.refreshLayout() == AttachResult::Ok);
+    CHECK(r.snapshotLayoutSeq() != seq);
+    CHECK(r.header().wheelsPerAxle[1] == 4);
+    p.setWheelLayout({9});   // invalid -> stored as unknown
+    CHECK(r.refreshLayout() == AttachResult::Ok);
+    CHECK(r.header().wheelsPerAxle[0] == 0);
+}
+
+TEST_CASE("validateDescriptor and matchesTable")
+{
+    namespace st = tele::standard;
+    const tele::ChannelDef& defl = st::kArrays[static_cast<uint32_t>(st::ArrayId::SuspensionDeflection)];
+    const tele::ChannelDef& rpm = st::kChannels[static_cast<uint32_t>(st::Id::EngineRpm)];
+
+    Section s(Producer::requiredBytes(64));
+    Producer p;
+    REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
+    const int e = p.declare(st::Id::EngineRpm);
+    const int a4 = p.declareArray(st::ArrayId::SuspensionDeflection, 4);
+    REQUIRE(p.commitLayout());
+    Reader r;
+    REQUIRE(r.attach(s.data(), s.size) == AttachResult::Ok);
+    const ChannelDesc scalar = r.descriptors()[e];
+    ChannelDesc d = r.descriptors()[a4 + 3];
+
+    CHECK(validateDescriptor(scalar));
+    CHECK(matchesTable(scalar, rpm, 0));
+    CHECK(validateDescriptor(d));
+    CHECK(matchesTable(d, defl, 3));             // capacity 4 against table 8
+    CHECK_FALSE(matchesTable(d, defl, 2));       // wrong element
+    ChannelDesc x = d;
+    x.arrayCapacity = 8; x.arrayIndex = 7;
+    CHECK(matchesTable(x, defl, 7));             // capacity 8, index 7
+    x.arrayCapacity = 9;
+    CHECK(validateDescriptor(x));
+    CHECK_FALSE(matchesTable(x, defl, 7));       // above the table
+    x = d; x.arrayCapacity = 0;
+    CHECK_FALSE(matchesTable(x, defl, 3));
+    x = d; x.arrayCapacity = 4; x.arrayIndex = 4;
+    CHECK_FALSE(validateDescriptor(x));          // index not below capacity
+    CHECK_FALSE(matchesTable(x, defl, 4));
+    x = d; x.layout = 2;
+    CHECK(validateDescriptor(x));
+    CHECK_FALSE(matchesTable(x, defl, 3));       // layout mismatch
+    x = d; x.layout = 3;
+    CHECK_FALSE(validateDescriptor(x));
+    x = scalar; x.layout = 1;
+    CHECK_FALSE(validateDescriptor(x));          // a layout on a scalar
+    x = scalar; x.provenance = 4;
+    CHECK_FALSE(validateDescriptor(x));
+    x = scalar; x.provenance = 3;
+    CHECK(matchesTable(x, rpm, 0));              // provenance is not compared
 }

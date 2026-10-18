@@ -10,7 +10,7 @@ project(irtactile_shm_cpp LANGUAGES CXX)
 # Targets:
 #   irtactile::shm-common   - common/atomic.h (+ future common/version.h)
 #   irtactile::stream-shm   - stream/*, depends on shm-common
-#   irtactile::telemetry-model - telemetry/*: channel model + core/ext tables
+#   irtactile::telemetry-model - telemetry/*: channel model + std table
 #   irtactile::shm          - umbrella convenience target
 #   irtactile::telemetry-shm   - telemetry-shm v1: producer, reader, return region
 
@@ -24,7 +24,7 @@ target_compile_features(irtactile_shm_common INTERFACE cxx_std_17)
 add_library(irtactile_shm_stream INTERFACE)
 target_link_libraries(irtactile_shm_stream INTERFACE irtactile_shm_common)
 
-# Channel model (kinds, flags, name rules, core.* / ext.* tables). Header-only,
+# Channel model (kinds, flags, name rules, std.* table). Header-only,
 # independent of shm-common: it carries no wire layout, only vocabulary.
 add_library(irtactile_telemetry_model INTERFACE)
 target_include_directories(irtactile_telemetry_model INTERFACE
@@ -61,8 +61,7 @@ if(MSVC)
         include/irtactile/shm/telemetry/reader.h
         include/irtactile/shm/telemetry/win32.h
         include/irtactile/telemetry/channel_model.h
-        include/irtactile/telemetry/core_channels.h
-        include/irtactile/telemetry/ext_channels.h
+        include/irtactile/telemetry/std_channels.h
     )
     set_target_properties(irtactile_shm_headers PROPERTIES FOLDER "irtactile-shm")
 endif()
