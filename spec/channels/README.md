@@ -13,12 +13,13 @@ Normative sources in this directory:
 | `std.json` | `std.*` - the standard table: scalars, wheel / axle arrays, `std::ConnectionStatus`, `std::Surface` |
 | this file | kinds, flags, array layouts, provenance, naming rules, append-only rule |
 
-The generated table (`bindings/cpp/include/irtactile/shm/channels/std.h`, C++ namespace
-`irtactile::shm::channels::standard`, and `StdChannels.g.cs` under
-`bindings/csharp/src/IrTactile.Shm/Channels/`, class `Std`) is produced from the JSON by
-`tools/gen_channels/gen_channels.py` and committed. CI regenerates them and
-fails on a difference. `channels/model.h` / `ChannelModel.cs` (kinds, flags, name
-rules) are hand-written and implement this file.
+`tools/gen_channels/gen_channels.py` generates the tables from the JSON:
+`bindings/cpp/include/irtactile/shm/channels/std.h` (namespace
+`irtactile::shm::channels::standard`) and
+`bindings/csharp/src/IrTactile.Shm/Channels/StdChannels.g.cs` (class `Std`). Both are
+committed, and CI fails if regenerating them gives a different result.
+`channels/model.h` and `ChannelModel.cs` (kinds, flags, name rules) are hand-written and
+implement this file.
 
 ## Values
 

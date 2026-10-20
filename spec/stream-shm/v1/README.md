@@ -394,7 +394,7 @@ depends on consumer semantics:
 | Mode | What must fit | Typical magnitude |
 |---|---|---|
 | Latest-value-wins | **copy duration**, with retry on tear | ~300 ns for 4 KB |
-| Lossless streaming | wake latency + copy | 0.1–20 ms (scheduling-bound) |
+| Lossless streaming | wake latency + copy | 0.1-20 ms (scheduling-bound) |
 
 Wake latency drops out for a latest-value consumer: waking late just yields a
 newer block, which is what it wanted. `ringBlocks: 2` is sufficient for that
@@ -445,10 +445,10 @@ unacceptable, take the event.
 
 | Bound | Value | Rationale |
 |---|---|---|
-| `channelCount` | 1–32 | A `uint32_t` mask covers the maximum exactly |
-| Stream rate | 46.875 Hz – 48 kHz | Eleven rates, `48000 / 2^k`, each half the one above |
+| `channelCount` | 1-32 | A `uint32_t` mask covers the maximum exactly |
+| Stream rate | 46.875 Hz - 48 kHz | Eleven rates, `48000 / 2^k`, each half the one above |
 | `publishHz` | **≤ 375 Hz** for the current producer | A producer-side bound, not a property of the format: it is the producer's render cadence that sets it, and a later producer may publish faster. **Derive the period from `samplesPerBlock` and `sampleRateMilliHz`; hardcode nothing.** A consumer that sizes a buffer or a poll interval against 2.67 ms is pinned to a behaviour the contract does not promise |
-| `ringBlocks` | 2–256 | 1 offers no protection - writer and reader always share the slot |
+| `ringBlocks` | 2-256 | 1 offers no protection - writer and reader always share the slot |
 | Ring duration | warn above 1 s | Beyond that it is a recording buffer in shared memory - the wrong tool |
 
 ### Size classes and resolved names

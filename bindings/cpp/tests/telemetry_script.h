@@ -3,8 +3,8 @@
 // script is a JSON array of ops that drive a Producer over a byte buffer; the resulting bytes are
 // the golden section.
 //
-// Ops: open{capacity,simId,simName,qpcFrequency,pid} · declare{name,count?,provenance?} · wheels{list} · declareLocal{name,unit,min,max,kind,flags}
-//      car{id,name} · commit · state{state,now} · frame{frameQpc,now,set:{slot:v},event:{slot:amp}}
+// Ops: open{capacity,simId,simName,qpcFrequency,pid}; declare{name,count?,provenance?}; wheels{list}; declareLocal{name,unit,min,max,kind,flags}
+//      car{id,name}; commit; state{state,now}; frame{frameQpc,now,set:{slot:v},event:{slot:amp}}
 //      raw{offset,u32|u64|u8: value}   (byte surgery, used by the generator for torn / hostile states)
 
 #ifndef IRTACTILE_TESTS_TELEMETRY_SCRIPT_H

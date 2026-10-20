@@ -1,4 +1,4 @@
-﻿# C++ consumer API
+﻿# C++ binding
 
 The C++ binding for the [stream-shm v1 format](../../spec/stream-shm/v1/README.md).
 Header-only, zero dependencies, namespace `irtactile::shm::stream`. Namespaced
@@ -156,11 +156,13 @@ ProducerSection s;
 s.create(sectionNameFromEnvironment("mysim"), /*capacity*/ 256, Identity{/*simId*/ "", "My Sim"});
 Producer& p = s.producer();
 
-int rpm  = p.declare(channels::standard::Id::EngineRpm, channels::Provenance::Native);   // properties come from the table
-int defl = p.declareArray(channels::standard::ArrayId::SuspensionDeflection, 4);     // 4 of the table's 8 elements
-p.setWheelLayout({2, 2});                                            // wheels per axle, front to back
-int pump = p.declareLocal("pump_pressure", "bar", 0, 10, channels::Kind::Continuous);  // -> sim.<sourceId>.pump_pressure
-p.commitLayout();                                                    // the section becomes visible here
+// Table channels copy their unit, range and kind from the table.
+int rpm  = p.declare(channels::standard::Id::EngineRpm, channels::Provenance::Native);
+int defl = p.declareArray(channels::standard::ArrayId::SuspensionDeflection, 4);   // 4 of 8 elements
+p.setWheelLayout({2, 2});                                                          // front to back
+// A local channel; irTactile sees it as sim.<sourceId>.pump_pressure.
+int pump = p.declareLocal("pump_pressure", "bar", 0, 10, channels::Kind::Continuous);
+p.commitLayout();   // the section becomes visible here
 p.setState(ProducerState::Active, qpcNow());
 
 for (;;) {
@@ -171,9 +173,9 @@ for (;;) {
 }
 ```
 
-- Declare every channel before `commitLayout()`; changing the set later is another `commitLayout()` (a layout
-  rewrite). `setCar()` after the commit is one too.
-- Use `Inactive` while the sim is not running; keep calling `setState(Inactive, qpcNow())` as a heartbeat.
-- `ProducerSection::pollReturn()` shows which channels of the current layout irTactile `accepted` (name and
-  properties matched the table) and `demanded` (something consumes them). Skipping undemanded channels is optional.
+- Declare every channel before `commitLayout()`. Changing the set later means another `commitLayout()`, and
+  `setCar()` after the commit publishes a new layout on its own.
+- While the sim is not running, set `Inactive` and keep calling `setState(Inactive, qpcNow())` as a heartbeat.
+- `ProducerSection::pollReturn()` tells you which channels irTactile accepted (name and properties are valid) and
+  which it demands (something consumes them). You may skip channels nobody demands, but you don't have to.
 - `tests/telemetry_conformance_runner` runs the vectors in `conformance/telemetry-shm/v1`.

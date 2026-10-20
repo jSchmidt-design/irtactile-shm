@@ -3,14 +3,14 @@
 // SPDX-License-Identifier: MIT
 //
 // Publishes at 100 Hz:
-//   std.input.throttle, std.engine.rpm                             (table scalars)
-//   std.suspension.deflection[0..3]                                (table array: 4 of 8 elements, layout wheel, wheels {2,2})
-//   demo_wave                                                      (local channel -> sim.<simId>.demo_wave)
-//   demo_bump                                                      (EVENT, one every 2 s)
+//   std.input.throttle, std.engine.rpm     table scalars
+//   std.suspension.deflection[0..3]        4 of the 8 table elements, wheels {2,2}
+//   demo_wave                              local channel, seen as sim.<simId>.demo_wave
+//   demo_bump                              EVENT, one every 2 s
 // Keys: 'a' toggles Active / Inactive (sim running vs. sitting in a menu), 'q' quits.
 //
 // The source id comes from IRTACTILE_TELEMETRY_SOURCE (irTactile sets it when it launches this exe as a
-// companion), else "demo". Once a second it prints which of its channels irTactile accepted and demanded.
+// companion), else "demo". Once a second it prints how many channels irTactile accepted and demanded.
 
 #include <irtactile/shm/telemetry.h>
 #include <irtactile/shm/telemetry/win32.h>

@@ -1,12 +1,10 @@
 ﻿# Conformance vectors
 
-With three hand-written bindings, tests that live inside any single binding are that
-binding's opinion. This directory is the opinion-free half of the test strategy:
-golden binary
-sections plus a JSON manifest of expected results, emitted by
-[`tools/mkvectors`](../tools/mkvectors) from
-the *producer* side and committed to the repo. Every binding's test suite decodes the
-same blobs and compares against the same expectations.
+Tests that live inside one binding are that binding's opinion. This directory is the
+opinion-free half of the test strategy: golden binary sections plus a JSON manifest of
+expected results, emitted from the *producer* side by
+[`tools/mkvectors`](../tools/mkvectors) and committed to the repo. Every binding's test
+suite decodes the same blobs and compares against the same expectations.
 
 A binding that passes the suite here has implemented the spec, not the C++ headers.
 
@@ -21,17 +19,17 @@ conformance/
 ```
 
 Direction is per API and, for bidirectional APIs, per region. stream-shm flows one
-way, so it has `decode/` only. telemetry-shm's **inbound** region (third party writes)
-needs `encode/` vectors - byte-identical output catches padding and endianness
-mistakes a decode test cannot - and its **return** region `decode/` again. Both ship in
-`conformance/telemetry-shm/v1` (manifest schema 1, its own op set: `attach`, `frame`,
-`return`, `encode`; emitted by `tools/mkvectors_telemetry`; see *telemetry-shm v1* below).
+way, so it has `decode/` only. telemetry-shm's **inbound** region is written by a third
+party, so it also gets `encode/` vectors: byte-identical output catches padding and
+endianness mistakes a decode test cannot. Its **return** region is `decode/` again. The
+telemetry suite has its own manifest and generator, see *telemetry-shm v1* below.
 
 ## How a binding runs the suite
 
 First, check `schema`. A runner must **refuse** a manifest whose schema it does not
 implement rather than run it: a later schema may change the meaning of an op under a
-name the old runner still recognises. This document describes schema 2.
+name the old runner still recognises. The stream-shm manifest is schema 2, described
+here; the telemetry-shm manifest is described at the end.
 
 > **Schema 2** adds the `markHeader` and `reconfigureSince` ops (below) and
 > changes nothing else; every schema 1 case is a valid schema 2 case. The bump

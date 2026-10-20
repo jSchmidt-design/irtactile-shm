@@ -1,13 +1,12 @@
 # irtactile-shm
 
-The public shared-memory contracts of **[irTactile](https://irtactile.com/)**, the
-integration API a third-party tool uses to exchange real-time data with it, and
-their language bindings.
+The public shared-memory contracts of **[irTactile](https://irtactile.com/)** and
+their language bindings. Third-party tools use them to exchange real-time data with
+irTactile.
 
 The product is a **wire format**, not a library: fixed byte layouts plus publish/read
-protocols that let third-party tools exchange real-time data with irTactile without a
-link-time dependency on it. That is what the spec pins down, and what any binding is
-measured against.
+protocols, with no link-time dependency on irTactile. That is what the spec pins
+down, and what any binding is measured against.
 
 Parsing those bytes yourself is not the intended path, though. The C++ and C# clients
 in this repo already implement the spec, including the parts that are easy to get
@@ -20,7 +19,9 @@ the C++ one; the expectations of every decode case are written from the spec.
 **Platform.** The shared section and the event that signals new data are named Windows
 kernel objects, so `Client`, which owns the mapping and the waiting, runs only on
 Windows. `Reader` has no such tie: hand it a mapped buffer and it works anywhere, and
-the C++ `reader_min.cpp` example builds on Linux to prove it. Both sides also need to
+the C++ `reader_min.cpp` example builds on Linux to prove it. The same split holds for
+telemetry-shm: `Producer` works on any buffer, the named sections (`win32.h`,
+`TelemetrySection`) are Windows only. Both sides also need to
 be 64-bit. The protocol depends on 8-byte atomic loads, which x64 gives you for free
 and 32-bit cannot reliably guarantee, and irTactile ships no 32-bit producer in any
 case.
@@ -111,7 +112,7 @@ each, in the guides below.
 
 | | stream-shm v1 | telemetry-shm v1 | channel model |
 |---|---|---|---|
-| C++ ([bindings/cpp](bindings/cpp)) | read ✅ · write ✅ | read ✅ · write ✅ | ✅ |
+| C++ ([bindings/cpp](bindings/cpp)) | read ✅, write ✅ | read ✅, write ✅ | ✅ |
 | C# ([bindings/csharp](bindings/csharp)) | read ✅ | write ✅ | ✅ |
 
 **read** is the full consumer API: `Reader` over any mapped buffer, `Client` for the
@@ -122,13 +123,13 @@ the [C++ guide](bindings/cpp/README.md), *Producer side*, for why. For telemetry
 roles flip: a third party writes (`Producer`, `TelemetryProducer`), irTactile reads; the
 C++ `Reader` exists for tools that inspect a producer.
 
-**C++** - see the [C++ consumer guide](bindings/cpp/README.md). Header-only, zero
+**C++** - see the [C++ guide](bindings/cpp/README.md). Header-only, zero
 dependencies, C++17, `add_subdirectory()`-and-done (or point CMake at
 `bindings/cpp/examples` for the standalone examples build). Its suite - the doctest
 format tests plus the conformance vectors - runs standalone:
 `cmake -S bindings/cpp/tests -B build-tests && cmake --build build-tests && ctest --test-dir build-tests`.
 
-**C#** - see the [C# consumer guide](bindings/csharp/README.md). One assembly,
+**C#** - see the [C# guide](bindings/csharp/README.md). One assembly,
 `IrTactile.Shm`, fully managed (no native dependency, no P/Invoke), targeting
 `net8.0` and `netstandard2.0`. Consume it as a `ProjectReference` to
 `bindings/csharp/src/IrTactile.Shm`, or as a binary drop from a release; a NuGet
@@ -173,7 +174,8 @@ cmake -S bindings/cpp/tests -B build-tests
 cmake --build build-tests
 ctest --test-dir build-tests --output-on-failure
 ```
-The build also produces the `conformance_runner` target - see *Verify*.
+The build also produces the `conformance_runner` and `telemetry_conformance_runner`
+targets - see *Verify*.
 
 **C# suite** (xUnit; mirrors the C++ format tests, plus its own conformance runner):
 ```
@@ -185,7 +187,7 @@ dotnet test bindings/csharp
 `conformance/stream-shm/v1/` and `conformance/telemetry-shm/v1/` are the
 binding-independent half of the test strategy
 (see [conformance/README.md](conformance/README.md)): golden binary blobs plus a
-`manifest.json` of expected results, every binding's test suite runs the same
+`manifest.json` of expected results. Every binding's test suite runs the same
 blobs against the same expectations. A binding that passes the suite here has
 implemented the spec, not any other binding's headers.
 

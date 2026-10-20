@@ -1,4 +1,4 @@
-﻿# C# consumer API
+﻿# C# binding
 
 The C# binding for the irTactile shared-memory contracts. One assembly,
 `IrTactile.Shm`. **Fully managed** - `MemoryMappedFile`, `EventWaitHandle`,
@@ -75,9 +75,9 @@ SDK, and `dotnet pack src/IrTactile.Shm -c Release` produces the package plus it
 | `src/IrTactile.Shm/Stream/Reader.cs` | `Reader` / `BlockView` / `StreamRequest` / `AttachResult` / `StreamState`. Portable. |
 | `src/IrTactile.Shm/Stream/Client.cs` | Mapping, event, blocking `Wait()`, liveness. |
 | `samples/StreamReader/Program.cs` | The whole thing via `Client`. |
-
-`IrTactile.Shm.Common` lands with the second contract (telemetry-shm), when
-there is something to share.
+| `src/IrTactile.Shm/Telemetry/TelemetryProducer.cs` | telemetry-shm: `TelemetryProducer`, `TelemetrySection`, layout constants. |
+| `src/IrTactile.Shm/Channels/` | `ChannelModel.cs` (hand-written) and `StdChannels.g.cs` (generated). |
+| `samples/TelemetryDemoProducer/Program.cs` | A complete telemetry producer. |
 
 ## The four-line consumer
 
@@ -170,13 +170,15 @@ criteria the API is held to: the minimal consumer **multiplies nothing** and
 dotnet test bindings/csharp
 ```
 
-Three suites, mirroring the C++ binding's strategy:
+The suites mirror the C++ binding's:
 
 | Suite | Mirrors | What it proves |
 |---|---|---|
 | `tests/IrTactile.Shm.Tests/Stream/LayoutTests.cs` | the header's `static_assert`s + size-arithmetic tests | Offset pinning via `Marshal.OffsetOf`/`Marshal.SizeOf` against `spec/stream-shm/v1/fields.md` - the guard against the silent-garbage class of error |
 | `tests/IrTactile.Shm.Tests/Stream/StreamShmTests.cs` | `bindings/cpp/tests/stream/StreamShm_test.cpp`, case for case | The publish/read protocol over an in-memory section |
 | `tests/IrTactile.Shm.Tests/Conformance/` | `bindings/cpp/tests/conformance_runner.cpp` | The binding-independent vector suite: all of `conformance/stream-shm/v1/` decoded and compared |
+| `tests/IrTactile.Shm.Tests/Telemetry/` | `bindings/cpp/tests/telemetry/` | Producer behaviour, plus the telemetry-shm `encode` vectors compared byte for byte |
+| `tests/IrTactile.Shm.Tests/Channels/` | `bindings/cpp/tests/channels/` | Name rules and the generated `std.*` table |
 
 The test project targets `net8.0` only, so the `netstandard2.0` assembly is
 compiled (`dotnet build` builds both targets) but not exercised. The two targets
@@ -197,11 +199,13 @@ using IrTactile.Shm.Telemetry;
 using var s = TelemetrySection.Create(TelemetrySection.NameFromEnvironment("mysim"), 256,
                                       new ProducerIdentity { SimName = "My Sim" });
 TelemetryProducer p = s.Producer;
+// Table channels copy their unit, range and kind from the table.
 int rpm  = p.Declare(Std.All[(int)StdChannel.EngineRpm], Provenance.Native);
-int defl = p.DeclareArray(Std.Arrays[(int)StdArray.SuspensionDeflection], 4);   // 4 of the table's 8 elements
-p.SetWheelLayout(2, 2);                                                         // wheels per axle, front to back
-int pump = p.DeclareLocal("pump_pressure", "bar", 0, 10, SignalKind.Continuous);   // -> sim.<sourceId>.pump_pressure
-p.CommitLayout();
+int defl = p.DeclareArray(Std.Arrays[(int)StdArray.SuspensionDeflection], 4);   // 4 of 8 elements
+p.SetWheelLayout(2, 2);                                                         // front to back
+// A local channel; irTactile sees it as sim.<sourceId>.pump_pressure.
+int pump = p.DeclareLocal("pump_pressure", "bar", 0, 10, SignalKind.Continuous);
+p.CommitLayout();   // the section becomes visible here
 p.SetState(ProducerState.Active, TelemetryClock.Now);
 
 while (running)
@@ -213,8 +217,9 @@ while (running)
 }
 ```
 
-`samples/TelemetryDemoProducer` is the full example. The test suite replays the `encode` vectors of
-`conformance/telemetry-shm/v1` and compares the section bytes with the C++ binding's output.
+`Create` throws `InvalidOperationException` when the section cannot hold the layout or the `SimId` is invalid.
+`PollReturn` tells you which channels irTactile accepted and which it demands, the same as the C++
+`pollReturn()`. `samples/TelemetryDemoProducer` is the full example.
 
 ## License
 
