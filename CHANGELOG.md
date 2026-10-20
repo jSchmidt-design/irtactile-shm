@@ -11,6 +11,9 @@
   `provenance` and the array `layout`; the header carries the vehicle's
   `wheelsPerAxle`. A table array may be declared with fewer elements than the
   table capacity (`1 <= arrayCapacity <= table capacity`).
+  `producerState` changes on transitions only, never per frame. The return
+  region's mask offsets are *frame* fields under `retSeq`; the new *frame*
+  class is defined in `spec/common/concurrency.md`.
 - `conformance/telemetry-shm/v1/` - 60 vector cases (attach, frame, return region
   decode; byte-exact producer encode), emitted by `tools/mkvectors_telemetry`.
 - `bindings/cpp` - `irtactile::telemetry-shm` (header-only): `Producer`, `Reader`,

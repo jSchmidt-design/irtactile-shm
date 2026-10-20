@@ -1,8 +1,9 @@
 ﻿# Concurrency classes and memory ordering
 
 Every field of an irtactile shared-memory header belongs to exactly one of
-three concurrency classes. The "Class" column in
-[../stream-shm/v1/fields.md](../stream-shm/v1/fields.md) is normative.
+three concurrency classes, or four in a format with a frame seqlock (see
+*Frame fields*). The "Class" column of each format's `fields.md` (e.g.
+[../stream-shm/v1/fields.md](../stream-shm/v1/fields.md)) is normative.
 
 ## Layout fields
 
@@ -47,6 +48,16 @@ snapshot's bytes in this range may be mid-store garbage - see
   graph rebuild, which is not compatible with the snapshot model.
 - All six words sit inside one cache line, so a reader loading `writeSeq` gets
   `layoutSeq` and `deviceState` for free.
+
+## Frame fields
+
+A format that guards a whole frame with a counter ([seqlock.md](seqlock.md),
+*Generalization*) adds a fourth class: **frame** fields are rewritten on every
+publish inside the frame seqlock window. A reader copies them inside one
+window, validates the counter afterwards and uses the copy for that read only.
+It never caches a frame field, including an offset, across reads. A field
+that is rewritten on every publish is never pinned, even when its value rarely
+changes.
 
 ## Why plain integers rather than `std::atomic`
 

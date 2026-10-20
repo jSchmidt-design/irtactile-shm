@@ -25,7 +25,7 @@ namespace IrTactile.Shm.Telemetry;
 /// <summary>Producer-side state published in the header.</summary>
 public enum ProducerState : uint
 {
-    /// <summary>The producer is up, the sim is not running / sits in a menu.</summary>
+    /// <summary>The producer is up, but the sim is not running or sits in a menu.</summary>
     Inactive = 0,
 
     /// <summary>Frames are being published.</summary>
@@ -222,7 +222,10 @@ public sealed unsafe class TelemetryProducer
         return TelemetryOpenResult.Ok;
     }
 
-    /// <summary>Declares a scalar from a generated table (properties copied from the table).</summary>
+    /// <summary>
+    /// Declares a channel from the generated table, with its properties copied from the table. An array entry
+    /// declares all its elements (see <see cref="DeclareArray"/>).
+    /// </summary>
     public int Declare(ChannelDef def, Provenance provenance = Provenance.Unspecified)
     {
         if (def.ArrayCapacity != 0) return DeclareArray(def, 0, provenance);
@@ -362,7 +365,10 @@ public sealed unsafe class TelemetryProducer
         Set(slot, amplitude);
     }
 
-    /// <summary>Ends the frame. <paramref name="frameQpc"/>: sample time; <paramref name="nowQpc"/>: publish time.</summary>
+    /// <summary>
+    /// Ends the frame. <paramref name="frameQpc"/>: sample time; <paramref name="nowQpc"/>: publish time. Does not
+    /// write the producer state: call <see cref="SetState"/> with <see cref="ProducerState.Active"/> before the first frame.
+    /// </summary>
     public void EndFrame(ulong frameQpc, ulong nowQpc)
     {
         if (!_committed) return;

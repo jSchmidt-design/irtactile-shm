@@ -196,7 +196,7 @@ public:
             h->acceptedOffset = returnAcceptedOffset();
             h->demandedOffset = returnDemandedOffset(kMaxCapacity);
         }
-        h->consumerPid = consumerPid;
+        shm::detail::releaseStore(h->consumerPid, consumerPid);
         shm::detail::releaseStore(h->magic, kReturnMagic);
         return true;
     }
@@ -261,7 +261,7 @@ public:
             if (r1 & 1u) continue;
             ReturnHeader h;
             std::memcpy(&h, m_base, kReturnHeaderBytes);
-            if (validateReturnHeader(h, m_mapped) != AttachResult::Ok) return false;
+            if (validateReturnFrame(h, m_mapped) != AttachResult::Ok) return false;
             const uint32_t words = h.capacity / 64;
             out.accepted.assign(words, 0);
             out.demanded.assign(words, 0);
@@ -270,14 +270,14 @@ public:
                 std::memcpy(out.demanded.data(), m_base + h.demandedOffset, static_cast<size_t>(words) * 8);
             }
             if (shm::detail::acquireLoad(live.retSeqEnd) != r1 || shm::detail::acquireLoad(live.retSeq) != r1) continue;
+            // Concurrent fields: live loads, never the copy. An unknown state is rejected (as at attach).
+            const uint32_t cs = shm::detail::acquireLoad(live.consumerState);
+            if (cs > static_cast<uint32_t>(ConsumerState::Closed)) return false;
             out.capacity = h.capacity;
             out.forLayoutSeq = h.forLayoutSeq;
-            // Concurrent fields: live loads.
-            const uint32_t cs = shm::detail::acquireLoad(live.consumerState);
-            out.consumerState = cs <= static_cast<uint32_t>(ConsumerState::Closed) ? static_cast<ConsumerState>(cs)
-                                                                                   : ConsumerState::Closed;
+            out.consumerState = static_cast<ConsumerState>(cs);
             out.lastConsumeQpc = shm::detail::acquireLoad(live.lastConsumeQpc);
-            out.consumerPid = h.consumerPid;
+            out.consumerPid = shm::detail::acquireLoad(live.consumerPid);
             return true;
         }
         return false;

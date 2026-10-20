@@ -389,8 +389,37 @@ TEST_CASE("return region: absent, torn and malformed")
     CHECK(rr.read(v));
 
     h->consumerState = 9;
+    CHECK_FALSE(rr.read(v));                                             // unknown live state: rejected on read too
     ReturnReader rr2;
     CHECK(rr2.attach(ret.data(), ret.size) == AttachResult::Malformed);
+}
+
+TEST_CASE("return region: the offsets follow capacity, consumerPid is a live load")
+{
+    Section ret(kReturnBytes);
+    ReturnWriter w;
+    REQUIRE(w.init(ret.data(), ret.size, 11));
+    ReturnReader rr;
+    REQUIRE(rr.attach(ret.data(), ret.size) == AttachResult::Ok);
+    auto* h = reinterpret_cast<ReturnHeader*>(ret.data());
+
+    std::vector<uint64_t> acc(8, ~uint64_t{0}), dem(8, 0x5);
+    w.publishMasks(512, 2, acc.data(), dem.data());
+    CHECK(h->demandedOffset == returnDemandedOffset(512));
+    w.publishMasks(256, 4, acc.data(), dem.data());                      // producer restarted with a smaller capacity
+    CHECK(h->demandedOffset == returnDemandedOffset(256));
+    ReturnView v;
+    REQUIRE(rr.read(v));
+    CHECK(v.capacity == 256);
+    CHECK(v.forLayoutSeq == 4);
+    REQUIRE(v.demanded.size() == 4);
+    CHECK(v.demanded[3] == 0x5);
+    CHECK(v.consumerPid == 11);
+
+    REQUIRE(w.init(ret.data(), ret.size, 12));                           // irTactile restart: the section survives
+    REQUIRE(rr.read(v));
+    CHECK(v.consumerPid == 12);
+    CHECK(v.capacity == 256);
 }
 
 TEST_CASE("the producer writes provenance, layout and the wheel layout")

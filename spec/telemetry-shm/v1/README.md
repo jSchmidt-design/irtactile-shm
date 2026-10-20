@@ -3,7 +3,7 @@
 A third-party **producer** (a sim adapter, a rig controller, a test generator) publishes real-time telemetry;
 irTactile reads it as a signal source. The payload is the channel model in
 [spec/channels](../../channels/README.md): named `float32` channels with a kind, a unit and a validity bit per frame.
-This document is the wire format that carries it.
+This document specifies the wire format.
 
 Field tables: [fields.md](fields.md). Shared mechanics: [../../common](../../common) - the seqlock protocol
 ([seqlock.md](../../common/seqlock.md), including the *frame* generalization), concurrency classes
@@ -23,12 +23,9 @@ treats a missing inbound region as "source not running".
 
 ### Names
 
-`sourceId` is `[a-z0-9_]{1,24}` (the *owner id* rule of the channel model). Windows has no supported way to
-enumerate named sections, so the consumer always opens names it was configured with; the name is therefore a
-contract between producer and configuration, and **only `sourceId` has to match**:
-
-- inbound name: `irTactile_Telemetry_<sourceId>`
-- return name: `irTactile_TelemetryReturn_<sourceId>`
+`sourceId` is `[a-z0-9_]{1,24}` (the *owner id* rule of the channel model). Windows cannot list named sections,
+so the consumer only opens names it was configured with. Producer and configuration therefore have to agree on
+the `sourceId`, and nothing else.
 
 A configuration may override the inbound name with a free `sectionName`. The return name is then derived from the
 inbound name alone, so both sides compute it without further configuration:
@@ -95,14 +92,16 @@ is malformed.
 
 ### Publish protocol (producer)
 
-Fields have three concurrency classes ([concurrency.md](../../common/concurrency.md)):
+Fields have four concurrency classes ([concurrency.md](../../common/concurrency.md)):
 
 - **pinned**: `magic`, `versionMajor`, `headerBytes`, `totalBytes`. Written once, never changed. A different value
   needs a different section.
 - **layout** (read under `layoutSeq`): geometry, `qpcFrequency`, `producerPid`, `simId`, the session identity
   (`simName`, `carId`, `carName`) and the **descriptor table**.
-- **concurrent** (bytes `[80, 120)`): `frameSeq`, `lastPublishQpc`, `producerState`, `layoutSeq`, `frameSeqEnd`,
-  `frameQpc`; read with per-field acquire loads.
+- **concurrent** (bytes `[80, 120)` except `frameQpc`): `frameSeq`, `lastPublishQpc`, `producerState`,
+  `layoutSeq`, `frameSeqEnd`; read with per-field acquire loads.
+- **frame** (read under the frame seqlock, never cached across reads): `frameQpc` and the `valid`, `eventCount`
+  and `values` arrays.
 
 **First creation.** Create the section (zero-filled by the OS), write everything except `magic`, then store `magic`
 with release. A consumer that sees `magic == 0` retries.
@@ -115,8 +114,9 @@ clear valid[]; write values, valid, eventCount, frameQpc
 frameSeqEnd = frameSeq + 1         // release
 frameSeq += 1                      // even, release
 lastPublishQpc = QPC now           // release
-producerState  = Active            // release
 ```
+
+A frame does not write `producerState` (see *States*).
 
 Event channels: `eventCount[slot]` is a free-running `uint32` incremented once per event; `values[slot]` holds the
 amplitude of the latest one. The producer never decrements or resets it while the layout is unchanged.
@@ -131,10 +131,14 @@ A restarting producer cycles `layoutSeq` even when it rewrites nothing, and step
 ([seqlock.md](../../common/seqlock.md), *Writer side*). A car change is a layout rewrite: `carId` / `carName` are
 layout fields.
 
-**States.** `producerState = Inactive` while the sim is not running or sits in a menu (the producer is up, no
-telemetry), `Active` while frames are published, `Closed` on clean shutdown. Liveness follows
-[liveness.md](../../common/liveness.md) with `lastPublishQpc`; the producer publishes at its own rate (the
-stale threshold is `max(100 ms, 5 x 1000/rateHz)`, a consumer assumes 20 ms when no rate is known, i.e. 100 ms).
+**States.** `producerState` is `Inactive` while the sim is not running or sits in a menu, `Active` while frames
+are published, and `Closed` after a clean shutdown. The producer writes it only on a transition (`lastPublishQpc`
+first, then `producerState`, both release), so it sets `Active` before its first frame. A consumer treats any
+state other than `Active` as not live, however fresh the frames are. While `Inactive`, the producer keeps
+refreshing `lastPublishQpc` as a heartbeat.
+
+Liveness follows [liveness.md](../../common/liveness.md) with `lastPublishQpc`. The stale threshold is
+`max(100 ms, 5 x 1000/rateHz)`; without a known rate the consumer assumes 20 ms per frame, i.e. 100 ms.
 
 ### Read protocol (consumer)
 
@@ -157,8 +161,8 @@ count as baseline and emits nothing.
 
 ## Return region
 
-Created by irTactile, read by the producer, also latest-value and optional for the producer. It is indexed by the
-**producer's** slot numbers and tagged with the producer `layoutSeq` it refers to.
+irTactile creates it and the producer may read it. It holds only the latest value, is indexed by the
+**producer's** slot numbers, and is tagged with the producer `layoutSeq` it refers to.
 
 ```
  [ header 128 B ][ accepted u64[capacity/64] ][ demanded u64[capacity/64] ]
@@ -177,7 +181,10 @@ a producer restart with another capacity.
 - `forLayoutSeq`: the producer `layoutSeq` the masks were computed for. A producer ignores masks whose
   `forLayoutSeq` differs from its current one.
 
-Protocol: the same frame seqlock (`retSeq` / `retSeqEnd`), bounded reader retries, latest value only.
+The region uses the same frame seqlock (`retSeq` / `retSeqEnd`) with bounded reader retries. `capacity`, both
+offsets, `forLayoutSeq` and both masks are *frame* fields: the producer copies them inside one `retSeq` window and
+never caches an offset across reads. `consumerState`, `lastConsumeQpc` and `consumerPid` are concurrent and read
+with live acquire loads.
 
 ## Versioning
 

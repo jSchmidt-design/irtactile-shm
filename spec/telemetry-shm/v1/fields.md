@@ -3,7 +3,8 @@
 All integers little-endian. All offsets are bytes from the section base. 64-bit fields are 8-byte aligned. Strings
 are UTF-8, NUL-terminated within the field, tail zeroed. **Class** is the concurrency class
 ([concurrency.md](../../common/concurrency.md)): *pinned*, *layout* (under `layoutSeq`), *concurrent*
-(per-field acquire loads), *frame* (under `frameSeq`).
+(per-field acquire loads), *frame* (under the region's frame seqlock: `frameSeq` inbound, `retSeq` return; never
+cached across reads).
 
 ## Inbound header - 256 bytes
 
@@ -74,16 +75,17 @@ A descriptor with an empty `name` is an unused slot.
 | 8 | 4 | `headerBytes` | pinned | `128` |
 | 12 | 4 | `totalBytes` | pinned | `4096` |
 | 16 | 4 | `capacity` | frame | slot count of the producer layout the masks refer to |
-| 20 | 4 | `acceptedOffset` | pinned | `128` |
-| 24 | 4 | `demandedOffset` | pinned | `128 + capacity/8`, 8-byte aligned (maximum 8192 slots) |
+| 20 | 4 | `acceptedOffset` | frame | `128` |
+| 24 | 4 | `demandedOffset` | frame | `128 + roundUp8(capacity / 8)`; follows `capacity` |
 | 28 | 4 | `reserved0` | pinned | |
 | 32 | 8 | `retSeq` | concurrent | frame seqlock of the return region |
 | 40 | 8 | `retSeqEnd` | concurrent | equals `retSeq` after a consistent frame |
 | 48 | 4 | `forLayoutSeq` | frame | producer `layoutSeq` the masks refer to |
 | 52 | 4 | `consumerState` | concurrent | `0` Idle, `1` Active, `2` Closed |
 | 56 | 8 | `lastConsumeQpc` | concurrent | QPC of the last consumed frame |
-| 64 | 4 | `consumerPid` | pinned | |
+| 64 | 4 | `consumerPid` | concurrent | irTactile process id; rewritten at every consumer start |
 | 68 | 60 | `reserved1` | | zero / ignore |
 
-`demandedOffset` is `128 + roundUp8(capacity / 8)`; both masks hold `capacity / 64` words. `capacity`, `forLayoutSeq`
-and both masks are guarded by `retSeq` / `retSeqEnd`.
+Both masks hold `capacity / 64` words. The consumer rewrites every *frame* field on each publish, so
+`demandedOffset` moves when the producer capacity changes. 4096 bytes fit the masks for the maximum of 8192 slots.
+While `capacity == 0` no masks have been published yet: both offsets are unspecified and the masks are empty.

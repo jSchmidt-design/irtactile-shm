@@ -85,7 +85,8 @@ public:
 
     // --- declaration (staged until commitLayout) ----------------------------
 
-    /// A scalar from a generated table. Properties are copied from the table, so they always match.
+    /// A channel from the generated table. Properties are copied from the table, so they always match.
+    /// An array entry declares all its elements (see declareArray).
     int declare(const channels::ChannelDef& def, channels::Provenance provenance = channels::Provenance::Unspecified)
     {
         if (def.arrayCapacity != 0) return declareArray(def, 0, provenance);
@@ -232,6 +233,7 @@ public:
         set(slot, amplitude);
     }
     /// `frameQpc`: QPC of the sim sample. `nowQpc`: QPC of this publish (liveness).
+    /// Does not write producerState: call setState(Active) before the first frame.
     void endFrame(uint64_t frameQpc, uint64_t nowQpc)
     {
         if (!m_committed) return;

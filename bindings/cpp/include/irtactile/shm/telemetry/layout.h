@@ -263,21 +263,31 @@ inline AttachResult validateHeader(const Header& h, size_t mappedBytes) noexcept
     return AttachResult::Ok;
 }
 
-/// Validates a return header copy.
-inline AttachResult validateReturnHeader(const ReturnHeader& h, size_t mappedBytes) noexcept
+/// Validates the pinned and frame fields of a return header copy. The concurrent fields (`consumerState`,
+/// `lastConsumeQpc`, `consumerPid`) are not checked: a copy may hold them mid-store, so a reader takes them from
+/// live loads.
+inline AttachResult validateReturnFrame(const ReturnHeader& h, size_t mappedBytes) noexcept
 {
     if (h.magic == 0) return AttachResult::NotReady;
     if (h.magic != kReturnMagic) return AttachResult::Malformed;
     if (h.versionMajor != kVersionMajor) return AttachResult::BadVersion;
     if (h.headerBytes < kReturnHeaderBytes || h.headerBytes > mappedBytes) return AttachResult::Malformed;
     if (h.totalBytes < h.headerBytes || h.totalBytes > mappedBytes) return AttachResult::Malformed;
-    if (h.consumerState > static_cast<uint32_t>(ConsumerState::Closed)) return AttachResult::Malformed;
     if (h.capacity != 0) {
         if (!isValidCapacity(h.capacity)) return AttachResult::Malformed;
         const uint64_t words = h.capacity / 64;
         if (!detail::arrayFits(h.acceptedOffset, words * 8, h.headerBytes, h.totalBytes)) return AttachResult::Malformed;
         if (!detail::arrayFits(h.demandedOffset, words * 8, h.headerBytes, h.totalBytes)) return AttachResult::Malformed;
     }
+    return AttachResult::Ok;
+}
+
+/// Validates a return header copy at attach: validateReturnFrame plus an unknown `consumerState`.
+inline AttachResult validateReturnHeader(const ReturnHeader& h, size_t mappedBytes) noexcept
+{
+    const AttachResult r = validateReturnFrame(h, mappedBytes);
+    if (r != AttachResult::Ok) return r;
+    if (h.consumerState > static_cast<uint32_t>(ConsumerState::Closed)) return AttachResult::Malformed;
     return AttachResult::Ok;
 }
 
