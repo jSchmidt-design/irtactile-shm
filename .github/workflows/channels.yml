@@ -2,7 +2,7 @@ name: channels
 
 on:
   push:
-    paths: ['spec/telemetry-shm/**', 'tools/gen_channels/**', 'bindings/**/telemetry/**', 'bindings/**/Telemetry/**']
+    paths: ['spec/channels/**', 'tools/gen_channels/**', 'bindings/**/channels/**', 'bindings/**/Channels/**']
   pull_request:
 
 jobs:

@@ -36,16 +36,16 @@ if(NOT TARGET irtactile::stream-shm)
     add_library(irtactile::stream-shm ALIAS irtactile_shm_stream)
 endif()
 
-if(NOT TARGET irtactile::telemetry-model)
-    add_library(irtactile_telemetry_model INTERFACE)
-    target_include_directories(irtactile_telemetry_model INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
-    target_compile_features(irtactile_telemetry_model INTERFACE cxx_std_17)
-    add_library(irtactile::telemetry-model ALIAS irtactile_telemetry_model)
+if(NOT TARGET irtactile::channels)
+    add_library(irtactile_channels INTERFACE)
+    target_include_directories(irtactile_channels INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+    target_compile_features(irtactile_channels INTERFACE cxx_std_17)
+    add_library(irtactile::channels ALIAS irtactile_channels)
 endif()
 
 if(NOT TARGET irtactile::telemetry-shm)
     add_library(irtactile_shm_telemetry INTERFACE)
-    target_link_libraries(irtactile_shm_telemetry INTERFACE irtactile::shm-common irtactile::telemetry-model)
+    target_link_libraries(irtactile_shm_telemetry INTERFACE irtactile::shm-common irtactile::channels)
     add_library(irtactile::telemetry-shm ALIAS irtactile_shm_telemetry)
 endif()
 
@@ -109,15 +109,15 @@ else()
 endif()
 
 # --- channel model tests -----------------------------------------------------
-add_executable(telemetry_model_tests
+add_executable(channels_tests
     doctest_main.cpp
-    telemetry/ChannelModel_test.cpp
+    channels/ChannelModel_test.cpp
 )
-target_link_libraries(telemetry_model_tests PRIVATE irtactile::telemetry-model doctest::doctest)
+target_link_libraries(channels_tests PRIVATE irtactile::channels doctest::doctest)
 if(DEFINED doctest_SOURCE_DIR AND EXISTS "${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake")
-    doctest_discover_tests(telemetry_model_tests)
+    doctest_discover_tests(channels_tests)
 else()
-    add_test(NAME telemetry-model COMMAND telemetry_model_tests)
+    add_test(NAME channels COMMAND channels_tests)
 endif()
 
 # --- telemetry-shm v1 -------------------------------------------------------
@@ -140,7 +140,7 @@ add_test(
     COMMAND telemetry_conformance_runner ${CMAKE_CURRENT_SOURCE_DIR}/../../../conformance/telemetry-shm/v1/manifest.json
 )
 
-foreach(target conformance_runner stream_shm_tests telemetry_model_tests telemetry_shm_tests telemetry_conformance_runner)
+foreach(target conformance_runner stream_shm_tests channels_tests telemetry_shm_tests telemetry_conformance_runner)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /permissive-)
     else()

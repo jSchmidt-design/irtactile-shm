@@ -15,7 +15,7 @@
 #include <string>
 #include <string_view>
 
-#include <irtactile/telemetry/channel_model.h>
+#include <irtactile/shm/channels/model.h>
 
 namespace irtactile {
 namespace shm {
@@ -76,7 +76,7 @@ struct Header {
 
 /// Channel descriptor, 128 bytes.
 struct ChannelDesc {
-    char     name[irt::telemetry::kNameLen];
+    char     name[channels::kNameLen];
     char     unit[16];
     float    rangeMin;
     float    rangeMax;
@@ -84,8 +84,8 @@ struct ChannelDesc {
     uint32_t flags;
     uint16_t arrayIndex;
     uint16_t arrayCapacity;
-    uint8_t  provenance;     ///< irt::telemetry::Provenance
-    uint8_t  layout;         ///< irt::telemetry::ArrayLayout
+    uint8_t  provenance;     ///< channels::Provenance
+    uint8_t  layout;         ///< channels::ArrayLayout
     uint8_t  reserved[26];
 };
 
@@ -252,7 +252,7 @@ inline AttachResult validateHeader(const Header& h, size_t mappedBytes) noexcept
 
     std::string_view simId;
     if (!fieldString(h.simId, sizeof(h.simId), simId)) return AttachResult::Malformed;
-    if (!simId.empty() && (!irt::telemetry::isValidOwnerId(simId) || isReservedSimId(simId))) {
+    if (!simId.empty() && (!channels::isValidOwnerId(simId) || isReservedSimId(simId))) {
         return AttachResult::Malformed;
     }
     std::string_view s;
@@ -285,15 +285,15 @@ inline AttachResult validateReturnHeader(const ReturnHeader& h, size_t mappedByt
 /// A consumer drops a descriptor that fails this (not the whole layout).
 inline bool validateDescriptor(const ChannelDesc& d) noexcept
 {
-    if (d.provenance > static_cast<uint8_t>(irt::telemetry::Provenance::Estimated)) return false;
-    if (d.layout > static_cast<uint8_t>(irt::telemetry::ArrayLayout::Axle)) return false;
-    if (d.arrayCapacity == 0) return d.layout == static_cast<uint8_t>(irt::telemetry::ArrayLayout::Index) && d.arrayIndex == 0;
+    if (d.provenance > static_cast<uint8_t>(channels::Provenance::Estimated)) return false;
+    if (d.layout > static_cast<uint8_t>(channels::ArrayLayout::Axle)) return false;
+    if (d.arrayCapacity == 0) return d.layout == static_cast<uint8_t>(channels::ArrayLayout::Index) && d.arrayIndex == 0;
     return d.arrayIndex < d.arrayCapacity;
 }
 
 /// Properties of a descriptor must equal the table entry of a std.* name. A producer may declare an array with
 /// a smaller capacity than the table (`1 <= arrayCapacity <= def.arrayCapacity`); provenance is not compared.
-inline bool matchesTable(const ChannelDesc& d, const irt::telemetry::ChannelDef& def, uint32_t arrayElement) noexcept
+inline bool matchesTable(const ChannelDesc& d, const channels::ChannelDef& def, uint32_t arrayElement) noexcept
 {
     std::string_view unit;
     if (!fieldString(d.unit, sizeof(d.unit), unit) || unit != def.unit) return false;

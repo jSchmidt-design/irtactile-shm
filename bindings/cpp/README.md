@@ -138,16 +138,16 @@ you publish telemetry, irTactile reads it as a source. Header-only, namespace
 
 ```cpp
 using namespace irtactile::shm::telemetry;
-namespace tele = irt::telemetry;
+namespace channels = irtactile::shm::channels;
 
 ProducerSection s;
 s.create(sectionNameFromEnvironment("mysim"), /*capacity*/ 256, Identity{/*simId*/ "", "My Sim"});
 Producer& p = s.producer();
 
-int rpm  = p.declare(tele::standard::Id::EngineRpm, tele::Provenance::Native);   // properties come from the table
-int defl = p.declareArray(tele::standard::ArrayId::SuspensionDeflection, 4);     // 4 of the table's 8 elements
+int rpm  = p.declare(channels::standard::Id::EngineRpm, channels::Provenance::Native);   // properties come from the table
+int defl = p.declareArray(channels::standard::ArrayId::SuspensionDeflection, 4);     // 4 of the table's 8 elements
 p.setWheelLayout({2, 2});                                            // wheels per axle, front to back
-int pump = p.declareLocal("pump_pressure", "bar", 0, 10, tele::Kind::Continuous);  // -> sim.<sourceId>.pump_pressure
+int pump = p.declareLocal("pump_pressure", "bar", 0, 10, channels::Kind::Continuous);  // -> sim.<sourceId>.pump_pressure
 p.commitLayout();                                                    // the section becomes visible here
 p.setState(ProducerState::Active, qpcNow());
 

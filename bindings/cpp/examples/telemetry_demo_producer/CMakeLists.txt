@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(irtactile_telemetry_demo_producer LANGUAGES CXX)
 
-# The basic telemetry-shm v1 producer: publishes a few core.* / ext.* channels, a
+# The basic telemetry-shm v1 producer: publishes a few std.* channels, a
 # local channel and an event, and prints the return region. Windows only (named
 # sections). Also configurable on its own:
 #
@@ -15,10 +15,10 @@ if(NOT TARGET irtactile::telemetry-shm)
     add_library(irtactile_shm_common INTERFACE)
     target_include_directories(irtactile_shm_common INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../../include)
     target_compile_features(irtactile_shm_common INTERFACE cxx_std_17)
-    add_library(irtactile_telemetry_model INTERFACE)
-    target_link_libraries(irtactile_telemetry_model INTERFACE irtactile_shm_common)
+    add_library(irtactile_channels INTERFACE)
+    target_link_libraries(irtactile_channels INTERFACE irtactile_shm_common)
     add_library(irtactile_shm_telemetry INTERFACE)
-    target_link_libraries(irtactile_shm_telemetry INTERFACE irtactile_shm_common irtactile_telemetry_model)
+    target_link_libraries(irtactile_shm_telemetry INTERFACE irtactile_shm_common irtactile_channels)
     add_library(irtactile::telemetry-shm ALIAS irtactile_shm_telemetry)
 endif()
 

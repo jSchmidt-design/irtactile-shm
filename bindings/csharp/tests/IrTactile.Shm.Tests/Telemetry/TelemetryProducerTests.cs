@@ -6,6 +6,7 @@
 
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using IrTactile.Shm.Channels;
 using IrTactile.Shm.Telemetry;
 
 namespace IrTactile.Shm.Tests.Telemetry;
@@ -25,6 +26,18 @@ public unsafe class TelemetryProducerTests
     }
 
     private static readonly string Dir = FindDir();
+
+    [Fact]
+    public void WheelsPerAxleValidation()
+    {
+        Assert.True(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { }));
+        Assert.True(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 2, 2 }));
+        Assert.True(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 2, 4, 4 }));
+        Assert.True(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 1, 1, 1, 1, 1, 1, 1, 8 }));
+        Assert.False(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 0, 2 }));
+        Assert.False(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 2, 2, 0, 2 }));
+        Assert.False(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 9 }));
+    }
 
     public static IEnumerable<object[]> EncodeCases()
     {

@@ -176,9 +176,11 @@ Three suites, mirroring the C++ binding's strategy:
 | `tests/IrTactile.Shm.Tests/Conformance/` | `bindings/cpp/tests/conformance_runner.cpp` | The binding-independent vector suite: all of `conformance/stream-shm/v1/` decoded and compared |
 
 The test project targets `net8.0` only, so the `netstandard2.0` assembly is
-compiled by CI but not exercised by it. The two targets share every source file
-and differ in one `#if` (`Client.IsWindows`), so the gap is narrow - but it is a
-gap, and closing it means multi-targeting the test project to `net8.0;net48`.
+compiled (`dotnet build` builds both targets) but not exercised. The two targets
+share every source file and differ only in `#if NET5_0_OR_GREATER` guards
+(`Client.IsWindows`, the `SupportedOSPlatform` attributes) and the
+`IsExternalInit.cs` polyfill, so the gap is narrow - but it is a gap, and closing
+it means multi-targeting the test project to `net8.0;net48`.
 
 ## telemetry-shm: your first producer
 
@@ -186,6 +188,7 @@ gap, and closing it means multi-targeting the test project to `net8.0;net48`.
 [telemetry-shm v1 format](../../spec/telemetry-shm/v1/README.md) (Windows; the section is a named file mapping).
 
 ```csharp
+using IrTactile.Shm.Channels;
 using IrTactile.Shm.Telemetry;
 
 using var s = TelemetrySection.Create(TelemetrySection.NameFromEnvironment("mysim"), 256,

@@ -1,11 +1,11 @@
-// IrTactile.Shm.Telemetry - the shared channel model: kinds, flags, name rules.
+// IrTactile.Shm.Channels - the shared channel model: kinds, flags, name rules.
 //
 // SPDX-License-Identifier: MIT
 //
-// Normative text: spec/telemetry-shm/channel_model.md. The generated table is
+// Normative text: spec/channels/README.md. The generated table is
 // StdChannels.g.cs.
 
-namespace IrTactile.Shm.Telemetry;
+namespace IrTactile.Shm.Channels;
 
 /// <summary>Signal kind of a channel. Describes the data, not how it is played back.</summary>
 public enum SignalKind : uint

@@ -22,21 +22,21 @@
 namespace telemetry_script {
 
 using nlohmann::json;
-namespace tele = irt::telemetry;
+namespace channels = irtactile::shm::channels;
 namespace sh = irtactile::shm::telemetry;
 
-inline const tele::ChannelDef* findDef(const std::string& name)
+inline const channels::ChannelDef* findDef(const std::string& name)
 {
-    for (const auto& d : tele::standard::kChannels) if (name == d.name) return &d;
-    for (const auto& d : tele::standard::kArrays) if (name == d.name) return &d;
+    for (const auto& d : channels::standard::kChannels) if (name == d.name) return &d;
+    for (const auto& d : channels::standard::kArrays) if (name == d.name) return &d;
     return nullptr;
 }
 
-inline tele::Kind kindOf(const std::string& s)
+inline channels::Kind kindOf(const std::string& s)
 {
-    if (s == "continuous") return tele::Kind::Continuous;
-    if (s == "discrete") return tele::Kind::Discrete;
-    if (s == "event") return tele::Kind::Event;
+    if (s == "continuous") return channels::Kind::Continuous;
+    if (s == "discrete") return channels::Kind::Discrete;
+    if (s == "event") return channels::Kind::Event;
     throw std::runtime_error("unknown kind " + s);
 }
 
@@ -67,8 +67,8 @@ inline void run(const json& script, std::vector<uint64_t>& buffer)
                 throw std::runtime_error("open failed");
             }
         } else if (kind == "declare") {
-            const tele::ChannelDef* d = findDef(op.at("name"));
-            const auto prov = static_cast<tele::Provenance>(op.value("provenance", 0u));
+            const channels::ChannelDef* d = findDef(op.at("name"));
+            const auto prov = static_cast<channels::Provenance>(op.value("provenance", 0u));
             const int slot = d && d->arrayCapacity != 0
                                  ? producer.declareArray(*d, op.value("count", uint16_t{0}), prov)
                                  : (d ? producer.declare(*d, prov) : sh::Producer::kInvalidSlot);

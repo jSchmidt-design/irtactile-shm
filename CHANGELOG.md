@@ -26,19 +26,20 @@
 
 ## 1.1.0 - Unreleased
 
-- `spec/telemetry-shm/` - the channel model: `channel_model.md` (kinds, flags,
-  array layouts, provenance, name rules, append-only) and `channels/std.json`
+- `spec/channels/` - the transport-independent channel model: `README.md` (kinds, flags,
+  array layouts, provenance, name rules, append-only) and `std.json`
   (the normative `std.*` table: 35 scalars, 17 wheel arrays of capacity 8 and one
   axle array of capacity 4, `std::ConnectionStatus`, `std::Surface`). It replaces
   the unreleased `core.json` / `ext.json` split; every `std.*` channel is
   `OPTIONAL`.
   The telemetry-shm wire format itself is not part of this release.
-- `tools/gen_channels/` - generates the tables into `bindings/cpp/.../telemetry/`
-  and `bindings/csharp/.../Telemetry/`; the output is committed and CI fails if
+- `tools/gen_channels/` - generates the tables into `bindings/cpp/.../shm/channels/`
+  and `bindings/csharp/.../Channels/`; the output is committed and CI fails if
   regeneration differs (`.github/workflows/channels.yml`).
-- `bindings/cpp` - `irtactile::telemetry-model` (header-only):
-  `channel_model.h`, `std_channels.h` (namespace `irt::telemetry::standard`), with a doctest suite.
-- `bindings/csharp` - `IrTactile.Shm.Telemetry` (`ChannelModel`, `Std`) with xunit tests.
+- `bindings/cpp` - `irtactile::channels` (header-only): `irtactile/shm/channels/model.h`,
+  `irtactile/shm/channels/std.h` (umbrella `irtactile/shm/channels.h`; namespace
+  `irtactile::shm::channels`, table in `irtactile::shm::channels::standard`), with a doctest suite.
+- `bindings/csharp` - `IrTactile.Shm.Channels` (`ChannelModel`, `Std`) with xunit tests.
 - `spec/common/seqlock.md` generalized to a counter guarding a whole frame
   (`frameSeq`); `spec/common/versioning.md` gains the channel-model
   append-only rule.

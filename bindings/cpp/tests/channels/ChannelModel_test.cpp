@@ -1,15 +1,15 @@
-// Unit tests for the shared channel model (spec/telemetry-shm/channel_model.md):
+// Unit tests for the shared channel model (spec/channels/README.md):
 // the name rules and the invariants of the generated std table.
 
 #include <doctest/doctest.h>
 
-#include <irtactile/telemetry/channel_model.h>
-#include <irtactile/telemetry/std_channels.h>
+#include <irtactile/shm/channels/model.h>
+#include <irtactile/shm/channels/std.h>
 
 #include <set>
 #include <string>
 
-using namespace irt::telemetry;
+using namespace irtactile::shm::channels;
 
 TEST_CASE("isValidChannelName accepts the documented forms") {
     CHECK(isValidChannelName("std.engine.rpm"));

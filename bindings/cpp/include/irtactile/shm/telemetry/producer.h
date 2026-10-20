@@ -28,7 +28,7 @@
 #include <vector>
 
 #include <irtactile/shm/common/atomic.h>
-#include <irtactile/telemetry/std_channels.h>
+#include <irtactile/shm/channels/std.h>
 
 #include "layout.h"
 
@@ -61,7 +61,7 @@ public:
     /// into an existing section) its pinned fields are kept; `capacity` is clamped to what fits.
     OpenResult open(void* base, size_t bytes, uint32_t capacity, Identity identity)
     {
-        if (!irt::telemetry::isValidOwnerId(identity.simId) && !identity.simId.empty()) return OpenResult::BadIdentity;
+        if (!channels::isValidOwnerId(identity.simId) && !identity.simId.empty()) return OpenResult::BadIdentity;
         if (isReservedSimId(identity.simId)) return OpenResult::BadIdentity;
         m_base = static_cast<uint8_t*>(base);
         m_bytes = bytes;
@@ -86,20 +86,20 @@ public:
     // --- declaration (staged until commitLayout) ----------------------------
 
     /// A scalar from a generated table. Properties are copied from the table, so they always match.
-    int declare(const irt::telemetry::ChannelDef& def, irt::telemetry::Provenance provenance = irt::telemetry::Provenance::Unspecified)
+    int declare(const channels::ChannelDef& def, channels::Provenance provenance = channels::Provenance::Unspecified)
     {
         if (def.arrayCapacity != 0) return declareArray(def, 0, provenance);
         return addDesc(def.name, def.unit, def.rangeMin, def.rangeMax, def.kind, def.flags, 0, 0, def.layout, provenance);
     }
-    int declare(irt::telemetry::standard::Id id, irt::telemetry::Provenance provenance = irt::telemetry::Provenance::Unspecified)
+    int declare(channels::standard::Id id, channels::Provenance provenance = channels::Provenance::Unspecified)
     {
-        return declare(irt::telemetry::standard::kChannels[static_cast<uint32_t>(id)], provenance);
+        return declare(channels::standard::kChannels[static_cast<uint32_t>(id)], provenance);
     }
 
     /// The first `count` elements of an array table entry (0 = the table capacity); the descriptors carry `count` as
     /// their arrayCapacity. Returns the slot of element 0, elements are consecutive.
-    int declareArray(const irt::telemetry::ChannelDef& def, uint16_t count = 0,
-                     irt::telemetry::Provenance provenance = irt::telemetry::Provenance::Unspecified)
+    int declareArray(const channels::ChannelDef& def, uint16_t count = 0,
+                     channels::Provenance provenance = channels::Provenance::Unspecified)
     {
         if (def.arrayCapacity == 0) return declare(def, provenance);
         if (count == 0) count = def.arrayCapacity;
@@ -114,20 +114,20 @@ public:
         }
         return first;
     }
-    int declareArray(irt::telemetry::standard::ArrayId id, uint16_t count = 0,
-                     irt::telemetry::Provenance provenance = irt::telemetry::Provenance::Unspecified)
+    int declareArray(channels::standard::ArrayId id, uint16_t count = 0,
+                     channels::Provenance provenance = channels::Provenance::Unspecified)
     {
-        return declareArray(irt::telemetry::standard::kArrays[static_cast<uint32_t>(id)], count, provenance);
+        return declareArray(channels::standard::kArrays[static_cast<uint32_t>(id)], count, provenance);
     }
 
     /// A producer-specific channel; the consumer publishes it as `sim.<simId>.<name>`.
     int declareLocal(std::string_view name, std::string_view unit, float rangeMin, float rangeMax,
-                     irt::telemetry::Kind kind, uint32_t flags = irt::telemetry::kFlagNone,
-                     irt::telemetry::Provenance provenance = irt::telemetry::Provenance::Unspecified)
+                     channels::Kind kind, uint32_t flags = channels::kFlagNone,
+                     channels::Provenance provenance = channels::Provenance::Unspecified)
     {
-        if (name.empty() || name.size() > irt::telemetry::kNameMax) return kInvalidSlot;
-        if (!irt::telemetry::isValidChannelName(std::string("sim.x.") + std::string(name))) return kInvalidSlot;
-        return addDesc(name, unit, rangeMin, rangeMax, kind, flags, 0, 0, irt::telemetry::ArrayLayout::Index, provenance);
+        if (name.empty() || name.size() > channels::kNameMax) return kInvalidSlot;
+        if (!channels::isValidChannelName(std::string("sim.x.") + std::string(name))) return kInvalidSlot;
+        return addDesc(name, unit, rangeMin, rangeMax, kind, flags, 0, 0, channels::ArrayLayout::Index, provenance);
     }
 
     /// Wheels per axle, front to back (car `{2,2}`, motorcycle `{1,1}`). Empty = unknown. Entries are 1..8, at most 8
@@ -264,11 +264,11 @@ private:
     }
 
     int addDesc(std::string_view name, std::string_view unit, float rangeMin, float rangeMax,
-                irt::telemetry::Kind kind, uint32_t flags, uint16_t arrayIndex, uint16_t arrayCapacity,
-                irt::telemetry::ArrayLayout layout = irt::telemetry::ArrayLayout::Index,
-                irt::telemetry::Provenance provenance = irt::telemetry::Provenance::Unspecified)
+                channels::Kind kind, uint32_t flags, uint16_t arrayIndex, uint16_t arrayCapacity,
+                channels::ArrayLayout layout = channels::ArrayLayout::Index,
+                channels::Provenance provenance = channels::Provenance::Unspecified)
     {
-        if (m_stage.size() >= m_capacity || name.size() > irt::telemetry::kNameMax || unit.size() >= sizeof(ChannelDesc::unit)) {
+        if (m_stage.size() >= m_capacity || name.size() > channels::kNameMax || unit.size() >= sizeof(ChannelDesc::unit)) {
             return kInvalidSlot;
         }
         ChannelDesc d{};

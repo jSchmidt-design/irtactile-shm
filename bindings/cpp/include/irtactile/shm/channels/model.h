@@ -1,20 +1,21 @@
-// irtactile/telemetry/channel_model.h - the shared channel model: kinds, flags,
-// name rules. Normative text: spec/telemetry-shm/channel_model.md.
+// irtactile/shm/channels/model.h - the shared channel model: kinds, flags,
+// name rules. Normative text: spec/channels/README.md.
 //
 // SPDX-License-Identifier: MIT
 //
-// Hand-written (the generated table is std_channels.h).
+// Hand-written (the generated table is std.h).
 // Header-only, no dependencies beyond the standard library.
 
-#ifndef IRTACTILE_TELEMETRY_CHANNEL_MODEL_H
-#define IRTACTILE_TELEMETRY_CHANNEL_MODEL_H
+#ifndef IRTACTILE_SHM_CHANNELS_MODEL_H
+#define IRTACTILE_SHM_CHANNELS_MODEL_H
 
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
 
-namespace irt {
-namespace telemetry {
+namespace irtactile {
+namespace shm {
+namespace channels {
 
 /// Signal kind of a channel. Describes the data, not how it is played back.
 enum class Kind : uint32_t {
@@ -27,7 +28,7 @@ enum class Kind : uint32_t {
 inline constexpr uint32_t kFlagNone     = 0;
 inline constexpr uint32_t kFlagOptional = 1u << 1;  ///< producer may leave the channel invalid
 
-/// Element order and labelling of an array (channel_model.md, "Arrays").
+/// Element order and labelling of an array (spec/channels/README.md, "Arrays").
 enum class ArrayLayout : uint8_t {
     Index = 0,   ///< free index; also the layout of every scalar
     Wheel = 1,   ///< axle by axle front -> back, left -> right within an axle
@@ -87,7 +88,7 @@ constexpr bool isValidOwnerId(std::string_view id) {
 
 /// True for ids no external source or plugin may claim: the three namespaces,
 /// `irtactile`, and the built-in simulator ids. (An external source may still
-/// declare a built-in simulator id as its simId; see channel_model.md.)
+/// declare a built-in simulator id as its simId; see spec/channels/README.md.)
 constexpr bool isReservedOwnerId(std::string_view id) {
     constexpr std::string_view kReserved[] = {
         "std", "sim", "plugin", "irtactile",
@@ -146,7 +147,8 @@ constexpr bool isValidChannelName(std::string_view name) {
     return false;
 }
 
-}  // namespace telemetry
-}  // namespace irt
+}  // namespace channels
+}  // namespace shm
+}  // namespace irtactile
 
-#endif  // IRTACTILE_TELEMETRY_CHANNEL_MODEL_H
+#endif  // IRTACTILE_SHM_CHANNELS_MODEL_H

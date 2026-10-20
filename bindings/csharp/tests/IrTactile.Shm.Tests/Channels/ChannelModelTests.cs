@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-using IrTactile.Shm.Telemetry;
+using IrTactile.Shm.Channels;
 
-namespace IrTactile.Shm.Tests.Telemetry;
+namespace IrTactile.Shm.Tests.Channels;
 
 public class ChannelModelTests
 {
@@ -136,17 +136,5 @@ public class ChannelModelTests
         Assert.Equal(1, (int)Provenance.Native);
         Assert.Equal(2, (int)Provenance.Derived);
         Assert.Equal(3, (int)Provenance.Estimated);
-    }
-
-    [Fact]
-    public void WheelsPerAxleValidation()
-    {
-        Assert.True(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { }));
-        Assert.True(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 2, 2 }));
-        Assert.True(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 2, 4, 4 }));
-        Assert.True(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 1, 1, 1, 1, 1, 1, 1, 8 }));
-        Assert.False(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 0, 2 }));
-        Assert.False(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 2, 2, 0, 2 }));
-        Assert.False(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 9 }));
     }
 }

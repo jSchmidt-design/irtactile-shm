@@ -11,7 +11,7 @@
 #include <vector>
 
 using namespace irtactile::shm::telemetry;
-namespace tele = irt::telemetry;
+namespace channels = irtactile::shm::channels;
 
 namespace {
 
@@ -100,7 +100,7 @@ TEST_CASE("a fresh section is NotReady until the first commitLayout")
 
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    p.declare(tele::standard::Id::EngineRpm);
+    p.declare(channels::standard::Id::EngineRpm);
     CHECK(r.attach(s.data(), s.size) == AttachResult::NotReady);   // still staged
     REQUIRE(p.commitLayout());
     CHECK(r.attach(s.data(), s.size) == AttachResult::Ok);
@@ -114,9 +114,9 @@ TEST_CASE("table declarations copy the table properties; arrays declare every el
     Section s(Producer::requiredBytes(128));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 128, identity()) == OpenResult::Ok);
-    const int rpm = p.declare(tele::standard::Id::EngineRpm);
-    const int arr = p.declareArray(tele::standard::ArrayId::WheelLoad);
-    const int local = p.declareLocal("demo_wave", "", -1.f, 1.f, tele::Kind::Continuous);
+    const int rpm = p.declare(channels::standard::Id::EngineRpm);
+    const int arr = p.declareArray(channels::standard::ArrayId::WheelLoad);
+    const int local = p.declareLocal("demo_wave", "", -1.f, 1.f, channels::Kind::Continuous);
     REQUIRE(p.commitLayout());
     CHECK(rpm == 0);
     CHECK(arr == 1);
@@ -125,11 +125,11 @@ TEST_CASE("table declarations copy the table properties; arrays declare every el
     Reader r;
     REQUIRE(r.attach(s.data(), s.size) == AttachResult::Ok);
     const auto& d = r.descriptors();
-    CHECK(matchesTable(d[rpm], tele::standard::kChannels[static_cast<uint32_t>(tele::standard::Id::EngineRpm)], 0));
+    CHECK(matchesTable(d[rpm], channels::standard::kChannels[static_cast<uint32_t>(channels::standard::Id::EngineRpm)], 0));
     CHECK(std::string(d[arr + 3].name) == "std.wheel.load[3]");
     CHECK(d[arr + 3].arrayIndex == 3);
     CHECK(d[arr + 3].arrayCapacity == 8);
-    CHECK(matchesTable(d[arr + 3], tele::standard::kArrays[static_cast<uint32_t>(tele::standard::ArrayId::WheelLoad)], 3));
+    CHECK(matchesTable(d[arr + 3], channels::standard::kArrays[static_cast<uint32_t>(channels::standard::ArrayId::WheelLoad)], 3));
     CHECK(std::string(d[local].name) == "demo_wave");
 }
 
@@ -138,14 +138,14 @@ TEST_CASE("declareLocal rejects invalid names; declarations stop at capacity")
     Section s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    CHECK(p.declareLocal("", "", 0, 1, tele::Kind::Continuous) == Producer::kInvalidSlot);
-    CHECK(p.declareLocal("Bad.name", "", 0, 1, tele::Kind::Continuous) == Producer::kInvalidSlot);
-    CHECK(p.declareLocal("a b", "", 0, 1, tele::Kind::Continuous) == Producer::kInvalidSlot);
-    CHECK(p.declareLocal("pump[3]", "bar", 0, 1, tele::Kind::Continuous) == 0);
+    CHECK(p.declareLocal("", "", 0, 1, channels::Kind::Continuous) == Producer::kInvalidSlot);
+    CHECK(p.declareLocal("Bad.name", "", 0, 1, channels::Kind::Continuous) == Producer::kInvalidSlot);
+    CHECK(p.declareLocal("a b", "", 0, 1, channels::Kind::Continuous) == Producer::kInvalidSlot);
+    CHECK(p.declareLocal("pump[3]", "bar", 0, 1, channels::Kind::Continuous) == 0);
     for (int i = 1; i < 64; ++i) {
-        CHECK(p.declareLocal("c" + std::to_string(i), "", 0, 1, tele::Kind::Continuous) == i);
+        CHECK(p.declareLocal("c" + std::to_string(i), "", 0, 1, channels::Kind::Continuous) == i);
     }
-    CHECK(p.declareLocal("overflow", "", 0, 1, tele::Kind::Continuous) == Producer::kInvalidSlot);
+    CHECK(p.declareLocal("overflow", "", 0, 1, channels::Kind::Continuous) == Producer::kInvalidSlot);
 }
 
 TEST_CASE("frames round-trip values, valid bits, events and QPC")
@@ -153,9 +153,9 @@ TEST_CASE("frames round-trip values, valid bits, events and QPC")
     Section s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    const int rpm = p.declare(tele::standard::Id::EngineRpm);
-    const int gear = p.declare(tele::standard::Id::DrivetrainGear);
-    const int bump = p.declareLocal("bump", "", 0, 1, tele::Kind::Event);
+    const int rpm = p.declare(channels::standard::Id::EngineRpm);
+    const int gear = p.declare(channels::standard::Id::DrivetrainGear);
+    const int bump = p.declareLocal("bump", "", 0, 1, channels::Kind::Event);
     REQUIRE(p.commitLayout());
     p.setState(ProducerState::Active, 1000);
 
@@ -194,7 +194,7 @@ TEST_CASE("a frame being written is Torn, never a mix")
     Section s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    p.declare(tele::standard::Id::EngineRpm);
+    p.declare(channels::standard::Id::EngineRpm);
     REQUIRE(p.commitLayout());
     Reader r;
     REQUIRE(r.attach(s.data(), s.size) == AttachResult::Ok);
@@ -208,7 +208,7 @@ TEST_CASE("layout rewrite: readers see LayoutChanged, then the new descriptors")
     Section s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    p.declare(tele::standard::Id::EngineRpm);
+    p.declare(channels::standard::Id::EngineRpm);
     p.setCar("car_a", "Car A");
     REQUIRE(p.commitLayout());
     Reader r;
@@ -231,7 +231,7 @@ TEST_CASE("a layout rewrite that crashed mid-way leaves an odd layoutSeq: NotRea
     Section s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    p.declare(tele::standard::Id::EngineRpm);
+    p.declare(channels::standard::Id::EngineRpm);
     REQUIRE(p.commitLayout());
     Reader r;
     REQUIRE(r.attach(s.data(), s.size) == AttachResult::Ok);
@@ -243,7 +243,7 @@ TEST_CASE("a layout rewrite that crashed mid-way leaves an odd layoutSeq: NotRea
 
     Producer q;                  // the restarted producer
     REQUIRE(q.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    q.declare(tele::standard::Id::EngineRpm);
+    q.declare(channels::standard::Id::EngineRpm);
     REQUIRE(q.commitLayout());
     CHECK(s.header().layoutSeq % 2 == 0);
     CHECK(s.header().layoutSeq > odd);
@@ -256,7 +256,7 @@ TEST_CASE("a restart into an existing section keeps the pinned fields and refuse
     {
         Producer p;
         REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-        p.declare(tele::standard::Id::EngineRpm);
+        p.declare(channels::standard::Id::EngineRpm);
         REQUIRE(p.commitLayout());
     }
     const uint32_t total = s.header().totalBytes;
@@ -284,7 +284,7 @@ TEST_CASE("validateHeader rejections")
     Section s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    p.declare(tele::standard::Id::EngineRpm);
+    p.declare(channels::standard::Id::EngineRpm);
     REQUIRE(p.commitLayout());
     const Header good = s.header();
     REQUIRE(validateHeader(good, s.size) == AttachResult::Ok);
@@ -387,11 +387,11 @@ TEST_CASE("the producer writes provenance, layout and the wheel layout")
     Section s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
-    const int rpm = p.declare(tele::standard::Id::EngineRpm, tele::Provenance::Native);
-    const int defl = p.declareArray(tele::standard::ArrayId::SuspensionDeflection, 4, tele::Provenance::Derived);
-    const int third = p.declareArray(tele::standard::ArrayId::SuspensionThird, 2);
-    const int local = p.declareLocal("demo_wave", "", -1.f, 1.f, tele::Kind::Continuous, tele::kFlagNone, tele::Provenance::Estimated);
-    CHECK(p.declareArray(tele::standard::ArrayId::SuspensionThird, 5) == Producer::kInvalidSlot);   // above the table capacity
+    const int rpm = p.declare(channels::standard::Id::EngineRpm, channels::Provenance::Native);
+    const int defl = p.declareArray(channels::standard::ArrayId::SuspensionDeflection, 4, channels::Provenance::Derived);
+    const int third = p.declareArray(channels::standard::ArrayId::SuspensionThird, 2);
+    const int local = p.declareLocal("demo_wave", "", -1.f, 1.f, channels::Kind::Continuous, channels::kFlagNone, channels::Provenance::Estimated);
+    CHECK(p.declareArray(channels::standard::ArrayId::SuspensionThird, 5) == Producer::kInvalidSlot);   // above the table capacity
     p.setWheelLayout({2, 2});
     REQUIRE(p.commitLayout());
 
@@ -422,9 +422,9 @@ TEST_CASE("the producer writes provenance, layout and the wheel layout")
 
 TEST_CASE("validateDescriptor and matchesTable")
 {
-    namespace st = tele::standard;
-    const tele::ChannelDef& defl = st::kArrays[static_cast<uint32_t>(st::ArrayId::SuspensionDeflection)];
-    const tele::ChannelDef& rpm = st::kChannels[static_cast<uint32_t>(st::Id::EngineRpm)];
+    namespace st = channels::standard;
+    const channels::ChannelDef& defl = st::kArrays[static_cast<uint32_t>(st::ArrayId::SuspensionDeflection)];
+    const channels::ChannelDef& rpm = st::kChannels[static_cast<uint32_t>(st::Id::EngineRpm)];
 
     Section s(Producer::requiredBytes(64));
     Producer p;

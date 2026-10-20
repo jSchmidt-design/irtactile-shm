@@ -117,7 +117,7 @@ void checkAttach(const Reader& r, const json& ex, Failures& f)
                 std::string base = got.name;
                 const size_t br = base.find('[');
                 if (br != std::string::npos) base.resize(br);
-                const irt::telemetry::ChannelDef* def = telemetry_script::findDef(base);
+                const irtactile::shm::channels::ChannelDef* def = telemetry_script::findDef(base);
                 const bool match = def != nullptr && matchesTable(got, *def, got.arrayIndex);
                 f.eq((tag + "tableMatch").c_str(), match ? 1 : 0, d["tableMatch"].get<bool>() ? 1 : 0);
             }

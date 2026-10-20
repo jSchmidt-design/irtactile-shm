@@ -37,7 +37,9 @@ must reject it. The rules a reader implements to earn that are in
 [spec/common/versioning.md](spec/common/versioning.md).
 
 Shared mechanics both contracts build on: [spec/common](spec/common) - the seqlock
-protocol, concurrency classes, versioning rules, and the liveness model.
+protocol, concurrency classes, versioning rules, and the liveness model. The channel
+model telemetry-shm carries (kinds, flags, name rules, the `std.*` table) is
+transport-independent and lives in [spec/channels](spec/channels/README.md).
 
 ## The consumer loop
 

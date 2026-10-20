@@ -2,22 +2,22 @@
 
 The vocabulary every irTactile telemetry producer and consumer shares: what a
 *channel* is, how it is named, and which channels exist in the standard tables.
-It is independent of any transport. telemetry-shm (planned) carries channels
-over shared memory, and irTactile's own signal bus uses the same kinds, flags
+It is independent of any transport. [telemetry-shm](../telemetry-shm/v1/README.md) carries
+channels over shared memory, and irTactile's own signal bus uses the same kinds, flags
 and name rules.
 
 Normative sources in this directory:
 
 | File | Content |
 |---|---|
-| `channels/std.json` | `std.*` - the standard table: scalars, wheel / axle arrays, `std::ConnectionStatus`, `std::Surface` |
+| `std.json` | `std.*` - the standard table: scalars, wheel / axle arrays, `std::ConnectionStatus`, `std::Surface` |
 | this file | kinds, flags, array layouts, provenance, naming rules, append-only rule |
 
-The generated table (`bindings/cpp/include/irtactile/telemetry/std_channels.h`, C++ namespace
-`irt::telemetry::standard`, and `StdChannels.g.cs` under
-`bindings/csharp/src/IrTactile.Shm/Telemetry/`, class `Std`) is produced from the JSON by
+The generated table (`bindings/cpp/include/irtactile/shm/channels/std.h`, C++ namespace
+`irtactile::shm::channels::standard`, and `StdChannels.g.cs` under
+`bindings/csharp/src/IrTactile.Shm/Channels/`, class `Std`) is produced from the JSON by
 `tools/gen_channels/gen_channels.py` and committed. CI regenerates them and
-fails on a difference. `channel_model.h` / `ChannelModel.cs` (kinds, flags, name
+fails on a difference. `channels/model.h` / `ChannelModel.cs` (kinds, flags, name
 rules) are hand-written and implement this file.
 
 ## Values

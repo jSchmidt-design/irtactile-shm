@@ -8,11 +8,12 @@ project(irtactile_shm_cpp LANGUAGES CXX)
 # That is what lets a consumer add_subdirectory() this and be done.
 #
 # Targets:
-#   irtactile::shm-common   - common/atomic.h (+ future common/version.h)
-#   irtactile::stream-shm   - stream/*, depends on shm-common
-#   irtactile::telemetry-model - telemetry/*: channel model + std table
-#   irtactile::shm          - umbrella convenience target
-#   irtactile::telemetry-shm   - telemetry-shm v1: producer, reader, return region
+#   irtactile::shm-common    - common/atomic.h (+ future common/version.h)
+#   irtactile::channels      - channels/*: channel model + std table, no wire layout
+#   irtactile::stream-shm    - stream/*, depends on shm-common
+#   irtactile::telemetry-shm - telemetry/*: producer, reader, return region;
+#                              depends on shm-common and channels
+#   irtactile::shm           - umbrella convenience target
 
 add_library(irtactile_shm_common INTERFACE)
 target_include_directories(irtactile_shm_common INTERFACE
@@ -26,31 +27,34 @@ target_link_libraries(irtactile_shm_stream INTERFACE irtactile_shm_common)
 
 # Channel model (kinds, flags, name rules, std.* table). Header-only,
 # independent of shm-common: it carries no wire layout, only vocabulary.
-add_library(irtactile_telemetry_model INTERFACE)
-target_include_directories(irtactile_telemetry_model INTERFACE
+add_library(irtactile_channels INTERFACE)
+target_include_directories(irtactile_channels INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-target_compile_features(irtactile_telemetry_model INTERFACE cxx_std_17)
+target_compile_features(irtactile_channels INTERFACE cxx_std_17)
 
 # telemetry-shm v1 wire format (producer + reader + return region). Header-only,
 # depends on shm-common (atomics) and the channel model.
 add_library(irtactile_shm_telemetry INTERFACE)
-target_link_libraries(irtactile_shm_telemetry INTERFACE irtactile_shm_common irtactile_telemetry_model)
+target_link_libraries(irtactile_shm_telemetry INTERFACE irtactile_shm_common irtactile_channels)
 
 add_library(irtactile_shm INTERFACE)
-target_link_libraries(irtactile_shm INTERFACE irtactile_shm_common irtactile_shm_stream irtactile_shm_telemetry irtactile_telemetry_model)
+target_link_libraries(irtactile_shm INTERFACE irtactile_shm_common irtactile_channels irtactile_shm_stream irtactile_shm_telemetry)
 
-add_library(irtactile::shm-common ALIAS irtactile_shm_common)
-add_library(irtactile::stream-shm ALIAS irtactile_shm_stream)
-add_library(irtactile::shm        ALIAS irtactile_shm)
+add_library(irtactile::shm-common    ALIAS irtactile_shm_common)
+add_library(irtactile::channels      ALIAS irtactile_channels)
+add_library(irtactile::stream-shm    ALIAS irtactile_shm_stream)
 add_library(irtactile::telemetry-shm ALIAS irtactile_shm_telemetry)
-add_library(irtactile::telemetry-model ALIAS irtactile_telemetry_model)
+add_library(irtactile::shm           ALIAS irtactile_shm)
 
 # Make the headers visible in IDE project trees; they are the whole deliverable.
 if(MSVC)
     add_custom_target(irtactile_shm_headers SOURCES
         include/irtactile/shm/common/atomic.h
+        include/irtactile/shm/channels.h
+        include/irtactile/shm/channels/model.h
+        include/irtactile/shm/channels/std.h
         include/irtactile/shm/stream/layout.h
         include/irtactile/shm/stream/reader.h
         include/irtactile/shm/stream/win32.h
@@ -60,8 +64,6 @@ if(MSVC)
         include/irtactile/shm/telemetry/producer.h
         include/irtactile/shm/telemetry/reader.h
         include/irtactile/shm/telemetry/win32.h
-        include/irtactile/telemetry/channel_model.h
-        include/irtactile/telemetry/std_channels.h
     )
     set_target_properties(irtactile_shm_headers PROPERTIES FOLDER "irtactile-shm")
 endif()

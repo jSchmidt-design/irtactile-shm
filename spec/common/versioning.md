@@ -40,7 +40,7 @@ happens to do.
 
 ## Channel model: append-only
 
-The channel model ([../telemetry-shm/channel_model.md](../telemetry-shm/channel_model.md))
+The channel model ([../channels/README.md](../channels/README.md))
 is versioned by its contents, not by a field:
 
 - A release may add channels, add enum values and use reserved values.

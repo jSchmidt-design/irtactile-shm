@@ -2,7 +2,7 @@
 
 A third-party **producer** (a sim adapter, a rig controller, a test generator) publishes real-time telemetry;
 irTactile reads it as a signal source. The payload is the channel model in
-[../channel_model.md](../channel_model.md): named `float32` channels with a kind, a unit and a validity bit per frame.
+[spec/channels](../../channels/README.md): named `float32` channels with a kind, a unit and a validity bit per frame.
 This document is the wire format that carries it.
 
 Field tables: [fields.md](fields.md). Shared mechanics: [../../common](../../common) - the seqlock protocol
@@ -68,7 +68,7 @@ consumer - channels are resolved **by name**.
 
 | Descriptor `name` | Meaning |
 |---|---|
-| a `std.*` table name (`std.engine.rpm`, `std.suspension.deflection[2]`) | the standard channel. `unit`, `rangeMin`, `rangeMax`, `kind`, `flags` and `layout` **must equal the table entry**; for an array element `1 <= arrayCapacity <= table capacity` and `arrayIndex < arrayCapacity` (the producer declares the elements it fills, see [channel_model.md](../channel_model.md#arrays)). `provenance` is the producer's statement and is not compared. The bindings' `declare()` fills all of it from the table. |
+| a `std.*` table name (`std.engine.rpm`, `std.suspension.deflection[2]`) | the standard channel. `unit`, `rangeMin`, `rangeMax`, `kind`, `flags` and `layout` **must equal the table entry**; for an array element `1 <= arrayCapacity <= table capacity` and `arrayIndex < arrayCapacity` (the producer declares the elements it fills, see [spec/channels](../../channels/README.md#arrays)). `provenance` is the producer's statement and is not compared. The bindings' `declare()` fills all of it from the table. |
 | a *local* name (`demo_wave`, `pump[2]`) | a producer-specific channel; the consumer publishes it as `sim.<simId>.<name>` with the descriptor as given. `[a-z0-9_]` in every segment, last segment may also use upper case, optional `[i]` suffix. |
 
 Everything else is **rejected per channel** (not per source): a `plugin.*` or `sim.*` name, an unknown `std.*` name, a table name whose properties contradict the table, invalid syntax, a duplicate name, an unknown

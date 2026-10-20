@@ -7,6 +7,7 @@
 // 'a' toggles Active / Inactive, 'q' quits. The source id comes from IRTACTILE_TELEMETRY_SOURCE
 // (set by irTactile when it launches the exe as a companion), else "demo".
 
+using IrTactile.Shm.Channels;
 using IrTactile.Shm.Telemetry;
 
 string name = TelemetrySection.NameFromEnvironment("demo");

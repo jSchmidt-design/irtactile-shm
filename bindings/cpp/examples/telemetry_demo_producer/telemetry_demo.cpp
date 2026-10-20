@@ -23,7 +23,7 @@
 #include <thread>
 
 using namespace irtactile::shm::telemetry;
-namespace tele = irt::telemetry;
+namespace channels = irtactile::shm::channels;
 
 int main()
 {
@@ -40,12 +40,12 @@ int main()
     }
     Producer& p = s.producer();
 
-    const int thr  = p.declare(tele::standard::Id::InputThrottle, tele::Provenance::Native);
-    const int rpm  = p.declare(tele::standard::Id::EngineRpm, tele::Provenance::Native);
-    const int defl = p.declareArray(tele::standard::ArrayId::SuspensionDeflection, 4, tele::Provenance::Native);
+    const int thr  = p.declare(channels::standard::Id::InputThrottle, channels::Provenance::Native);
+    const int rpm  = p.declare(channels::standard::Id::EngineRpm, channels::Provenance::Native);
+    const int defl = p.declareArray(channels::standard::ArrayId::SuspensionDeflection, 4, channels::Provenance::Native);
     p.setWheelLayout({2, 2});
-    const int wave = p.declareLocal("demo_wave", "", -1.0f, 1.0f, tele::Kind::Continuous);
-    const int bump = p.declareLocal("demo_bump", "", 0.0f, 1.0f, tele::Kind::Event);
+    const int wave = p.declareLocal("demo_wave", "", -1.0f, 1.0f, channels::Kind::Continuous);
+    const int bump = p.declareLocal("demo_bump", "", 0.0f, 1.0f, channels::Kind::Event);
     p.setCar("demo_car", "Demo Car");
     p.commitLayout();   // the section becomes visible here
 

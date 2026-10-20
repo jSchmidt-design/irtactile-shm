@@ -18,6 +18,7 @@ using System.Diagnostics;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.Versioning;
 using System.Text;
+using IrTactile.Shm.Channels;
 
 namespace IrTactile.Shm.Telemetry;
 
@@ -254,7 +255,7 @@ public sealed unsafe class TelemetryProducer
     /// </summary>
     public void SetWheelLayout(params byte[] wheelsPerAxle)
     {
-        Array.Clear(_wheelsPerAxle);
+        Array.Clear(_wheelsPerAxle, 0, _wheelsPerAxle.Length);
         if (wheelsPerAxle.Length <= TelemetryLayout.MaxAxles && TelemetryLayout.IsValidWheelsPerAxle(wheelsPerAxle))
         {
             wheelsPerAxle.CopyTo(_wheelsPerAxle, 0);
@@ -437,7 +438,9 @@ public sealed class TelemetryReturnView
 }
 
 /// <summary>Owns the named inbound section (Windows) and the <see cref="TelemetryProducer"/> bound to it.</summary>
+#if NET5_0_OR_GREATER
 [SupportedOSPlatform("windows")]
+#endif
 public sealed unsafe class TelemetrySection : IDisposable
 {
     private readonly MemoryMappedFile _inbound;
