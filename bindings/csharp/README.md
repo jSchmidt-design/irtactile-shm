@@ -1,14 +1,17 @@
 ﻿# C# consumer API
 
-The C# binding for the [stream-shm v1 format](../../spec/stream-shm/v1/README.md).
-One assembly, `IrTactile.Shm`, namespace `IrTactile.Shm.Stream`. **Fully managed** -
-`MemoryMappedFile`, `EventWaitHandle`, `Volatile.Read` for the acquire/release
-fields, `[StructLayout(LayoutKind.Explicit)]` for the wire structs. No native
+The C# binding for the irTactile shared-memory contracts. One assembly,
+`IrTactile.Shm`. **Fully managed** - `MemoryMappedFile`, `EventWaitHandle`,
+`Volatile.Read` / `Volatile.Write` for the acquire/release fields. No native
 dependency, no P/Invoke.
 
-Reader-side only, and the section is mapped read-only, so the acquire half is
-all there is - nothing in the shipped assembly stores to the section. (The test
-suite writes with `Volatile.Write`, standing in for a producer.)
+| Namespace | Content |
+|---|---|
+| `IrTactile.Shm.Stream` | [stream-shm v1](../../spec/stream-shm/v1/README.md) consumer: `Reader`, `Client`. Reader-side only; the section is mapped read-only. |
+| `IrTactile.Shm.Telemetry` | [telemetry-shm v1](../../spec/telemetry-shm/v1/README.md) producer: `TelemetryProducer`, `TelemetrySection`. See *telemetry-shm: your first producer*. |
+| `IrTactile.Shm.Channels` | The [channel model](../../spec/channels/README.md): `ChannelModel` (kinds, flags, name rules) and the generated `std.*` table `Std`. |
+
+Most of this guide is the stream consumer; the telemetry producer is at the end.
 
 ## Install
 

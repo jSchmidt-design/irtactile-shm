@@ -13,7 +13,9 @@ Parsing those bytes yourself is not the intended path, though. The C++ and C# cl
 in this repo already implement the spec, including the parts that are easy to get
 subtly wrong, and using one is strongly recommended. Each is an independent
 implementation checked against the same conformance vectors rather than against the
-other, so the spec stays the authority either way.
+other, so the spec stays the authority either way. One exception: the telemetry-shm
+*encode* vectors are the C++ producer's output, so they check the C# producer against
+the C++ one; the expectations of every decode case are written from the spec.
 
 **Platform.** The shared section and the event that signals new data are named Windows
 kernel objects, so `Client`, which owns the mapping and the waiting, runs only on
@@ -107,16 +109,18 @@ each, in the guides below.
 
 ## Bindings
 
-| | stream-shm v1 |
-|---|---|
-| C++ ([bindings/cpp](bindings/cpp)) | read ✅ · write ✅ |
-| C# ([bindings/csharp](bindings/csharp)) | read ✅ |
+| | stream-shm v1 | telemetry-shm v1 | channel model |
+|---|---|---|---|
+| C++ ([bindings/cpp](bindings/cpp)) | read ✅ · write ✅ | read ✅ · write ✅ | ✅ |
+| C# ([bindings/csharp](bindings/csharp)) | read ✅ | write ✅ | ✅ |
 
 **read** is the full consumer API: `Reader` over any mapped buffer, `Client` for the
 Windows mapping and event. **write** is the producer half of the contract - the wire
 structs, the size arithmetic, the addressing helpers and the acquire/release
 accessors a producer publishes through. There is deliberately no `Writer` class; see
-the [C++ guide](bindings/cpp/README.md), *Producer side*, for why.
+the [C++ guide](bindings/cpp/README.md), *Producer side*, for why. For telemetry-shm the
+roles flip: a third party writes (`Producer`, `TelemetryProducer`), irTactile reads; the
+C++ `Reader` exists for tools that inspect a producer.
 
 **C++** - see the [C++ consumer guide](bindings/cpp/README.md). Header-only, zero
 dependencies, C++17, `add_subdirectory()`-and-done (or point CMake at
@@ -145,14 +149,21 @@ with no global state beyond the toolchain.
 
 **C++ binding** - header-only, no build step of its own. Two ways to use it:
 - `add_subdirectory(bindings/cpp)` from a CMake project that wants the
-  `irtactile::shm`, `irtactile::stream-shm` and `irtactile::shm-common` targets.
+  `irtactile::shm` (umbrella), `irtactile::stream-shm`, `irtactile::telemetry-shm`,
+  `irtactile::channels` and `irtactile::shm-common` targets.
 - Standalone, just to compile the examples: `cmake -S bindings/cpp/examples -B build-examples && cmake --build build-examples`.
 
 **C# binding** - `dotnet build bindings/csharp`. Targets `net8.0` and `netstandard2.0`.
 
-**`tools/mkvectors`** - the generator that emits the conformance vectors
-(see *Verify* below). Only build this if you intend to regenerate the suite:
-`cmake -S tools/mkvectors -B build-mkvectors && cmake --build build-mkvectors`.
+**`tools/mkvectors`**, **`tools/mkvectors_telemetry`** - the generators that emit the
+stream-shm and telemetry-shm conformance vectors (see *Verify* below). Only build them
+if you intend to regenerate a suite:
+`cmake -S tools/mkvectors -B build-mkvectors && cmake --build build-mkvectors`, and
+`cmake -S tools/mkvectors_telemetry -B build-mkvt && cmake --build build-mkvt`.
+
+**`tools/gen_channels`** - generates the `std.*` table bindings from
+`spec/channels/std.json`: `uv run tools/gen_channels/gen_channels.py` (standard library
+only; `--check` is what CI runs).
 
 ### Test
 
@@ -171,21 +182,25 @@ dotnet test bindings/csharp
 
 ### Verify (conformance vectors)
 
-`conformance/stream-shm/v1/` is the binding-independent half of the test strategy
+`conformance/stream-shm/v1/` and `conformance/telemetry-shm/v1/` are the
+binding-independent half of the test strategy
 (see [conformance/README.md](conformance/README.md)): golden binary blobs plus a
 `manifest.json` of expected results, every binding's test suite runs the same
 blobs against the same expectations. A binding that passes the suite here has
 implemented the spec, not any other binding's headers.
 
-The C++ suite runs the vectors via the `conformance_runner` target built in the
-*Test* step above; `ctest --test-dir build-tests` invokes it. The C# suite runs
-the same vectors via `IrTactile.Shm.Tests.Conformance`; `dotnet test` invokes it.
+The C++ suite runs the vectors via the `conformance_runner` and
+`telemetry_conformance_runner` targets built in the *Test* step above;
+`ctest --test-dir build-tests` invokes both. The C# suite runs the stream-shm vectors
+via `IrTactile.Shm.Tests.Conformance` and replays the telemetry-shm encode vectors in
+`TelemetryProducerTests`; `dotnet test` invokes both.
 
 To regenerate the vectors - only when the spec or its producer-side encoding
 changes - run the generator and inspect the diff:
 ```
 ./build-mkvectors/mkvectors conformance/stream-shm/v1
-git diff conformance/stream-shm/v1
+./build-mkvt/mkvectors_telemetry conformance/telemetry-shm/v1
+git diff conformance/
 ```
 The blobs are committed; any change is a spec change and belongs in its own
 review.
@@ -199,7 +214,8 @@ LICENSE            MIT
 spec/              normative wire-format documentation (the deliverable)
 bindings/          per-language implementations of the spec
 conformance/       golden vectors every binding's test suite runs (conformance/README.md)
-tools/             repo-local tooling - mkvectors emits the conformance vectors
+tools/             repo-local tooling - mkvectors / mkvectors_telemetry emit the
+                   conformance vectors, gen_channels generates the std.* tables
 ```
 
 ## License

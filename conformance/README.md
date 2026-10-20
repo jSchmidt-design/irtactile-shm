@@ -25,7 +25,7 @@ way, so it has `decode/` only. telemetry-shm's **inbound** region (third party w
 needs `encode/` vectors - byte-identical output catches padding and endianness
 mistakes a decode test cannot - and its **return** region `decode/` again. Both ship in
 `conformance/telemetry-shm/v1` (manifest schema 1, its own op set: `attach`, `frame`,
-`return`, `encode`; emitted by `tools/mkvectors_telemetry`).
+`return`, `encode`; emitted by `tools/mkvectors_telemetry`; see *telemetry-shm v1* below).
 
 ## How a binding runs the suite
 
@@ -189,3 +189,33 @@ Three properties of that family are deliberate:
   and `slotBytes` are each individually in range; only the product runs past the
   mapping. It is the rule most likely to be missing from a hand-written binding, and
   the one whose absence is an out-of-bounds read rather than a wrong number.
+
+## telemetry-shm v1 (manifest schema 1)
+
+`conformance/telemetry-shm/v1/manifest.json` has its own schema, independent of the
+stream-shm one above. The loading rules are the same (refuse an unknown schema, a
+missing blob fails the case, an unknown op fails the case). A case is one op, not a
+list of steps:
+
+| Op | Fields | Semantics |
+|---|---|---|
+| `attach` | `file`, optional `mappedBytes`, `expect` | Attach a consumer to the inbound section. `expect.attach` is `Ok` / `NotReady` / `BadVersion` / `Malformed`. On `Ok`, optional keys assert the snapshot: `capacity`, `channelCount`, `simId`, `simName`, `carId`, `carName`, `wheelsPerAxle`, `layoutSeq`, `descNames` (slot order), and `descs` (per `slot`: `name`, `unit`, `kind`, `flags`, `arrayIndex`, `arrayCapacity`, `provenance`, `layout`; `valid` = passes the per-descriptor rules, `tableMatch` = a `std.*` name whose properties equal the table). |
+| `frame` | `file`, optional `lastSeen`, `expect` | Attach (expected `Ok` unless `expect.attach` says otherwise), then read one frame given the last seen `frameSeq` (default 0). `expect.result` is `NewFrame` / `NoNewFrame` / `Torn` / `LayoutChanged` / `LayoutBusy` / `Detached`. Optional `producerState`, `lastPublishQpc`; on `NewFrame` also `frameSeq`, `frameQpc`, `values` (slot -> float, exact), `validSlots` (the exact set of valid slots), `eventCounts` (slot -> count). |
+| `return` | `file`, `expect` | Attach a producer-side reader to the return region (`expect.attach`); if `expect.read` is present, read once and compare `capacity`, `forLayoutSeq`, `consumerState`, `lastConsumeQpc`, and `accepted` / `demanded` (exact slot sets, `demanded` read with the "not Active = every accepted slot" rule). |
+| `encode` | `script`, `bytes`, `file`, optional `initial` | Start from a zeroed buffer of `bytes` (or the `initial` blob, a restart), run `script` through the binding's producer, and compare the whole buffer with `file` byte for byte. |
+
+Script ops (`encode`): `open` (`capacity`, `simId`, `simName`, `qpcFrequency` default
+10000000, `pid` default 4242), `declare` (`name` of a `std.*` entry, optional `count`
+for arrays and `provenance`), `declareLocal` (`name`, `unit`, `min`, `max`, `kind`,
+`flags`), `wheels` (`list`), `car` (`id`, `name`), `commit`, `state` (`state`, `now`),
+`frame` (`set` and `event` as slot -> value, `frameQpc`, `now`), `raw` (`offset` plus one
+of `u8` / `u16` / `u32` / `u64`, or `fill` + `len`). `open`, `declare` and `declareLocal`
+fail the case if the producer refuses them.
+
+The decode expectations are literals in
+[`tools/mkvectors_telemetry`](../tools/mkvectors_telemetry/mkvectors_telemetry.cpp),
+written from the spec. The encode blobs are the C++ producer's output, so they check a
+producer against the C++ one, not against an independent opinion. Reference harness:
+[`bindings/cpp/tests/telemetry_conformance_runner.cpp`](../bindings/cpp/tests/telemetry_conformance_runner.cpp)
+(script ops in `telemetry_script.h`). Regenerate with
+`build-mkvt/mkvectors_telemetry conformance/telemetry-shm/v1`.

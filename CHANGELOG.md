@@ -2,19 +2,15 @@
 
 ## 1.2.0 - Unreleased
 
-- Descriptor `provenance` (offset 100) and `layout` (offset 101) take two bytes of `reserved`; header
-  `reserved1` becomes `wheelsPerAxle[8]` (offset 248). Both are in v1 in place (`versionMinor` stays 0): v1 was
-  never published. A table array may be declared with fewer elements than the table capacity
-  (`1 <= arrayCapacity <= table capacity`), so raising a capacity later breaks no producer. Bindings: `Provenance`,
-  `ArrayLayout`, `declare(..., provenance)`, `declareArray(def, count, provenance)`, `setWheelLayout()`,
-  `validateDescriptor()`; vectors for the wheel layout, descriptor rules and a smaller-capacity array.
-
 - `spec/telemetry-shm/v1/` - the telemetry-shm wire format: an inbound region the
   producer creates (header, descriptor table, one latest-value frame with a
   frame seqlock) and a return region irTactile creates (`accepted[]`,
   `demanded[]`, consumer liveness). Names `irTactile_Telemetry_<sourceId>` /
   `irTactile_TelemetryReturn_<sourceId>`; the producer reads its identity from
-  `IRTACTILE_TELEMETRY_SOURCE` / `IRTACTILE_TELEMETRY_SECTION`.
+  `IRTACTILE_TELEMETRY_SOURCE` / `IRTACTILE_TELEMETRY_SECTION`. Descriptors carry
+  `provenance` and the array `layout`; the header carries the vehicle's
+  `wheelsPerAxle`. A table array may be declared with fewer elements than the
+  table capacity (`1 <= arrayCapacity <= table capacity`).
 - `conformance/telemetry-shm/v1/` - 60 vector cases (attach, frame, return region
   decode; byte-exact producer encode), emitted by `tools/mkvectors_telemetry`.
 - `bindings/cpp` - `irtactile::telemetry-shm` (header-only): `Producer`, `Reader`,
@@ -29,9 +25,8 @@
 - `spec/channels/` - the transport-independent channel model: `README.md` (kinds, flags,
   array layouts, provenance, name rules, append-only) and `std.json`
   (the normative `std.*` table: 35 scalars, 17 wheel arrays of capacity 8 and one
-  axle array of capacity 4, `std::ConnectionStatus`, `std::Surface`). It replaces
-  the unreleased `core.json` / `ext.json` split; every `std.*` channel is
-  `OPTIONAL`.
+  axle array of capacity 4, `std::ConnectionStatus`, `std::Surface`). Every
+  `std.*` channel is `OPTIONAL`.
   The telemetry-shm wire format itself is not part of this release.
 - `tools/gen_channels/` - generates the tables into `bindings/cpp/.../shm/channels/`
   and `bindings/csharp/.../Channels/`; the output is committed and CI fails if

@@ -5,6 +5,18 @@ Header-only, zero dependencies, namespace `irtactile::shm::stream`. Namespaced
 because a public header must not drop `ShmStreamHeader` into the global
 namespace of somebody else's project.
 
+The same tree carries the [telemetry-shm v1](../../spec/telemetry-shm/v1/README.md)
+binding (`irtactile/shm/telemetry/*`, see *telemetry-shm: your first producer* at
+the end) and the [channel model](../../spec/channels/README.md) it carries:
+
+| Header | Content |
+|---|---|
+| `irtactile/shm/channels/model.h` | Kinds, flags, array layouts, provenance, `isValidChannelName()`. Hand-written. |
+| `irtactile/shm/channels/std.h` | The `std.*` table, namespace `irtactile::shm::channels::standard`. Generated from `spec/channels/std.json`. |
+| `irtactile/shm/channels.h` | Umbrella for the two above. Target `irtactile::channels`. |
+
+The stream-shm headers:
+
 | Header | Content |
 |---|---|
 | `irtactile/shm/stream/layout.h` | The wire format: structs, constants, size arithmetic, addressing. Constexpr only, zero behaviour. What a non-C++ binding is generated from. **Both sides** - see *Producer side*. |

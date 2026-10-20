@@ -43,7 +43,7 @@ public enum ArrayLayout : byte
     Axle = 2,
 }
 
-/// <summary>Who computed a value (descriptor field <c>provenance</c>); equals the plugin SDK <c>irt_provenance</c>.</summary>
+/// <summary>Who computed a value (descriptor field <c>provenance</c>).</summary>
 public enum Provenance : byte
 {
     /// <summary>Not stated; consumers read it as <see cref="Native"/>.</summary>

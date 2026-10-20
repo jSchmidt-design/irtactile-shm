@@ -35,7 +35,7 @@ enum class ArrayLayout : uint8_t {
     Axle  = 2,   ///< front -> back
 };
 
-/// Who computed a value (descriptor field `provenance`). Values equal the plugin SDK `irt_provenance`.
+/// Who computed a value (descriptor field `provenance`).
 enum class Provenance : uint8_t {
     Unspecified = 0,   ///< not stated; consumers read it as Native
     Native      = 1,   ///< delivered by the sim API

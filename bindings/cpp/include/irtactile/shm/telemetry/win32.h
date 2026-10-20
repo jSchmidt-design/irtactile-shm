@@ -9,7 +9,7 @@
 //     ProducerSection s;
 //     s.create(sectionNameFromEnvironment("demo"), 256, {"", "My Sim"});
 //     Producer& p = s.producer();
-//     p.declare(core::Id::EngineRpm);  p.commitLayout();
+//     p.declare(channels::standard::Id::EngineRpm);  p.commitLayout();
 //     ...
 //     ReturnView rv; if (s.pollReturn(rv)) { /* rv.isAccepted(slot) */ }
 

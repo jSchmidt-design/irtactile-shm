@@ -6,9 +6,9 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
 
-    <!-- The binding reads shared memory through raw pointers (the same memory
-         the producer is concurrently writing). All unsafe code is internal;
-         the consumer-facing surface is safe (ReadOnlySpan&lt;float&gt;). -->
+    <!-- The binding accesses shared memory through raw pointers (the same memory
+         the other side is concurrently using). The stream consumer surface is
+         safe (ReadOnlySpan&lt;float&gt;); TelemetryProducer.Open takes a byte*. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <RootNamespace>IrTactile.Shm</RootNamespace>
@@ -19,7 +19,7 @@
     <!-- NuGet metadata -->
     <PackageId>IrTactile.Shm</PackageId>
     <Title>irTactile shared-memory binding</Title>
-    <Description>Managed binding for the irTactile shared-memory contracts (stream-shm v1). Fully managed; no native dependency.</Description>
+    <Description>Managed binding for the irTactile shared-memory contracts (stream-shm v1, telemetry-shm v1, channel model). Fully managed; no native dependency.</Description>
     <Authors>Jakob Schmidt</Authors>
     <Copyright>Copyright (c) Jakob Schmidt</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

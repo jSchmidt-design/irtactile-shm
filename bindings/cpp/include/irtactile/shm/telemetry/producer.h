@@ -9,9 +9,9 @@
 // Windows section handling is win32.h.
 //
 //     Producer p;
-//     p.open(base, bytes, Producer::requiredBytes(256) ...);
-//     const int rpm = p.declare(standard::Id::EngineRpm);
-//     const int wave = p.declareLocal("demo_wave", "", -1.f, 1.f, Kind::Continuous);
+//     p.open(base, Producer::requiredBytes(256), /*capacity*/ 256, Identity{});
+//     const int rpm = p.declare(channels::standard::Id::EngineRpm);
+//     const int wave = p.declareLocal("demo_wave", "", -1.f, 1.f, channels::Kind::Continuous);
 //     p.commitLayout();
 //     p.setState(ProducerState::Active, qpcNow);
 //     for (;;) { p.beginFrame(); p.set(rpm, v); p.endFrame(qpcSample, qpcNow); }
