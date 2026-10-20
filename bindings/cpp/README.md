@@ -174,6 +174,6 @@ for (;;) {
 - Declare every channel before `commitLayout()`; changing the set later is another `commitLayout()` (a layout
   rewrite). `setCar()` after the commit is one too.
 - Use `Inactive` while the sim is not running; keep calling `setState(Inactive, qpcNow())` as a heartbeat.
-- `ProducerSection::pollReturn()` shows which channels irTactile `accepted` (name and properties matched the
-  table) and `demanded` (something consumes them). Skipping undemanded channels is optional.
+- `ProducerSection::pollReturn()` shows which channels of the current layout irTactile `accepted` (name and
+  properties matched the table) and `demanded` (something consumes them). Skipping undemanded channels is optional.
 - `tests/telemetry_conformance_runner` runs the vectors in `conformance/telemetry-shm/v1`.

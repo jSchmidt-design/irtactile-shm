@@ -46,8 +46,9 @@ struct Identity {
 
 enum class OpenResult : uint32_t {
     Ok,
-    TooSmall,   ///< the buffer (or the pinned totalBytes of an existing section) cannot hold the layout
-    BadIdentity ///< simId is not a valid owner id or is reserved
+    TooSmall,      ///< the buffer (or the pinned totalBytes of an existing section) cannot hold the layout
+    BadIdentity,   ///< simId is not a valid owner id or is reserved
+    SectionFailed, ///< ProducerSection only: the OS refused to create or map the section (access, namespace)
 };
 
 class Producer {
@@ -64,7 +65,6 @@ public:
         if (!channels::isValidOwnerId(identity.simId) && !identity.simId.empty()) return OpenResult::BadIdentity;
         if (isReservedSimId(identity.simId)) return OpenResult::BadIdentity;
         m_base = static_cast<uint8_t*>(base);
-        m_bytes = bytes;
         m_identity = std::move(identity);
 
         Header* h = header();
@@ -151,8 +151,8 @@ public:
     /// Session identity; a change after commitLayout() is a layout rewrite and is published immediately.
     void setCar(std::string_view carId, std::string_view carName)
     {
-        m_carId.assign(carId.substr(0, sizeof(Header::carId) - 1));
-        m_carName.assign(carName.substr(0, sizeof(Header::carName) - 1));
+        m_carId.assign(carId.substr(0, utf8Prefix(carId, sizeof(Header::carId) - 1)));
+        m_carName.assign(carName.substr(0, utf8Prefix(carName, sizeof(Header::carName) - 1)));
         if (m_committed) commitLayout();
     }
 
@@ -257,10 +257,19 @@ private:
     uint32_t* eventCounts() noexcept { return reinterpret_cast<uint32_t*>(m_base + header()->eventCountOffset); }
     float* values() noexcept { return reinterpret_cast<float*>(m_base + header()->valuesOffset); }
 
+    /// Longest prefix of `s` of at most `max` bytes that does not split a UTF-8 sequence.
+    static size_t utf8Prefix(std::string_view s, size_t max) noexcept
+    {
+        if (s.size() <= max) return s.size();
+        size_t n = max;
+        while (n > 0 && (static_cast<uint8_t>(s[n]) & 0xC0u) == 0x80u) --n;
+        return n;
+    }
+
     static void setString(char* dst, size_t n, std::string_view src) noexcept
     {
         std::memset(dst, 0, n);
-        std::memcpy(dst, src.data(), src.size() < n - 1 ? src.size() : n - 1);
+        std::memcpy(dst, src.data(), utf8Prefix(src, n - 1));
     }
 
     int addDesc(std::string_view name, std::string_view unit, float rangeMin, float rangeMax,
@@ -287,7 +296,6 @@ private:
     }
 
     uint8_t*                 m_base{nullptr};
-    size_t                   m_bytes{0};
     uint32_t                 m_total{0};
     uint32_t                 m_capacity{0};
     bool                     m_committed{false};

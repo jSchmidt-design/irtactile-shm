@@ -96,6 +96,15 @@ public static class TelemetryLayout
     /// <summary>'I','T','T','R' in memory.</summary>
     public const uint ReturnMagic = 0x52545449u;
 
+    /// <summary>Layout break; a reader rejects a mismatch.</summary>
+    public const ushort VersionMajor = 1;
+
+    /// <summary>Additive only; a reader tolerates a higher value.</summary>
+    public const ushort VersionMinor = 0;
+
+    /// <summary>Bounded seqlock retries of a frame read.</summary>
+    internal const int MaxFrameRetries = 4;
+
     public const int HeaderBytes = 256;
     public const int ReturnHeaderBytes = 128;
     public const int ReturnBytes = 4096;
@@ -266,8 +275,8 @@ public sealed unsafe class TelemetryProducer
     /// <summary>Session identity; after <see cref="CommitLayout"/> this is a layout rewrite published immediately.</summary>
     public void SetCar(string carId, string carName)
     {
-        _carId = Truncate(carId, 63);
-        _carName = Truncate(carName, 31);
+        _carId = carId ?? "";     // truncated to the field (UTF-8 safe) when written
+        _carName = carName ?? "";
         if (_committed) CommitLayout();
     }
 
@@ -292,8 +301,8 @@ public sealed unsafe class TelemetryProducer
         if (fresh)
         {
             new Span<byte>(_base, _total).Clear();
-            U16(TelemetryLayout.OffVersionMajor) = 1;
-            U16(TelemetryLayout.OffVersionMinor) = 0;
+            U16(TelemetryLayout.OffVersionMajor) = TelemetryLayout.VersionMajor;
+            U16(TelemetryLayout.OffVersionMinor) = TelemetryLayout.VersionMinor;
             U32(TelemetryLayout.OffHeaderBytes) = TelemetryLayout.HeaderBytes;
             U32(TelemetryLayout.OffTotalBytes) = (uint)_total;
             U32(TelemetryLayout.OffLayoutSeq) = begin;
@@ -371,6 +380,9 @@ public sealed unsafe class TelemetryProducer
         Volatile.Write(ref U32(TelemetryLayout.OffProducerState), (uint)state);
     }
 
+    /// <summary>The live layoutSeq: what the return region's forLayoutSeq must equal.</summary>
+    internal uint LayoutSeq => Volatile.Read(ref U32(TelemetryLayout.OffLayoutSeq));
+
     private ref uint U32(int offset) => ref *(uint*)(_base + offset);
 
     private ref ulong U64(int offset) => ref *(ulong*)(_base + offset);
@@ -383,13 +395,8 @@ public sealed unsafe class TelemetryProducer
         dst.Clear();
         byte[] bytes = Encoding.UTF8.GetBytes(value);
         int n = Math.Min(bytes.Length, length - 1);
+        while (n > 0 && n < bytes.Length && (bytes[n] & 0xC0) == 0x80) n--;   // never split a UTF-8 sequence
         bytes.AsSpan(0, n).CopyTo(dst);
-    }
-
-    private static string Truncate(string s, int maxBytes)
-    {
-        byte[] b = Encoding.UTF8.GetBytes(s ?? "");
-        return b.Length <= maxBytes ? s ?? "" : Encoding.UTF8.GetString(b, 0, maxBytes);
     }
 
     private int AddDesc(string name, string unit, float rangeMin, float rangeMax, SignalKind kind, ChannelFlags flags,
@@ -491,7 +498,11 @@ public sealed unsafe class TelemetrySection : IDisposable
         return new TelemetrySection(file, view, ptr, TelemetryLayout.ReturnNameFor(inboundName), producer);
     }
 
-    /// <summary>Reads the return region (opened lazily; absence is normal). False = nothing to report.</summary>
+    /// <summary>
+    /// Reads the return region (opened lazily; absence is normal). False = no consistent view this time (region absent,
+    /// not ready, malformed or torn). Masks computed for another layout than the current one are cleared, so every slot
+    /// reads as not accepted until irTactile has evaluated this layout.
+    /// </summary>
     public bool PollReturn(TelemetryReturnView into)
     {
         if (_returnView == null)
@@ -510,8 +521,8 @@ public sealed unsafe class TelemetrySection : IDisposable
         _returnView.SafeMemoryMappedViewHandle.AcquirePointer(ref p);
         try
         {
-            if (*(uint*)p != TelemetryLayout.ReturnMagic || *(ushort*)(p + 4) != 1) return false;
-            for (int attempt = 0; attempt < 4; attempt++)
+            if (*(uint*)p != TelemetryLayout.ReturnMagic || *(ushort*)(p + 4) != TelemetryLayout.VersionMajor) return false;
+            for (int attempt = 0; attempt < TelemetryLayout.MaxFrameRetries; attempt++)
             {
                 ulong r1 = Volatile.Read(ref *(ulong*)(p + TelemetryLayout.ROffRetSeq));
                 if ((r1 & 1) != 0) continue;
@@ -530,13 +541,15 @@ public sealed unsafe class TelemetrySection : IDisposable
                 }
                 if (Volatile.Read(ref *(ulong*)(p + TelemetryLayout.ROffRetSeqEnd)) != r1 ||
                     Volatile.Read(ref *(ulong*)(p + TelemetryLayout.ROffRetSeq)) != r1) continue;
+                uint cs = Volatile.Read(ref *(uint*)(p + TelemetryLayout.ROffConsumerState));
+                if (cs > (uint)ConsumerState.Closed) return false;   // unknown state: malformed, as in the C++ ReturnReader
                 into.Capacity = cap;
                 into.ForLayoutSeq = *(uint*)(p + TelemetryLayout.ROffForLayoutSeq);
-                uint cs = Volatile.Read(ref *(uint*)(p + TelemetryLayout.ROffConsumerState));
-                into.ConsumerState = cs <= 2 ? (ConsumerState)cs : ConsumerState.Closed;
+                into.ConsumerState = (ConsumerState)cs;
                 into.LastConsumeQpc = Volatile.Read(ref *(ulong*)(p + TelemetryLayout.ROffLastConsume));
-                into.Accepted = acc;
-                into.Demanded = dem;
+                bool current = into.ForLayoutSeq == Producer.LayoutSeq;
+                into.Accepted = current ? acc : Array.Empty<ulong>();
+                into.Demanded = current ? dem : Array.Empty<ulong>();
                 return true;
             }
             return false;

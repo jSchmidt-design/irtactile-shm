@@ -90,6 +90,7 @@ public:
         m_view = nullptr;
         m_mapping = nullptr;
         m_bytes = 0;
+        m_existed = false;
     }
     [[nodiscard]] void* data() const noexcept { return m_view; }
     [[nodiscard]] size_t size() const noexcept { return m_bytes; }
@@ -139,14 +140,14 @@ private:
 class ProducerSection {
 public:
     /// Creates (or restarts into) the section for `capacity` slots and binds the Producer. `identity.qpcFrequency`
-    /// and `identity.pid` are filled in when zero.
+    /// and `identity.pid` are filled in when zero. SectionFailed: the OS refused to create or map the section.
     OpenResult create(const std::string& inboundSectionName, uint32_t capacity, Identity identity)
     {
         if (identity.qpcFrequency == 0) identity.qpcFrequency = qpcFrequency();
         if (identity.pid == 0) identity.pid = GetCurrentProcessId();
         m_returnName = returnNameFor(inboundSectionName);
         if (!m_inbound.create(detail::widen(inboundSectionName), Producer::requiredBytes(capacity))) {
-            return OpenResult::TooSmall;
+            return OpenResult::SectionFailed;
         }
         return m_producer.open(m_inbound.data(), m_inbound.size(), capacity, std::move(identity));
     }
@@ -154,7 +155,9 @@ public:
     [[nodiscard]] Producer& producer() noexcept { return m_producer; }
     [[nodiscard]] bool restarted() const noexcept { return m_inbound.existed(); }
 
-    /// Reads the return region (opening it lazily; absence is normal). False = nothing new to report.
+    /// Reads the return region (opening it lazily; absence is normal). False = no consistent view this time
+    /// (region absent, not ready, or torn). Masks computed for another layout than the current one are cleared,
+    /// so every slot reads as not accepted until irTactile has evaluated this layout.
     bool pollReturn(ReturnView& out)
     {
         if (!m_return.isOpen()) {
@@ -165,7 +168,12 @@ public:
                 return false;
             }
         }
-        return m_returnReader.read(out);
+        if (!m_returnReader.read(out)) return false;
+        if (out.forLayoutSeq != shm::detail::acquireLoad(m_producer.publishedHeader().layoutSeq)) {
+            out.accepted.clear();
+            out.demanded.clear();
+        }
+        return true;
     }
 
 private:

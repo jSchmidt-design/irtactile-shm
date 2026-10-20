@@ -226,6 +226,17 @@ TEST_CASE("layout rewrite: readers see LayoutChanged, then the new descriptors")
     CHECK(std::string(r.header().carName) == "Car B");
 }
 
+TEST_CASE("strings are truncated to the field without splitting a UTF-8 sequence")
+{
+    Section s(Producer::requiredBytes(64));
+    Producer p;
+    REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
+    const std::string x30(30, 'x');
+    p.setCar("car", x30 + "\xC3\xA9");   // 32 bytes; the field holds 31 + NUL, byte 31 would split the 'é'
+    REQUIRE(p.commitLayout());
+    CHECK(std::string(s.header().carName) == x30);
+}
+
 TEST_CASE("a layout rewrite that crashed mid-way leaves an odd layoutSeq: NotReady, and a restart steps past it")
 {
     Section s(Producer::requiredBytes(64));

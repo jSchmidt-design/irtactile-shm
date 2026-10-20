@@ -39,6 +39,29 @@ public unsafe class TelemetryProducerTests
         Assert.False(TelemetryLayout.IsValidWheelsPerAxle(new byte[] { 9 }));
     }
 
+    [Fact]
+    public void StringsAreTruncatedWithoutSplittingUtf8()
+    {
+        int bytes = TelemetryLayout.RequiredBytes(64);
+        var buffer = new byte[bytes + 8];
+        var pin = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        try
+        {
+            byte* aligned = (byte*)(((long)pin.AddrOfPinnedObject() + 7) & ~7L);
+            var p = new TelemetryProducer();
+            Assert.Equal(TelemetryOpenResult.Ok, p.Open(aligned, bytes, 64, new ProducerIdentity()));
+            string x30 = new string('x', 30);
+            p.SetCar("car", x30 + "é");   // 32 bytes; the field holds 31 + NUL, byte 31 would split the 'é'
+            Assert.True(p.CommitLayout());
+            var carName = new Span<byte>(aligned + TelemetryLayout.OffCarName, 32);
+            Assert.Equal(x30, System.Text.Encoding.UTF8.GetString(carName.Slice(0, carName.IndexOf((byte)0)).ToArray()));
+        }
+        finally
+        {
+            pin.Free();
+        }
+    }
+
     public static IEnumerable<object[]> EncodeCases()
     {
         using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(Dir, "manifest.json")));

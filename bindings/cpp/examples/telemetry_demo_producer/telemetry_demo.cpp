@@ -97,7 +97,9 @@ int main()
                     demanded += rv.isDemanded(slot) ? 1 : 0;
                 }
                 std::printf("irTactile: %s, accepted %d/%u, demanded %d (rpm:%s wave:%s)\n",
-                            rv.consumerState == ConsumerState::Active ? "Active" : "Idle", accepted,
+                            rv.consumerState == ConsumerState::Active ? "Active"
+                            : rv.consumerState == ConsumerState::Idle ? "Idle" : "Closed",
+                            accepted,
                             p.channelCount(), demanded, rv.isDemanded(rpm) ? "yes" : "no",
                             rv.isDemanded(wave) ? "yes" : "no");
             } else {

@@ -56,6 +56,9 @@ if(WIN32)
     if(MSVC)
         target_compile_options(viewer_win32 PRIVATE /W4 /permissive-)
     endif()
+
+    # The telemetry-shm demo producer.
+    add_subdirectory(telemetry_demo_producer)
 endif()
 
 enable_testing()
