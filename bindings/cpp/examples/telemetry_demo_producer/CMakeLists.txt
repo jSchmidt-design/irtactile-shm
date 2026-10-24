@@ -3,7 +3,7 @@ project(irtactile_telemetry_demo_producer LANGUAGES CXX)
 
 # The basic telemetry-shm v1 producer: publishes a few std.* channels, a
 # local channel and an event, and prints the return region. Windows only (named
-# sections). Also configurable on its own:
+# segments). Also configurable on its own:
 #
 #   cmake -S bindings/cpp/examples/telemetry_demo_producer -B build-demo
 #   cmake --build build-demo --config Release

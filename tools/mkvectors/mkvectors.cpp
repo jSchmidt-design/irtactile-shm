@@ -1,10 +1,10 @@
 ﻿// tools/mkvectors/mkvectors.cpp - emits the stream-shm v1 conformance vectors:
-// golden binary sections (decode/*.bin) plus manifest.json describing what a
+// golden binary segments (decode/*.bin) plus manifest.json describing what a
 // correct binding must do with them. See conformance/README.md.
 //
 // SPDX-License-Identifier: MIT
 //
-// Producer-side only. Sections are built with layout.h's arithmetic, and the
+// Producer-side only. Segments are built with layout.h's arithmetic, and the
 // expected values in the manifest are computed from what was written - never
 // by running a reader - so a binding bug cannot bless itself.
 //
@@ -35,7 +35,7 @@ namespace fs = std::filesystem;
 namespace {
 
 // ---------------------------------------------------------------------------
-// Section construction - producer side, layout.h arithmetic only
+// Segment construction - producer side, layout.h arithmetic only
 // ---------------------------------------------------------------------------
 
 struct Sec {
@@ -43,8 +43,8 @@ struct Sec {
     ShmStreamHeader& h() { return *reinterpret_cast<ShmStreamHeader*>(bytes.data()); }
 };
 
-/// A valid v1.0 section for `p`, magic written, nothing published.
-Sec makeSection(const LayoutParams& p)
+/// A valid v1.0 segment for `p`, magic written, nothing published.
+Sec makeSegment(const LayoutParams& p)
 {
     Sec s;
     s.bytes.assign(static_cast<size_t>(computeTotalSize(p)), 0);
@@ -87,8 +87,8 @@ Sec makeSection(const LayoutParams& p)
 /// descriptor fields -> seq, then writeSeq/lastPublishQpc) and returns the
 /// samples a correct decoder must produce, planar channel-major.
 ///
-/// Float32 sections carry the canonical pattern sample(ch,i) = fsi + i +
-/// ch*1000 (exactly representable). Int16 sections take explicit raw values
+/// Float32 segments carry the canonical pattern sample(ch,i) = fsi + i +
+/// ch*1000 (exactly representable). Int16 segments take explicit raw values
 /// via `rawInt16` (channelCount x samplesPerBlock, planar).
 std::vector<float> publishBlock(Sec& s, uint64_t seq, uint64_t fsi, uint32_t flags,
                                 const std::vector<int16_t>* rawInt16 = nullptr)
@@ -222,7 +222,7 @@ ordered_json attachStep(ordered_json expect, ordered_json request = nullptr)
     return s;
 }
 
-/// Resize a section and keep totalBytes honest, so a vector that grows the
+/// Resize a segment and keep totalBytes honest, so a vector that grows the
 /// slot array does not accidentally also break `totalBytes <= mappedBytes`.
 void setSize(Sec& s, size_t n)
 {
@@ -259,11 +259,11 @@ struct Emitter {
     }
 };
 
-/// A one-rule-invalid attach vector: take a valid section, break exactly one
+/// A one-rule-invalid attach vector: take a valid segment, break exactly one
 /// layout-validation rule, expect Malformed. The blob file name is the case id
 /// with '.' -> '_'.
 ///
-/// Each mutation is deliberately isolated - it grows the section rather than
+/// Each mutation is deliberately isolated - it grows the segment rather than
 /// letting a second rule fire as collateral - because the point of these
 /// vectors is to catch a binding that implements *some* of the validation.
 /// A case violating two rules still passes on a binding that checks only one.
@@ -271,7 +271,7 @@ template <class Mutate>
 void addMalformed(Emitter& em, const LayoutParams& p, const std::string& id,
                   const std::string& summary, Mutate mutate)
 {
-    Sec s = makeSection(p);
+    Sec s = makeSegment(p);
     mutate(s);
     std::string file = id;
     for (char& c : file)
@@ -294,7 +294,7 @@ int main(int argc, char** argv)
     fs::create_directories(em.outDir / "decode");
 
     // Geometries used below. All tiny on purpose: a vector blob is exactly
-    // totalBytes, and small sections keep the committed suite readable.
+    // totalBytes, and small segments keep the committed suite readable.
     const LayoutParams g4{4, 8, 2, SampleFormat::Float32};   // 640 B
     const LayoutParams g2{2, 4, 2, SampleFormat::Float32};   // 512 B
 
@@ -308,7 +308,7 @@ int main(int argc, char** argv)
     {
         const std::string b = em.blobBytes("attach_zero_filled", std::vector<uint8_t>(4096, 0));
         em.addCase("attach.zero_filled",
-                   "zero-filled section is NotReady and retryable",
+                   "zero-filled segment is NotReady and retryable",
                    b, {attachStep(expectResult("NotReady", true))});
     }
 
@@ -325,7 +325,7 @@ int main(int argc, char** argv)
 
     // --- higher versionMajor ------------------------------------------------
     {
-        Sec s = makeSection(g4);
+        Sec s = makeSegment(g4);
         s.h().versionMajor = kVersionMajor + 1;
         em.addCase("attach.higher_version_major",
                    "a versionMajor the binding does not know is BadVersion",
@@ -335,7 +335,7 @@ int main(int argc, char** argv)
 
     // --- higher versionMinor: tolerated -------------------------------------
     {
-        Sec s = makeSection(g4);
+        Sec s = makeSegment(g4);
         s.h().versionMinor = kVersionMinor + 5;
         em.addCase("attach.higher_version_minor",
                    "a higher versionMinor is tolerated (additives live behind runtime offsets)",
@@ -351,7 +351,7 @@ int main(int argc, char** argv)
 
     // --- unknown enum values are rejected, never defaulted ------------------
     {
-        Sec s = makeSection(g4);
+        Sec s = makeSegment(g4);
         s.h().sampleFormat = 99;
         em.addCase("attach.unknown_sample_format",
                    "unknown sampleFormat is rejected (BadVersion), not defaulted",
@@ -359,7 +359,7 @@ int main(int argc, char** argv)
                    {attachStep(expectResult("BadVersion", false))});
     }
     {
-        Sec s = makeSection(g4);
+        Sec s = makeSegment(g4);
         s.h().channelLayout = 99;
         em.addCase("attach.unknown_channel_layout",
                    "unknown channelLayout is rejected (BadVersion), not defaulted",
@@ -367,7 +367,7 @@ int main(int argc, char** argv)
                    {attachStep(expectResult("BadVersion", false))});
     }
     {
-        Sec s = makeSection(g4);
+        Sec s = makeSegment(g4);
         s.h().channelLayout = static_cast<uint32_t>(ChannelLayout::Interleaved);  // 2: known, reserved
         em.addCase("attach.reserved_channel_layout",
                    "channelLayout=2 (Interleaved) is reserved: no v1 producer emits it; reject",
@@ -377,17 +377,17 @@ int main(int argc, char** argv)
 
     // --- an offset past mappedBytes ------------------------------------------
     {
-        Sec s = makeSection(g4);
+        Sec s = makeSegment(g4);
         s.bytes.resize(s.bytes.size() - 1);   // claims totalBytes, delivers fewer
         em.addCase("attach.offset_past_mapped",
-                   "a section smaller than its header's totalBytes is Malformed",
+                   "a segment smaller than its header's totalBytes is Malformed",
                    em.blob("attach_offset_past_mapped", s),
                    {attachStep(expectResult("Malformed", false))});
     }
 
     // --- hostile samplesPerBlock: the v1 form of the descriptor-count clamp --
     {
-        Sec s = makeSection(g2);
+        Sec s = makeSegment(g2);
         s.h().samplesPerBlock = 4096;   // planes still say 4 samples
         em.addCase("attach.hostile_samples_per_block",
                    "samplesPerBlock overrunning the channel plane is Malformed - the copy bound "
@@ -445,7 +445,7 @@ int main(int argc, char** argv)
     addMalformed(em, g4, "attach.bytes_per_sample_mismatch",
                  "bytesPerSample disagreeing with sampleFormat is Malformed - a binding must not "
                  "pick one and ignore the other",
-                 [](Sec& s) { s.h().bytesPerSample = 2; });   // section is Float32
+                 [](Sec& s) { s.h().bytesPerSample = 2; });   // segment is Float32
 
     addMalformed(em, g4, "attach.payload_overlaps_descriptor",
                  "slotPayloadOffset inside the descriptor (< 64) is Malformed: plane 0 would "
@@ -458,7 +458,7 @@ int main(int argc, char** argv)
 
     addMalformed(em, g4, "attach.unaligned_slot_array_offset",
                  "slotArrayOffset not a multiple of bytesPerSample is Malformed: every plane in "
-                 "the section would be misaligned",
+                 "the segment would be misaligned",
                  [](Sec& s) {
                      setSize(s, 704);
                      s.h().slotArrayOffset = 258;
@@ -504,7 +504,7 @@ int main(int argc, char** argv)
                  "runs past the mapping",
                  [](Sec& s) { s.h().ringBlocks = 4; });   // 256 + 4x192 = 1024 > 640
 
-    // --- a section caught mid-rewrite ----------------------------------------
+    // --- a segment caught mid-rewrite ----------------------------------------
     {
         // The seqlock's whole point: layoutSeq odd means the producer is
         // partway through a header rewrite, and the fields do not agree with
@@ -515,11 +515,11 @@ int main(int argc, char** argv)
         // Malformed (the plane no longer holds samplesPerBlock samples) - a
         // fatal answer to a transient condition. The correct answer is
         // NotReady: wait, and the completed rewrite attaches cleanly.
-        Sec torn = makeSection(g4);
+        Sec torn = makeSegment(g4);
         torn.h().layoutSeq       = 1;
         torn.h().samplesPerBlock = 16;
 
-        Sec done = makeSection(g4);
+        Sec done = makeSegment(g4);
         done.h().layoutSeq         = 2;
         done.h().channelCount      = 2;
         done.h().samplesPerBlock   = 16;
@@ -527,7 +527,7 @@ int main(int argc, char** argv)
         done.h().slotBytes         = align64(slotPayloadOffsetOf() + 2 * 64);
 
         em.addCase("attach.rewrite_in_progress",
-                   "a section whose layoutSeq is odd is NotReady and retryable, never read torn; "
+                   "a segment whose layoutSeq is odd is NotReady and retryable, never read torn; "
                    "the completed rewrite then attaches with the new layout",
                    em.blob("attach_rewrite_in_progress_torn", torn),
                    {attachStep(expectResult("NotReady", true)),
@@ -543,7 +543,7 @@ int main(int argc, char** argv)
 
     // --- non-zero reserved[] bytes are tolerated -----------------------------
     {
-        Sec s = makeSection(g4);
+        Sec s = makeSegment(g4);
         std::memset(s.h().reserved, 0xAB, sizeof(s.h().reserved));
         s.h().reserved1 = 0xCDCDCDCDu;
         em.addCase("attach.nonzero_reserved_tolerated",
@@ -559,7 +559,7 @@ int main(int argc, char** argv)
         // clamp its snapshot copy to its own struct size and follow the
         // runtime slotArrayOffset, never assume it.
         const uint32_t grownHeader = static_cast<uint32_t>(sizeof(ShmStreamHeader)) + 64;
-        Sec s = makeSection(g2);
+        Sec s = makeSegment(g2);
         Sec t;
         t.bytes.assign(static_cast<size_t>(align64(grownHeader)) +
                            static_cast<size_t>(g2.ringBlocks) * slotBytesOf(g2),
@@ -577,9 +577,9 @@ int main(int argc, char** argv)
 
     // --- StreamRequest mismatch ----------------------------------------------
     {
-        Sec s = makeSection(g4);
+        Sec s = makeSegment(g4);
         em.addCase("attach.request_mismatch",
-                   "a StreamRequest field the section cannot satisfy is Mismatch, not retryable",
+                   "a StreamRequest field the segment cannot satisfy is Mismatch, not retryable",
                    em.blob("attach_request_mismatch", s),
                    {attachStep(expectResult("Mismatch", false,
                                             {{"mismatchDetailContains", "channelCount"}}),
@@ -593,7 +593,7 @@ int main(int argc, char** argv)
     // --- the happy path: five blocks, sample-exact ---------------------------
     {
         const LayoutParams g8{4, 8, 8, SampleFormat::Float32};   // 1792 B
-        Sec s = makeSection(g8);
+        Sec s = makeSegment(g8);
         std::vector<ordered_json> steps;
         steps.push_back(attachStep(expectResult("Ok", false)));
         steps.push_back({{"op", "rewindToOldest"}});
@@ -617,7 +617,7 @@ int main(int argc, char** argv)
     // --- latest(): newest-wins, and skipping is not dropping -----------------
     {
         const LayoutParams g8{4, 8, 8, SampleFormat::Float32};   // 1792 B
-        Sec a = makeSection(g8);                                  // nothing published
+        Sec a = makeSegment(g8);                                  // nothing published
         Sec b = a;
         std::vector<float> d4;
         for (uint64_t seq = 0; seq < 5; ++seq)
@@ -654,7 +654,7 @@ int main(int argc, char** argv)
 
     // --- attach cursor starts at writeSeq, not zero --------------------------
     {
-        Sec s = makeSection(g4);
+        Sec s = makeSegment(g4);
         for (uint64_t seq = 0; seq < 10; ++seq)
             publishBlock(s, seq, seq * g4.samplesPerBlock, seq == 0 ? kDiscontinuity : 0u);
         // "Producer has been running for hours": attach must read writeSeq,
@@ -671,8 +671,8 @@ int main(int argc, char** argv)
 
     // --- overrun boundary at ringBlocks=2 ------------------------------------
     {
-        Sec a = makeSection(g4);   // nothing published
-        Sec b = makeSection(g4);
+        Sec a = makeSegment(g4);   // nothing published
+        Sec b = makeSegment(g4);
         const std::vector<float> decoded = publishBlock(b, 0, 0, kDiscontinuity);
 
         em.addCase("read.overrun_ring2_one_past_cursor",
@@ -688,8 +688,8 @@ int main(int argc, char** argv)
                     {{"op", "droppedBlocks"}, {"expect", 0}}});
     }
     {
-        Sec a = makeSection(g4);
-        Sec b = makeSection(g4);
+        Sec a = makeSegment(g4);
+        Sec b = makeSegment(g4);
         publishBlock(b, 0, 0, kDiscontinuity);
         const std::vector<float> decoded = publishBlock(b, 1, 8, 0);
 
@@ -709,7 +709,7 @@ int main(int argc, char** argv)
 
     // --- a busy slot is rejected outright --------------------------------------
     {
-        Sec a = makeSection(g4);
+        Sec a = makeSegment(g4);
         publishBlock(a, 0, 0, kDiscontinuity);
         publishBlock(a, 1, 8, 0);
 
@@ -734,7 +734,7 @@ int main(int argc, char** argv)
     // --- abandoned block: firstSampleIndex advances by the discarded samples --
     {
         const LayoutParams g4r4{4, 8, 4, SampleFormat::Float32};   // ring 4: 1024 B
-        Sec s = makeSection(g4r4);
+        Sec s = makeSegment(g4r4);
         const std::vector<float> d0 = publishBlock(s, 0, 0, kDiscontinuity);
         // A partial block (4 of 8 samples) is abandoned; the next published
         // block's firstSampleIndex has advanced by the discarded samples too.
@@ -761,7 +761,7 @@ int main(int argc, char** argv)
 
     // --- layoutSeq seqlock: a rewrite is picked up -----------------------------
     {
-        Sec a = makeSection(g4);   // layoutSeq 0, 4 channels
+        Sec a = makeSegment(g4);   // layoutSeq 0, 4 channels
         Sec b = a;
         ShmStreamHeader& h = b.h();
         // odd -> rewrite -> even; a geometry change done properly (slotBytes
@@ -784,7 +784,7 @@ int main(int argc, char** argv)
                       {{"channelCount", 2}, {"layoutSeq", 2}, {"slotBytes", h.slotBytes}}}}});
     }
     {
-        Sec a = makeSection(g4);
+        Sec a = makeSegment(g4);
         Sec b = a;
         ShmStreamHeader& h     = b.h();
         h.layoutSeq            = 2;
@@ -810,7 +810,7 @@ int main(int argc, char** argv)
         // mid-rewrite, or wedged). A correct reader re-reads a bounded number
         // of times and then gives up - it must not spin forever, and it must
         // not snapshot the odd state.
-        Sec a = makeSection(g4);
+        Sec a = makeSegment(g4);
         publishBlock(a, 0, 0, kDiscontinuity);
         Sec b = a;
         b.h().layoutSeq = 1;   // rewrite in progress, and it never finishes
@@ -829,7 +829,7 @@ int main(int argc, char** argv)
 
     // --- a hostile rewrite detaches the reader ---------------------------------
     {
-        Sec a = makeSection(g2);
+        Sec a = makeSegment(g2);
         publishBlock(a, 0, 0, kDiscontinuity);
         Sec b = a;
         b.h().layoutSeq       = 2;
@@ -854,7 +854,7 @@ int main(int argc, char** argv)
     // interpretation and reports success. That is exactly the silent misread
     // the rule exists to prevent, which is why each gets its own vector.
     {
-        Sec a = makeSection(g2);
+        Sec a = makeSegment(g2);
         publishBlock(a, 0, 0, kDiscontinuity);
         Sec b = a;
         b.h().layoutSeq    = 2;
@@ -871,7 +871,7 @@ int main(int argc, char** argv)
                     {{"op", "attached"}, {"expect", false}}});
     }
     {
-        Sec a = makeSection(g2);
+        Sec a = makeSegment(g2);
         publishBlock(a, 0, 0, kDiscontinuity);
         Sec b = a;
         b.h().layoutSeq     = 2;
@@ -903,7 +903,7 @@ int main(int argc, char** argv)
     // answerable no matter who refreshed in between. The last two steps are the
     // trap and the fix, back to back.
     {
-        Sec a = makeSection(g4);
+        Sec a = makeSegment(g4);
         publishBlock(a, 0, 0, kDiscontinuity);
         Sec b = a;
         ShmStreamHeader& h = b.h();
@@ -932,7 +932,7 @@ int main(int argc, char** argv)
 
     // --- layoutEpoch mismatch rejects the block ---------------------------------
     {
-        Sec s = makeSection(g4);
+        Sec s = makeSegment(g4);
         publishBlock(s, 0, 0, kDiscontinuity);
         auto* desc        = reinterpret_cast<ShmBlockDesc*>(slotAt(s.bytes.data(), s.h(), 0));
         desc->layoutEpoch = 0xDEADBEEFu;   // header layoutSeq is 0
@@ -952,7 +952,7 @@ int main(int argc, char** argv)
         // A hypothetical future producer with a larger descriptor and padded
         // planes. Every address comes from the header's own fields; a binding
         // that recomputes any of them from the v1 formulas decodes garbage.
-        Sec s = makeSection(g2);
+        Sec s = makeSegment(g2);
         const uint32_t inflatedPayloadOffset = 128;                          // NOT sizeof(ShmBlockDesc)
         const uint32_t inflatedPlaneBytes    = channelPlaneBytesOf(g2) + 16; // padded planes
         const uint32_t inflatedSlotBytes     = align64(128 + g2.channelCount * inflatedPlaneBytes);
@@ -990,7 +990,7 @@ int main(int argc, char** argv)
     // --- int16 payload: +/-32767 convention, no wrap ------------------------------
     {
         const LayoutParams gi16{2, 4, 2, SampleFormat::Int16};
-        Sec s = makeSection(gi16);
+        Sec s = makeSegment(gi16);
         // Raw int16 values, planar: ch0 then ch1. Covers zero, mid-scale,
         // full-scale both signs, and raw -32768, which decodes to -1.0000305
         // (marginally outside [-1,1] - the documented asymmetry).
@@ -1022,7 +1022,7 @@ int main(int argc, char** argv)
 
     // --- liveness over a synthetic clock ----------------------------------------
     {
-        Sec a = makeSection(g4);
+        Sec a = makeSegment(g4);
         publishBlock(a, 0, 0, kDiscontinuity);   // lastPublishQpc = 1000
         Sec b = a;
         b.h().deviceState = static_cast<uint32_t>(DeviceState::Inactive);

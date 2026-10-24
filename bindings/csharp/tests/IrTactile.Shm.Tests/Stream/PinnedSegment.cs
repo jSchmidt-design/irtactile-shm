@@ -1,4 +1,4 @@
-﻿// Test helpers: a GC-pinned stand-in for a mapped section, and raw
+﻿// Test helpers: a GC-pinned stand-in for a mapped segment, and raw
 // accessors/release stores over it.
 //
 // SPDX-License-Identifier: MIT
@@ -13,19 +13,19 @@ using System.Runtime.InteropServices;
 
 namespace IrTactile.Shm.Tests.Stream;
 
-/// <summary>A pinned byte buffer standing in for a mapped section.</summary>
-internal sealed unsafe class PinnedSection : IDisposable
+/// <summary>A pinned byte buffer standing in for a mapped segment.</summary>
+internal sealed unsafe class PinnedSegment : IDisposable
 {
     private readonly GCHandle _pin;
 
-    public PinnedSection(long size)
+    public PinnedSegment(long size)
     {
         Bytes = new byte[size];
         _pin = GCHandle.Alloc(Bytes, GCHandleType.Pinned);
         Raw = (byte*)_pin.AddrOfPinnedObject();
     }
 
-    public PinnedSection(byte[] content)
+    public PinnedSegment(byte[] content)
     {
         Bytes = content;
         _pin = GCHandle.Alloc(Bytes, GCHandleType.Pinned);
@@ -41,11 +41,11 @@ internal sealed unsafe class PinnedSection : IDisposable
 }
 
 /// <summary>
-/// Plain and release-store accessors over a section buffer. Release stores
+/// Plain and release-store accessors over a segment buffer. Release stores
 /// mirror the producer's obligations; the Reader under test does the acquire
 /// loads.
 /// </summary>
-internal static unsafe class SectionMemory
+internal static unsafe class SegmentMemory
 {
     public static ushort U16(byte* b, int off) => *(ushort*)(b + off);
     public static uint U32(byte* b, int off) => *(uint*)(b + off);

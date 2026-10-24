@@ -19,14 +19,14 @@ is **not** inactivity: blocks keep arriving and the stream stays `Active`.
 Two refinements:
 
 - **`producerPid`** (header, layout field) can strengthen the crash verdict:
-  if it is non-zero and no longer names a running process, the section is
+  if it is non-zero and no longer names a running process, the segment is
   abandoned - a deterministic answer where staleness alone is a heuristic.
   The converse holds nothing: PIDs are reused, so a live PID never overrides
   the staleness rules below.
 - **A producer that dies mid-rewrite leaves `layoutSeq` odd.** An attaching
   consumer then sees `NotReady` on every retry, and an attached one detaches
   - neither is an error in the consumer. The state resolves when a producer
-  restarts into the section: the restart steps past the odd value (see
+  restarts into the segment: the restart steps past the odd value (see
   [seqlock.md](seqlock.md), writer side).
 
 ## Reading the timestamp

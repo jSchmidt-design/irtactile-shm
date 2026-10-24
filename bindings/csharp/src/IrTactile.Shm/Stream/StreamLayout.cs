@@ -19,7 +19,7 @@ public static class StreamLayout
     // Constants
     // =========================================================================
 
-    /// <summary>'ITSA', the section magic.</summary>
+    /// <summary>'ITSA', the segment magic.</summary>
     public const uint Magic = 0x41535449u;
 
     /// <summary>Layout break.</summary>
@@ -120,11 +120,11 @@ public static class StreamLayout
     public static uint SlotBytesOf(in LayoutParams p) =>
         Align64(SlotPayloadOffsetOf() + p.ChannelCount * ChannelPlaneBytesOf(p));
 
-    /// <summary>Section base → slot[0].</summary>
+    /// <summary>Segment base → slot[0].</summary>
     public static uint SlotArrayOffsetOf() => Align64(HeaderBytes);
 
     /// <summary>
-    /// Total section footprint. 64-bit so an out-of-range config is detectable
+    /// Total segment footprint. 64-bit so an out-of-range config is detectable
     /// rather than wrapped.
     /// </summary>
     public static ulong ComputeTotalSize(in LayoutParams p) =>
@@ -206,7 +206,7 @@ public static class StreamLayout
 
     /// <summary>
     /// The smallest class whose envelope holds <paramref name="p"/>, sized
-    /// against Float32 so an int16→float32 switch keeps the same section name.
+    /// against Float32 so an int16→float32 switch keeps the same segment name.
     /// Returns S1M when nothing fits; the caller must still range-check
     /// <see cref="ComputeTotalSize"/> against <see cref="MaxTotalBytes"/>.
     /// </summary>
@@ -273,7 +273,7 @@ public static class StreamLayout
     // All values are byte offsets from base.
     // =========================================================================
 
-    /// <summary>Section-relative byte offset of the slot holding <paramref name="seq"/>.</summary>
+    /// <summary>Segment-relative byte offset of the slot holding <paramref name="seq"/>.</summary>
     public static long SlotOffsetOf(in ShmStreamHeader h, ulong seq) =>
         h.SlotArrayOffset + (long)(seq % h.RingBlocks) * h.SlotBytes;
 

@@ -46,7 +46,7 @@ enum class ChannelLayout : uint32_t {
 
 /// What the producer is doing with this device.
 ///
-/// Inactive is 0 so a freshly created, zero-filled section reads as "not
+/// Inactive is 0 so a freshly created, zero-filled segment reads as "not
 /// being driven" before the header is written.
 enum class DeviceState : uint32_t {
     Inactive = 0,  ///< engine alive, this device is not being driven
@@ -78,8 +78,8 @@ enum BlockFlags : uint32_t {
 //                     Never take their values from a header snapshot.
 //
 // Pinned: magic, versionMajor, headerBytes, totalBytes, slotArrayOffset must
-// never change within a section; consumers map once against them and never
-// remap. Changing any of them requires a different section (different size
+// never change within a segment; consumers map once against them and never
+// remap. Changing any of them requires a different segment (different size
 // class, different name). All other layout fields are rewritable under a
 // layoutSeq bump, subject to computeTotalSize(new layout) <= totalBytes.
 
@@ -90,7 +90,7 @@ struct alignas(64) ShmStreamHeader {
     uint16_t versionMajor;        //   4  *pinned; reader must reject a mismatch
     uint16_t versionMinor;        //   6  reader must tolerate a higher value
     uint32_t headerBytes;         //   8  *pinned; size of THIS header; never copy more
-    uint32_t totalBytes;          //  12  *pinned; size of the whole section
+    uint32_t totalBytes;          //  12  *pinned; size of the whole segment
 
     uint32_t sampleFormat;        //  16  SampleFormat; reject an unknown value
     uint32_t channelLayout;       //  20  ChannelLayout; reject an unknown value
@@ -105,7 +105,7 @@ struct alignas(64) ShmStreamHeader {
     // --- layout fields; seqlock-protected (addressing). Read, never recompute ---
     uint32_t slotPayloadOffset;   //  52  slot base → plane 0
     uint32_t channelArrayOffset;  //  56  0 in v1: no channel table
-    uint32_t slotArrayOffset;     //  60  *pinned; section base → slot[0]
+    uint32_t slotArrayOffset;     //  60  *pinned; segment base → slot[0]
     uint32_t slotBytes;           //  64  slot to slot; multiple of 64
     uint32_t channelPlaneBytes;   //  68  plane to plane inside a slot
 
@@ -321,14 +321,14 @@ constexpr double staleAfterMsOf(const ShmStreamHeader& h) noexcept
 // Size classes
 // ---------------------------------------------------------------------------
 //
-// Sections are sized into three discrete buckets; the suffix is part of the
-// section and event names. A restart needing a larger layout switches name
-// instead of colliding with a consumer still holding the old section open.
+// Segments are sized into three discrete buckets; the suffix is part of the
+// segment and event names. A restart needing a larger layout switches name
+// instead of colliding with a consumer still holding the old segment open.
 
 enum class SizeClass : uint32_t {
-    S256K,   ///< 256 KiB section
-    S512K,   ///< 512 KiB section
-    S1M,     ///< 1 MiB section
+    S256K,   ///< 256 KiB segment
+    S512K,   ///< 512 KiB segment
+    S1M,     ///< 1 MiB segment
 };
 
 inline constexpr uint64_t kSizeClassBytes[3] = {
@@ -358,7 +358,7 @@ inline bool sizeClassFromString(const char* s, SizeClass& out) noexcept
 }
 
 /// The smallest class whose envelope holds `p`, sized against Float32 so an
-/// int16→float32 switch keeps the same section name. Returns S1M when nothing
+/// int16→float32 switch keeps the same segment name. Returns S1M when nothing
 /// fits; the caller must still range-check computeTotalSize() against
 /// kSizeClassBytes for the chosen class.
 constexpr SizeClass smallestSizeClassFor(const LayoutParams& p) noexcept

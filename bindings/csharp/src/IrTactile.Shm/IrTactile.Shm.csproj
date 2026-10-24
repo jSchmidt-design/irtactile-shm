@@ -30,7 +30,7 @@
     <RepositoryType>git</RepositoryType>
 
     <!-- Tracks CHANGELOG.md. The package version and the WIRE version are
-         independent: this can go to 1.1.0 while the section it reads stays
+         independent: this can go to 1.1.0 while the segment it reads stays
          stream-shm v1 (spec/common/versioning.md). -->
     <Version>1.0.0</Version>
 

@@ -1,4 +1,4 @@
-﻿// Client-level tests, over a real named section.
+﻿// Client-level tests, over a real named segment.
 //
 // SPDX-License-Identifier: MIT
 //
@@ -16,7 +16,7 @@ namespace IrTactile.Shm.Tests.Stream;
 
 public unsafe class ClientTests
 {
-    /// <summary>A real named section, created and driven by a TestProducer.</summary>
+    /// <summary>A real named segment, created and driven by a TestProducer.</summary>
     private sealed class MappedProducer : IDisposable
     {
         private readonly MemoryMappedFile _mmf;
@@ -60,23 +60,23 @@ public unsafe class ClientTests
         // instead.
         if (!OperatingSystem.IsWindows()) return;
 
-        using var section = new MappedProducer(new LayoutParams(4, 8, 4, SampleFormat.Float32));
+        using var segment = new MappedProducer(new LayoutParams(4, 8, 4, SampleFormat.Float32));
         using var c = new Client();
-        Assert.Equal(OpenResult.Ok, c.Open(section.Name, null));
+        Assert.Equal(OpenResult.Ok, c.Open(segment.Name, null));
 
-        section.Producer.Publish();
+        segment.Producer.Publish();
         Assert.Equal(WaitResult.Blocks, c.Wait(TimeSpan.FromMilliseconds(50)));
 
         var b = new BlockView();
         while (c.Next(b)) { }
 
-        // The producer restarts into the section with a different channel count.
-        byte* raw = section.Raw;
-        SectionMemory.SetU32(raw, HeaderOffset.ChannelCount, 2u);
-        SectionMemory.SetU32(raw, HeaderOffset.SlotBytes,
-            Align64(SlotPayloadOffsetOf() + 2u * SectionMemory.U32(raw, HeaderOffset.ChannelPlaneBytes)));
-        SectionMemory.Release32(raw, HeaderOffset.LayoutSeq,
-            SectionMemory.U32(raw, HeaderOffset.LayoutSeq) + 2u);
+        // The producer restarts into the segment with a different channel count.
+        byte* raw = segment.Raw;
+        SegmentMemory.SetU32(raw, HeaderOffset.ChannelCount, 2u);
+        SegmentMemory.SetU32(raw, HeaderOffset.SlotBytes,
+            Align64(SlotPayloadOffsetOf() + 2u * SegmentMemory.U32(raw, HeaderOffset.ChannelPlaneBytes)));
+        SegmentMemory.Release32(raw, HeaderOffset.LayoutSeq,
+            SegmentMemory.U32(raw, HeaderOffset.LayoutSeq) + 2u);
 
         // The drain consumes the rewrite before Wait() ever sees it: the
         // reader's latch shows Geometry here, and is spent by the time
@@ -96,15 +96,15 @@ public unsafe class ClientTests
         // consumer rebuilds its buffers on every producer restart.
         if (!OperatingSystem.IsWindows()) return;
 
-        using var section = new MappedProducer(new LayoutParams(4, 8, 4, SampleFormat.Float32));
+        using var segment = new MappedProducer(new LayoutParams(4, 8, 4, SampleFormat.Float32));
         using var c = new Client();
-        Assert.Equal(OpenResult.Ok, c.Open(section.Name, null));
+        Assert.Equal(OpenResult.Ok, c.Open(segment.Name, null));
 
-        byte* raw = section.Raw;
-        SectionMemory.SetU32(raw, HeaderOffset.DiagEngineBlockSize, 128u);
-        SectionMemory.SetU32(raw, HeaderOffset.SourceSampleRate, 96000u);
-        SectionMemory.Release32(raw, HeaderOffset.LayoutSeq,
-            SectionMemory.U32(raw, HeaderOffset.LayoutSeq) + 2u);
+        byte* raw = segment.Raw;
+        SegmentMemory.SetU32(raw, HeaderOffset.DiagEngineBlockSize, 128u);
+        SegmentMemory.SetU32(raw, HeaderOffset.SourceSampleRate, 96000u);
+        SegmentMemory.Release32(raw, HeaderOffset.LayoutSeq,
+            SegmentMemory.U32(raw, HeaderOffset.LayoutSeq) + 2u);
 
         var b = new BlockView();
         while (c.Next(b)) { }
@@ -118,10 +118,10 @@ public unsafe class ClientTests
     {
         if (!OperatingSystem.IsWindows()) return;
 
-        using var section = new MappedProducer(new LayoutParams(2, 4, 2, SampleFormat.Float32));
+        using var segment = new MappedProducer(new LayoutParams(2, 4, 2, SampleFormat.Float32));
         using var c = new Client();
-        Assert.Equal(OpenResult.Ok, c.Open(section.Name, null));
-        section.Producer.Publish();
+        Assert.Equal(OpenResult.Ok, c.Open(segment.Name, null));
+        segment.Producer.Publish();
 
         c.ReleaseHandles();
 
@@ -136,7 +136,7 @@ public unsafe class ClientTests
     }
 
     [Fact]
-    public void Open_MissingSection_IsNotFoundAndRetryable()
+    public void Open_MissingSegment_IsNotFoundAndRetryable()
     {
         if (!OperatingSystem.IsWindows()) return;
 

@@ -19,11 +19,11 @@
 //         while (c.Next(b))
 //             render(b);
 //
-// Open-only: a typo'd section name fails with NotFound instead of silently
-// polling an empty section.
+// Open-only: a typo'd segment name fails with NotFound instead of silently
+// polling an empty segment.
 //
 // Single-threaded for Wait(): the producer's event is auto-reset and wakes
-// exactly one waiter. Polling consumers (no event) can share a section freely.
+// exactly one waiter. Polling consumers (no event) can share a segment freely.
 
 using System.Diagnostics;
 using System.IO.MemoryMappedFiles;
@@ -76,7 +76,7 @@ public sealed unsafe class Client : IDisposable
         Close();
         if (string.IsNullOrEmpty(shmName)) return OpenResult.NotFound;
 
-        // Kernel objects by name - section and event - are the Windows half
+        // Kernel objects by name - segment and event - are the Windows half
         // of the contract (win32.h in the C++ binding). The portable half is
         // Reader over any mapped buffer; on other platforms Open reports
         // NotFound rather than pretending a mapping exists.
@@ -88,10 +88,10 @@ public sealed unsafe class Client : IDisposable
             // managed FILE_MAP_READ, and the view below inherits it, so a
             // buggy consumer faults instead of corrupting the producer's ring.
             // The single-argument OpenExisting would ask for ReadWrite and be
-            // refused outright by a producer that shares the section read-only.
+            // refused outright by a producer that shares the segment read-only.
             _mmf = MemoryMappedFile.OpenExisting(shmName, MemoryMappedFileRights.Read);
 
-            // Map the whole section in one call: the cost is address space
+            // Map the whole segment in one call: the cost is address space
             // only - pages arrive on first touch.
             _view = _mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
 
@@ -114,7 +114,7 @@ public sealed unsafe class Client : IDisposable
         {
             // ReleaseHandles() rather than Close() keeps _reader, so
             // MismatchDetail survives Open() returning Mismatch. The retry
-            // path for NotReady is simply another Open(); remapping a section
+            // path for NotReady is simply another Open(); remapping a segment
             // is cheap against any sane retry cadence.
             ReleaseHandles();
             return FromAttach(ar);
@@ -268,7 +268,7 @@ public sealed unsafe class Client : IDisposable
 
     // The three reads below are gated on IsOpen, not merely on Reader.Attached.
     // ReleaseHandles() unmaps the view while the Reader still holds a pointer
-    // into it and still reports Attached; reaching the section through that
+    // into it and still reports Attached; reaching the segment through that
     // pointer is an access violation the CLR cannot turn into an exception, so
     // the gate is what makes the public ReleaseHandles() safe to call.
 
@@ -281,7 +281,7 @@ public sealed unsafe class Client : IDisposable
     /// <summary>Liveness against the current QPC reading. Closed once closed.</summary>
     public StreamState State() => IsOpen ? _reader.State(NowQpc()) : StreamState.Closed;
 
-    /// <summary>The reader over the mapped section.</summary>
+    /// <summary>The reader over the mapped segment.</summary>
     public Reader Reader => _reader;
 
     /// <summary>
@@ -292,7 +292,7 @@ public sealed unsafe class Client : IDisposable
     /// </summary>
     public EventWaitHandle? NativeEvent => _event;
 
-    /// <summary>QPC now, in the section's qpcFrequency units on Windows.</summary>
+    /// <summary>QPC now, in the segment's qpcFrequency units on Windows.</summary>
     public static ulong NowQpc() => (ulong)Stopwatch.GetTimestamp();
 
     private static OpenResult FromAttach(AttachResult r) => r switch

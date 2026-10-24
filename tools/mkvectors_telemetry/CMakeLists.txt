@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(irtactile_shm_mkvectors_telemetry LANGUAGES CXX)
 
-# mkvectors_telemetry - emits conformance/telemetry-shm/v1 (golden sections +
+# mkvectors_telemetry - emits conformance/telemetry-shm/v1 (golden segments +
 # manifest.json) from the producer side of the C++ binding. Standalone:
 #
 #   cmake -S tools/mkvectors_telemetry -B build-mkvt
@@ -10,7 +10,7 @@ project(irtactile_shm_mkvectors_telemetry LANGUAGES CXX)
 #
 # The output is committed; regenerating and diffing is the drift check. The
 # expectations in the manifest are written by hand in the generator source
-# (an independent opinion), the section bytes come from the C++ producer.
+# (an independent opinion), the segment bytes come from the C++ producer.
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

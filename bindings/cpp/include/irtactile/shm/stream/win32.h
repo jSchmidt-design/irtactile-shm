@@ -42,7 +42,7 @@ namespace stream {
 enum class WaitResult : uint32_t {
     Blocks,        ///< writeSeq advanced - drain with next() / latest()
     NoBlocks,      ///< woken or timed out with nothing new; ask state() why
-    Reconfigured,  ///< Same-section rewrite of an addressing-relevant field.
+    Reconfigured,  ///< Same-segment rewrite of an addressing-relevant field.
                    ///< The snapshot is already refreshed, so header() and all
                    ///< layout-derived accessors are valid for the new
                    ///< layoutSeq. Re-check any StreamRequest.
@@ -59,7 +59,7 @@ enum class WaitResult : uint32_t {
 enum class OpenResult : uint32_t {
     Ok,
     NotFound,      ///< ERROR_FILE_NOT_FOUND - irTactile is not up yet. RETRY.
-    NotReady,      ///< section exists, header not yet written. RETRY.
+    NotReady,      ///< segment exists, header not yet written. RETRY.
     AccessDenied,  ///< wrong session, or a Global\ name without the privilege.
     BadVersion,    ///< as AttachResult
     Malformed,     ///< as AttachResult
@@ -108,12 +108,12 @@ inline const char* toCString(StreamState s) noexcept
     return "?";
 }
 
-/// Open-only: a typo'd section name fails with NotFound instead of silently
-/// polling an empty section.
+/// Open-only: a typo'd segment name fails with NotFound instead of silently
+/// polling an empty segment.
 ///
 /// Move-only, and single-threaded for wait(): the producer's event is
 /// auto-reset and wakes exactly one waiter. Polling consumers (no event) can
-/// share a section freely.
+/// share a segment freely.
 #if defined(_MSC_VER)
 #  pragma warning(push)
 // C4324: struct padded due to alignas - expected, m_lastHeader is alignas(64).
@@ -151,7 +151,7 @@ public:
             return OpenResult::NotFound;
         }
 
-        // Map the whole section in one call: the view is 64 KB-aligned
+        // Map the whole segment in one call: the view is 64 KB-aligned
         // (preserving alignas(64)), and the cost is address space only -
         // pages arrive on first touch.
         m_view = MapViewOfFile(m_mapping, FILE_MAP_READ, 0, 0, 0);
@@ -171,7 +171,7 @@ public:
         if (ar != AttachResult::Ok) {
             // releaseHandles() rather than close() keeps m_reader, so
             // mismatchDetail() survives open() returning Mismatch. The retry
-            // path for NotReady is simply another open(); remapping a section
+            // path for NotReady is simply another open(); remapping a segment
             // is cheap against any sane retry cadence.
             releaseHandles();
             return fromAttach(ar);

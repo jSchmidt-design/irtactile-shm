@@ -14,7 +14,7 @@ liveness ([liveness.md](../../common/liveness.md)).
 
 | Region | Name | Created by | Direction |
 |---|---|---|---|
-| **inbound** | the section name, e.g. `irTactile_Telemetry_<simId>` | the producer | producer -> irTactile |
+| **inbound** | the segment name, e.g. `irTactile_Telemetry_<simId>` | the producer | producer -> irTactile |
 | **return** | derived from the inbound name, e.g. `irTactile_TelemetryReturn_<simId>` | irTactile | irTactile -> producer |
 
 Each side **creates the region it writes and only opens the region it reads.** Absence is normal in both directions:
@@ -23,12 +23,12 @@ treats a missing inbound region as "source not running".
 
 ### Names
 
-The inbound name (the *section name*) is the whole contract between a producer and irTactile. A producer ships with
+The inbound name (the *segment name*) is the whole contract between a producer and irTactile. A producer ships with
 a fixed name and documents it; the user enters that name in the irTactile configuration (sim catalogue). Windows
-cannot list named sections, so the consumer only opens names it was configured with, and irTactile passes nothing
+cannot list named segments, so the consumer only opens names it was configured with, and irTactile passes nothing
 to the producer.
 
-A section name is 1-200 characters from `[A-Za-z0-9_.-]`. The recommended form is `irTactile_Telemetry_<simId>`
+A segment name is 1-200 characters from `[A-Za-z0-9_.-]`. The recommended form is `irTactile_Telemetry_<simId>`
 (the bindings' `inboundName()` builds it). The return name is derived from the inbound name alone, so both sides
 compute it without further configuration:
 
@@ -50,8 +50,8 @@ frame does not supersede.
  [ header 256 B ][ desc[capacity] x 128 B ][ valid u64[capacity/64] ][ eventCount u32[capacity] ][ values f32[capacity] ]
 ```
 
-Offsets are fields of the header; a consumer uses them, never `sizeof`. The producer fixes the section size
-(`totalBytes`) when it creates the section; a layout rewrite must fit inside it.
+Offsets are fields of the header; a consumer uses them, never `sizeof`. The producer fixes the segment size
+(`totalBytes`) when it creates the segment; a layout rewrite must fit inside it.
 
 ### The producer's slots
 
@@ -71,7 +71,7 @@ Everything else is **rejected per channel** (not per source): a `plugin.*` or `s
 
 ### Header validation (consumer)
 
-A consumer treats the section as **untrusted**. It maps the whole section, learns the mapped size from the OS and
+A consumer treats the segment as **untrusted**. It maps the whole segment, learns the mapped size from the OS and
 rejects the source (`Malformed`) when:
 
 - `magic` is not `ITTE` (`0` means "created, header not yet written" - retry, `NotReady`);
@@ -93,7 +93,7 @@ is malformed.
 Fields have four concurrency classes ([concurrency.md](../../common/concurrency.md)):
 
 - **pinned**: `magic`, `versionMajor`, `headerBytes`, `totalBytes`. Written once, never changed. A different value
-  needs a different section.
+  needs a different segment.
 - **layout** (read under `layoutSeq`): geometry, `qpcFrequency`, `producerPid`, `simId`, the session identity
   (`simName`, `carId`, `carName`) and the **descriptor table**.
 - **concurrent** (bytes `[80, 120)` except `frameQpc`): `frameSeq`, `lastPublishQpc`, `producerState`,
@@ -101,7 +101,7 @@ Fields have four concurrency classes ([concurrency.md](../../common/concurrency.
 - **frame** (read under the frame seqlock, never cached across reads): `frameQpc` and the `valid`, `eventCount`
   and `values` arrays.
 
-**First creation.** Create the section (zero-filled by the OS), write everything except `magic`, then store `magic`
+**First creation.** Create the segment (zero-filled by the OS), write everything except `magic`, then store `magic`
 with release. A consumer that sees `magic == 0` retries.
 
 **Per frame** (the frame seqlock, [seqlock.md](../../common/seqlock.md) - *Generalization*):
@@ -166,7 +166,7 @@ irTactile creates it and the producer may read it. It holds only the latest valu
  [ header 128 B ][ accepted u64[capacity/64] ][ demanded u64[capacity/64] ]
 ```
 
-The region has a fixed size of **4096 bytes** (enough for the maximum capacity of 8192) so the same section survives
+The region has a fixed size of **4096 bytes** (enough for the maximum capacity of 8192) so the same segment survives
 a producer restart with another capacity.
 
 - `accepted[]` - bit set: the consumer bound this slot. Clear: rejected (see *Names a producer may declare*) or not
@@ -192,6 +192,6 @@ rejects unknown enum values (`producerState`, descriptor `kind`).
 
 ## Conformance
 
-`conformance/telemetry-shm/v1/` holds golden sections for the *decode* side (header validation, descriptor mapping,
+`conformance/telemetry-shm/v1/` holds golden segments for the *decode* side (header validation, descriptor mapping,
 frame and event reads, return region) and the *encode* side (byte-exact output of scripted producer calls). A
 binding passes when it reproduces every expectation of the manifest.

@@ -1,4 +1,4 @@
-// viewer_win32.cpp -- a small GDI window on the shm stream: pick a section,
+// viewer_win32.cpp -- a small GDI window on the shm stream: pick a segment,
 // pick a channel, watch that channel's waveform at 60 Hz.
 //
 // Single-threaded by design: pump messages, wait until the next 60 Hz frame
@@ -13,8 +13,8 @@
 // order, so waiting on the event buys real power savings. Above that, the
 // frame loop drains whatever arrived anyway, so the event is ignored.
 //
-// ASSUMPTION: the producer's event is named after the section itself (this
-// demo passes the section name as both names). Real producers append their
+// ASSUMPTION: the producer's event is named after the segment itself (this
+// demo passes the segment name as both names). Real producers append their
 // own suffixes to the base names -- see reader_win32.cpp for the resolved
 // names -- and Client silently falls back to polling when no event of the
 // given name exists, so a wrong event name costs latency, not function.
@@ -65,7 +65,7 @@ constexpr int kStatusHeight{20};        ///< status strip along the bottom edge
 constexpr long long kFramePeriodMs{16}; ///< ~60 Hz
 constexpr double kEventModeMaxRateHz{60.0};
 constexpr size_t kNameBufferChars{256};
-constexpr wchar_t kDefaultSectionName[]{L"irTactile_Stream_Primary_256k"};
+constexpr wchar_t kDefaultSegmentName[]{L"irTactile_Stream_Primary_256k"};
 
 // Top bar geometry. The device field takes whatever width is left over once
 // the fixed-width controls to its right have been placed.
@@ -107,7 +107,7 @@ struct AppState {
     int traceCapacity{640};
 
     std::deque<float> trace;
-    std::string status{"Not connected. Enter the resolved shm section name and press Connect."};
+    std::string status{"Not connected. Enter the resolved shm segment name and press Connect."};
 };
 
 AppState g_app;
@@ -152,17 +152,17 @@ void connectNow(AppState& app)
 {
     wchar_t nameBuffer[kNameBufferChars] = {0};
     GetWindowTextW(app.deviceEdit, nameBuffer, static_cast<int>(kNameBufferChars) - 1);
-    const std::wstring sectionName{nameBuffer};
-    if (sectionName.empty()) {
-        app.status = "Enter a section name first.";
+    const std::wstring segmentName{nameBuffer};
+    if (segmentName.empty()) {
+        app.status = "Enter a segment name first.";
         return;
     }
 
-    // Event name == section name by demo assumption; a missing event just
+    // Event name == segment name by demo assumption; a missing event just
     // leaves Client in polling mode. No structural assertion: this viewer
     // renders whatever geometry it finds.
     const OpenResult openResult =
-        app.client.open(sectionName.c_str(), sectionName.c_str(), nullptr);
+        app.client.open(segmentName.c_str(), segmentName.c_str(), nullptr);
 
     if (openResult != OpenResult::Ok) {
         std::string message{"Open failed: "};
@@ -405,7 +405,7 @@ void createControls(AppState& app, HWND window)
                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_DEVICE)),
                                      g_instance, nullptr);
     SendMessageW(app.deviceEdit, EM_SETLIMITTEXT, kNameBufferChars - 1, 0);
-    SetWindowTextW(app.deviceEdit, kDefaultSectionName);
+    SetWindowTextW(app.deviceEdit, kDefaultSegmentName);
 
     app.connectButton = CreateWindowExW(0, L"BUTTON", L"Connect",
                                         WS_CHILD | WS_VISIBLE | WS_TABSTOP,

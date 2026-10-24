@@ -54,7 +54,7 @@ public class ChannelModelTests
         Assert.False(ChannelModel.IsReservedOwnerId("myrig"));
     }
 
-    // Names and order copied from drafts/sim_channel_coverage_proposal.md section 2.2 (the ids follow the order).
+    // Names and order copied from drafts/sim_channel_coverage_proposal.md segment 2.2 (the ids follow the order).
     private static readonly string[] ScalarNames =
     {
         "std.session.status",

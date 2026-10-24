@@ -99,7 +99,7 @@ struct ChannelDesc {
     uint8_t  reserved[26];
 };
 
-/// Typed views of the descriptor fields the section stores as plain integers.
+/// Typed views of the descriptor fields the segment stores as plain integers.
 constexpr channels::Kind kindOf(const ChannelDesc& d) noexcept { return static_cast<channels::Kind>(d.kind); }
 constexpr channels::Provenance provenanceOf(const ChannelDesc& d) noexcept
 {
@@ -154,7 +154,7 @@ constexpr bool isValidCapacity(uint32_t capacity) noexcept
     return capacity >= kMinCapacity && capacity <= kMaxCapacity && capacity % 64 == 0;
 }
 
-/// Layout of a section holding `capacity` slots (must satisfy isValidCapacity).
+/// Layout of a segment holding `capacity` slots (must satisfy isValidCapacity).
 constexpr Layout layoutFor(uint32_t capacity) noexcept
 {
     Layout l;

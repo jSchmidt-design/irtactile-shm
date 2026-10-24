@@ -1,12 +1,12 @@
 // irtactile/shm/telemetry/win32.h - the Windows half of telemetry-shm v1:
-// named sections for the producer (creates the inbound region, opens the
+// named segments (named shared memory; Windows: file mapping) for the producer (creates the inbound region, opens the
 // return region), and for the consumer (opens the inbound region, creates the
 // return region), plus QPC.
 //
 // SPDX-License-Identifier: MIT
 //
 //     // producer
-//     ProducerSection s;
+//     ProducerSegment s;
 //     s.create(inboundName("demo"), 256, {"", "My Sim"});
 //     Producer& p = s.producer();
 //     p.declare(channels::standard::Id::EngineRpm);  p.commitLayout();
@@ -35,7 +35,7 @@ namespace detail {
 
 inline std::wstring widen(const std::string& s)
 {
-    return std::wstring(s.begin(), s.end());   // section names are ASCII
+    return std::wstring(s.begin(), s.end());   // segment names are ASCII
 }
 
 }  // namespace detail
@@ -60,10 +60,10 @@ public:
     [[nodiscard]] void* data() const noexcept { return m_view; }
     [[nodiscard]] size_t size() const noexcept { return m_bytes; }
     [[nodiscard]] bool isOpen() const noexcept { return m_view != nullptr; }
-    /// True when the section existed already (restart into a section that is still held open).
+    /// True when the segment existed already (restart into a segment that is still held open).
     [[nodiscard]] bool existed() const noexcept { return m_existed; }
 
-    /// CreateFileMappingW + map. An existing section keeps its size.
+    /// CreateFileMappingW + map. An existing segment keeps its size.
     bool create(const std::wstring& name, size_t bytes, DWORD* error = nullptr)
     {
         close();
@@ -74,7 +74,7 @@ public:
         m_existed = (GetLastError() == ERROR_ALREADY_EXISTS);
         return mapAll(true, error);
     }
-    /// OpenFileMappingW + map the whole section. The size is what the OS reports, never a header field.
+    /// OpenFileMappingW + map the whole segment. The size is what the OS reports, never a header field.
     bool open(const std::wstring& name, bool write, DWORD* error = nullptr)
     {
         close();
@@ -101,18 +101,18 @@ private:
     bool   m_existed{false};
 };
 
-/// Producer: owns the inbound section and the Producer bound to it; opens the return region on demand.
-class ProducerSection {
+/// Producer: owns the inbound segment and the Producer bound to it; opens the return region on demand.
+class ProducerSegment {
 public:
-    /// Creates (or restarts into) the section for `capacity` slots and binds the Producer. `identity.qpcFrequency`
-    /// and `identity.pid` are filled in when zero. SectionFailed: the OS refused to create or map the section.
-    OpenResult create(const std::string& inboundSectionName, uint32_t capacity, Identity identity)
+    /// Creates (or restarts into) the segment for `capacity` slots and binds the Producer. `identity.qpcFrequency`
+    /// and `identity.pid` are filled in when zero. SegmentFailed: the OS refused to create or map the segment.
+    OpenResult create(const std::string& inboundSegmentName, uint32_t capacity, Identity identity)
     {
         if (identity.qpcFrequency == 0) identity.qpcFrequency = qpcFrequency();
         if (identity.pid == 0) identity.pid = GetCurrentProcessId();
-        m_returnName = returnNameFor(inboundSectionName);
-        if (!m_inbound.create(detail::widen(inboundSectionName), Producer::requiredBytes(capacity))) {
-            return OpenResult::SectionFailed;
+        m_returnName = returnNameFor(inboundSegmentName);
+        if (!m_inbound.create(detail::widen(inboundSegmentName), Producer::requiredBytes(capacity))) {
+            return OpenResult::SegmentFailed;
         }
         return m_producer.open(m_inbound.data(), m_inbound.size(), capacity, std::move(identity));
     }
@@ -149,29 +149,29 @@ private:
     std::string  m_returnName;
 };
 
-/// Consumer: opens an inbound section read-only. Result mirrors the retry-vs-give-up split of stream-shm.
-enum class SectionOpen : uint32_t { Ok, NotFound, AccessDenied, Failed };
+/// Consumer: opens an inbound segment read-only. Result mirrors the retry-vs-give-up split of stream-shm.
+enum class SegmentOpen : uint32_t { Ok, NotFound, AccessDenied, Failed };
 
-inline const char* toCString(SectionOpen r) noexcept
+inline const char* toCString(SegmentOpen r) noexcept
 {
     switch (r) {
-        case SectionOpen::Ok:           return "Ok";
-        case SectionOpen::NotFound:     return "NotFound";
-        case SectionOpen::AccessDenied: return "AccessDenied";
-        case SectionOpen::Failed:       return "Failed";
+        case SegmentOpen::Ok:           return "Ok";
+        case SegmentOpen::NotFound:     return "NotFound";
+        case SegmentOpen::AccessDenied: return "AccessDenied";
+        case SegmentOpen::Failed:       return "Failed";
     }
     return "?";
 }
 
-class ConsumerSection {
+class ConsumerSegment {
 public:
-    SectionOpen open(const std::string& inboundSectionName)
+    SegmentOpen open(const std::string& inboundSegmentName)
     {
         DWORD err = 0;
-        if (m_view.open(detail::widen(inboundSectionName), false, &err)) return SectionOpen::Ok;
-        if (err == ERROR_FILE_NOT_FOUND) return SectionOpen::NotFound;
-        if (err == ERROR_ACCESS_DENIED) return SectionOpen::AccessDenied;
-        return SectionOpen::Failed;
+        if (m_view.open(detail::widen(inboundSegmentName), false, &err)) return SegmentOpen::Ok;
+        if (err == ERROR_FILE_NOT_FOUND) return SegmentOpen::NotFound;
+        if (err == ERROR_ACCESS_DENIED) return SegmentOpen::AccessDenied;
+        return SegmentOpen::Failed;
     }
     void close() noexcept { m_view.close(); }
     [[nodiscard]] bool isOpen() const noexcept { return m_view.isOpen(); }
@@ -183,11 +183,11 @@ private:
 };
 
 /// Consumer: creates the return region and publishes into it.
-class ReturnSection {
+class ReturnSegment {
 public:
-    bool create(const std::string& inboundSectionName)
+    bool create(const std::string& inboundSegmentName)
     {
-        if (!m_view.create(detail::widen(returnNameFor(inboundSectionName)), kReturnBytes)) return false;
+        if (!m_view.create(detail::widen(returnNameFor(inboundSegmentName)), kReturnBytes)) return false;
         return m_writer.init(m_view.data(), m_view.size(), GetCurrentProcessId());
     }
     void close() noexcept { m_view.close(); }

@@ -3,9 +3,9 @@
 **Format version 1.0** (`kVersionMajor = 1`, `kVersionMinor = 0`; minor versions
 are additive - see [../../common/versioning.md](../../common/versioning.md)).
 
-A named OS shared-memory section carrying one continuous, multi-channel sample
+A named OS shared-memory segment carrying one continuous, multi-channel sample
 stream from a single producer, published on a fixed cadence with an optional
-auto-reset event. A consumer maps the section read-only and reads a planar
+auto-reset event. A consumer maps the segment read-only and reads a planar
 float32/int16 ring - no command channel, no audio-driver detour.
 
 **This is a signal transport, not an audio device.** irTactile models the stream
@@ -15,13 +15,13 @@ same list as sound cards - and the header carries `deviceName`, `deviceGuid` and
 liveness, nothing more. The payload is whatever signal the producer's graph
 routes into the stream: transducer drive, control values, telemetry-derived
 envelopes. Nothing obliges a consumer to treat the samples as audio or hand them
-to a sound API, and no audio endpoint exists on either side of the section.
+to a sound API, and no audio endpoint exists on either side of the segment.
 
 This tree is the normative specification a consumer implements against:
 
 | Document | Content |
 |---|---|
-| [fields.md](fields.md) | Byte layout: section map, `ShmStreamHeader`, `ShmBlockDesc`, alignment |
+| [fields.md](fields.md) | Byte layout: segment map, `ShmStreamHeader`, `ShmBlockDesc`, alignment |
 | [../../common/concurrency.md](../../common/concurrency.md) | Field concurrency classes (pinned / layout / concurrent), memory-ordering rules |
 | [../../common/seqlock.md](../../common/seqlock.md) | The `layoutSeq` seqlock |
 | [../../common/versioning.md](../../common/versioning.md) | Forward-compatibility rules |
@@ -48,7 +48,7 @@ the folding.
 
 If your consumer draws conclusions from frequency content, that is the
 assumption to build on. Whether a particular stream is clean depends on how the
-producer's graph was configured, and the section cannot tell you the answer.
+producer's graph was configured, and the segment cannot tell you the answer.
 
 It can also change without notice. A producer that band-limits before decimating
 adds no header field and bumps no version, so a consumer sees cleaner data and no
@@ -73,22 +73,22 @@ a sample count.
 
 | Object | Consumer's call |
 |---|---|
-| Section | `OpenFileMappingW(FILE_MAP_READ, FALSE, name)` |
+| Segment | `OpenFileMappingW(FILE_MAP_READ, FALSE, name)` |
 | View | `MapViewOfFile(h, FILE_MAP_READ, 0, 0, 0)` |
 | Event | `OpenEventW(SYNCHRONIZE, FALSE, name)` |
 
 Never `CreateFileMappingW`. Open-only turns a mistyped name into
-`ERROR_FILE_NOT_FOUND` instead of a silently created empty section that polls
+`ERROR_FILE_NOT_FOUND` instead of a silently created empty segment that polls
 zeros forever. A consumer that starts before the producer gets the same error
 and must retry (`AttachResult::NotReady` / `OpenResult::NotFound`).
 `FILE_MAP_READ` also makes the mapped pages read-only, so a consumer bug faults
 instead of corrupting the producer's ring.
 
-**Map the whole section in one call** - `MapViewOfFile(h, FILE_MAP_READ, 0, 0, 0)`.
+**Map the whole segment in one call** - `MapViewOfFile(h, FILE_MAP_READ, 0, 0, 0)`.
 You never need the size before mapping; it costs address space only, and
 physical pages arrive on first touch. The two-step alternative (map a header
 window, read `totalBytes`, remap) is *worse*: between unmap and remap the
-producer can restart and replace the section, so the second map would be
+producer can restart and replace the segment, so the second map would be
 validated against a header no longer held.
 
 **One check is mandatory.** Mapping blind means trusting `header.totalBytes`
@@ -114,7 +114,7 @@ Naming consequences on Windows:
 ### What the operator configured, and what reaches you
 
 The stream is set up in irTactile's device configuration. Most of those choices
-arrive as header fields. Two never reach the section at all - plan for that
+arrive as header fields. Two never reach the segment at all - plan for that
 before you design around them:
 
 | The operator sets | You read |
@@ -125,16 +125,16 @@ before you design around them:
 | Sample format | `sampleFormat` |
 | Ring blocks | `ringBlocks` |
 | Shared memory size | the `_256k` / `_512k` / `_1m` suffix on the name you open |
-| Section name, event name | the names you open |
+| Segment name, event name | the names you open |
 | Device name | `deviceName` - informational, and rewritable on a restart |
 | **Channel labels** | **nothing** - they stay in the editor |
 
-Channel labels never enter the section, so channel identity remains positional
+Channel labels never enter the segment, so channel identity remains positional
 and established out of band. See *There is no channel table* below.
 
 Every one of these is fixed for the producer's lifetime: changing any of them
 requires restarting the producer, which a consumer observes as a
-`layoutSeq` rewrite or a fresh section, never as a field mutating underneath a
+`layoutSeq` rewrite or a fresh segment, never as a field mutating underneath a
 running read.
 
 ---
@@ -237,10 +237,10 @@ neither carries channel *identity*.
 
 ### There is no channel table
 
-The section is addressed by index and carries no per-channel strings. Channel
+The segment is addressed by index and carries no per-channel strings. Channel
 identity is established by whoever configured the producer, out of band.
 **No consumer should look up a channel by name at runtime.** What a consumer
-needs instead - an assertion that the section matches the structure it was
+needs instead - an assertion that the segment matches the structure it was
 built against - is a count/rate comparison at attach (`StreamRequest` →
 `AttachResult::Mismatch` in the C++ API), which compares numbers, not strings.
 
@@ -252,9 +252,9 @@ readers.
 
 ## The publish protocol *(normative)*
 
-### Section creation
+### Segment creation
 
-A freshly created section is zero-filled by the OS, and `magic == 0` is the
+A freshly created segment is zero-filled by the OS, and `magic == 0` is the
 consumer's "not ready yet" signal - which makes the creation ordering
 load-bearing:
 
@@ -267,11 +267,11 @@ half-written header: its attach-time validation failing there is `Malformed`,
 which is **fatal**, not a retry - a producer that stores `magic` early turns a
 startup race into a consumer that gives up permanently on a healthy stream.
 
-### Restarting into an existing section
+### Restarting into an existing segment
 
-A producer that reopens a section a consumer may still hold **must**:
+A producer that reopens a segment a consumer may still hold **must**:
 
-- **Preserve `writeSeq`** - resume from the value found in the section, never
+- **Preserve `writeSeq`** - resume from the value found in the segment, never
   reset it. It is the one counter that always moves forward.
 - **Cycle `layoutSeq`** (odd while rewriting, then even, ending strictly
   greater) **on every restart, even when no field changes.** The seqlock bump
@@ -320,7 +320,7 @@ consumer should ever see it.
 
 ### Attach
 
-1. Map the whole section. `magic == 0` means "created, header not yet written"
+1. Map the whole segment. `magic == 0` means "created, header not yet written"
    - `NotReady`, retry. A *wrong* magic is `Malformed`, fatal.
 2. Reject a `versionMajor` mismatch (`BadVersion`). Tolerate a higher
    `versionMinor`; reject unknown `sampleFormat` / `channelLayout` values.
@@ -374,7 +374,7 @@ still wants step 2: `head == cursor` is how it knows its value is current.
 
 **The copy in step 3 is mandatory.** There is no way to read a slot safely
 without copying it and re-checking; that is why the C++ `BlockView` owns its
-data rather than pointing into the section.
+data rather than pointing into the segment.
 
 ### Unsigned arithmetic
 
@@ -421,7 +421,7 @@ counter already advanced.
 - **Wakes coalesce.** One wake does not mean one block once you fall behind.
   Always drain: `while (next(b))`.
 - **Polling `writeSeq` has no such restriction**, needs no handle, and is
-  trivial in any language. Polling consumers can share one section freely; for
+  trivial in any language. Polling consumers can share one segment freely; for
   latest-value-wins consumers it is arguably the better pattern.
 - Producer shutdown and deactivation signal the event once after storing the
   new `deviceState`, so a blocked consumer learns the stream went quiet instead
@@ -453,9 +453,9 @@ unacceptable, take the event.
 
 ### Size classes and resolved names
 
-The section is allocated into one of three discrete size classes:
+The segment is allocated into one of three discrete size classes:
 
-| Class | Section bytes | Name suffix |
+| Class | Segment bytes | Name suffix |
 |---|---|---|
 | `"256k"` | 256 KiB | `_256k` |
 | `"512k"` | 512 KiB | `_512k` |
@@ -475,10 +475,10 @@ resolvedShmName   = shmName   + sizeClassSuffix
 resolvedEventName = eventName + sizeClassSuffix
 ```
 
-A class switch creates a **new** section and event under a different name.
-Before creating it, the producer stamps any abandoned section at the old name
+A class switch creates a **new** segment and event under a different name.
+Before creating it, the producer stamps any abandoned segment at the old name
 `Closed` and signals its event, so a parked consumer there wakes with `Closed`
-rather than timing out. A section at another class that is still being
+rather than timing out. A segment at another class that is still being
 published into belongs to a *second producer* and is left untouched.
 
 **Pin the class; do not discover it.** Both names are yours to choose - you
@@ -487,7 +487,7 @@ resolved names are known when you build and belong in your binary as constants.
 A stream left on the default class can move to a different class when its
 configuration changes, silently renaming both objects.
 
-> **Never probe the three class names in order.** A zombie section held open by
+> **Never probe the three class names in order.** A zombie segment held open by
 > a stuck consumer answers the probe, and you attach to a stream nobody writes
 > to.
 
@@ -495,14 +495,14 @@ configuration changes, silently renaming both objects.
 
 ## Multiple streams
 
-Multiple independent streams coexist freely - each has its own section and
+Multiple independent streams coexist freely - each has its own segment and
 event names, its own rate and channel set. The only shared resource is the OS
 kernel name space, and a producer must fail loudly on a duplicate name rather
-than let two streams scribble over one section.
+than let two streams scribble over one segment.
 
 ## Out of scope in v1
 
 - Bidirectional use (a consumer feeding samples *in*). The stream is a sink.
-- Consumer-owned structure - the consumer creating or laying out the section.
+- Consumer-owned structure - the consumer creating or laying out the segment.
 - Non-power-of-two rates, and rates above 48 kHz.
 - Cross-machine transport.

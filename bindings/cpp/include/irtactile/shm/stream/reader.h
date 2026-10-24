@@ -43,7 +43,7 @@ struct BlockView {
     uint32_t flags            = 0;   ///< BlockFlags
     uint32_t silentChannelMask = 0;
 
-    /// sampleCount floats, contiguous. Converts from int16 when the section
+    /// sampleCount floats, contiguous. Converts from int16 when the segment
     /// carries int16, so a consumer never branches on sampleFormat.
     const float* channel(uint32_t ch) const noexcept
     {
@@ -79,7 +79,7 @@ struct StreamRequest {
 /// Why an attach did not succeed - and whether to try again.
 enum class AttachResult : uint32_t {
     Ok,
-    NotReady,    ///< magic == 0: section exists, header not written yet. RETRY.
+    NotReady,    ///< magic == 0: segment exists, header not written yet. RETRY.
     BadVersion,  ///< versionMajor mismatch, or an unknown enum value.
     Malformed,   ///< wrong magic, or an offset that does not fit mappedBytes.
     Mismatch,    ///< valid, but not the structure this consumer expects.
@@ -133,7 +133,7 @@ public:
 
         const ShmStreamHeader& live = liveHeader();
 
-        // A section is zero-filled at creation: magic == 0 means "header not
+        // A segment is zero-filled at creation: magic == 0 means "header not
         // written yet", not an error.
         const uint32_t magic = irtactile::shm::detail::acquireLoad(live.magic);
         if (magic == 0)      return AttachResult::NotReady;
@@ -489,7 +489,7 @@ private:
         size_t used = 0;
         auto note = [&](const char* field, unsigned long long got, unsigned long long expect) {
             if (used >= sizeof(buf) - 1) return;
-            const int n = std::snprintf(buf + used, sizeof(buf) - used, "%s%s: section has %llu, this build expects %llu",
+            const int n = std::snprintf(buf + used, sizeof(buf) - used, "%s%s: segment has %llu, this build expects %llu",
                                         used ? "; " : "", field, got, expect);
             if (n > 0) used += static_cast<size_t>(n);
         };

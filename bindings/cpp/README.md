@@ -73,7 +73,7 @@ if (c.state() == StreamState::Stalled) warn();
 ## Contract checking
 
 `StreamRequest` compares counts and rates, not strings. `Mismatch` is
-deliberately **not retryable**: the section is valid and the producer healthy,
+deliberately **not retryable**: the segment is valid and the producer healthy,
 so waiting changes nothing. `mismatchDetail()` names the disagreeing fields -
 it survives `open()` returning `Mismatch` precisely so the failure can be
 reported with an actionable remedy.
@@ -108,7 +108,7 @@ criteria the API is held to: the minimal consumer **multiplies nothing** and
 Everything above is the consumer API. A producer uses **`layout.h` and
 `common/atomic.h`, and nothing else** - no `Reader`, no `Client`, and no
 `Writer`, because there is none. That omission is deliberate: a producer owns
-its own section lifetime, its own threading and its own publish cadence, so a
+its own segment lifetime, its own threading and its own publish cadence, so a
 writer class would either wrap one `memcpy` or dictate a design its host has
 already made. What the binding owes the producer is the wire format and the
 memory ordering, and those are exactly the two headers.
@@ -116,11 +116,11 @@ memory ordering, and those are exactly the two headers.
 | Producer needs | `layout.h` / `atomic.h` provides |
 |---|---|
 | Validate the configuration | `kMinChannels` / `kMaxChannels`, `kMinRingBlocks` / `kMaxRingBlocks`, `kWarnRingSeconds`, `rateDivisorFromHz()` |
-| Size the section | `LayoutParams`, `computeTotalSize()`, `smallestSizeClassFor()`, `sizeClassFromString()`, `kSizeClassBytes` / `kSizeClassSuffix` |
+| Size the segment | `LayoutParams`, `computeTotalSize()`, `smallestSizeClassFor()`, `sizeClassFromString()`, `kSizeClassBytes` / `kSizeClassSuffix` |
 | Fill the header | `ShmStreamHeader`, `kMagic`, `kVersionMajor` / `kVersionMinor`, `bytesPerSampleOf()`, `slotPayloadOffsetOf()`, `slotArrayOffsetOf()`, `slotBytesOf()`, `channelPlaneBytesOf()` |
 | Address a slot and its planes | `slotAt()`, `planeAt()` (non-const overloads) |
 | Encode samples | `floatToInt16()` |
-| Publish, and adjudicate a zombie section | `ShmBlockDesc`, `kSlotBusy`, `staleAfterMsOf()`, `detail::releaseStore()` / `detail::acquireLoad()` |
+| Publish, and adjudicate a zombie segment | `ShmBlockDesc`, `kSlotBusy`, `staleAfterMsOf()`, `detail::releaseStore()` / `detail::acquireLoad()` |
 
 The publish protocol those pieces implement - claim the slot with `kSlotBusy`,
 fill it, release-store the real `seq`, then bump `writeSeq` - is normative and
@@ -142,17 +142,17 @@ you publish telemetry, irTactile reads it as a source. Header-only, namespace
 
 | Header | Content |
 |---|---|
-| `irtactile/shm/telemetry/layout.h` | Wire structs, offsets, validation, section names. |
+| `irtactile/shm/telemetry/layout.h` | Wire structs, offsets, validation, segment names. |
 | `irtactile/shm/telemetry/producer.h` | `Producer`: `declare`, `commitLayout`, `beginFrame / set / event / endFrame`, `setState`. Portable (works on any aligned buffer). |
 | `irtactile/shm/telemetry/reader.h` | `Reader` (consumer), `ReturnReader` (producer reads the masks), `ReturnWriter` (irTactile). Portable. |
-| `irtactile/shm/telemetry/win32.h` | `ProducerSection`, `ConsumerSection`, `ReturnSection`, QPC. Windows only. |
+| `irtactile/shm/telemetry/win32.h` | `ProducerSegment`, `ConsumerSegment`, `ReturnSegment`, QPC. Windows only. |
 | `examples/telemetry_demo_producer` | The whole thing in ~100 lines. |
 
 ```cpp
 using namespace irtactile::shm::telemetry;
 namespace channels = irtactile::shm::channels;
 
-ProducerSection s;
+ProducerSegment s;
 s.create(inboundName("mysim"), /*capacity*/ 256, Identity{/*simId*/ "", "My Sim"});
 Producer& p = s.producer();
 
@@ -166,7 +166,7 @@ int pump = p.declareLocal({.name = "pump_pressure", .unit = "bar", .rangeMin = 0
 // A local per-wheel array: sim.<simId>.wheel_speed[0..3], elements in wheel-layout order.
 SlotRange speed = p.declareLocalArray({.name = "wheel_speed", .unit = "m/s", .rangeMin = 0.f, .rangeMax = 100.f},
                                       4, channels::ArrayLayout::Wheel);
-p.commitLayout();   // the section becomes visible here
+p.commitLayout();   // the segment becomes visible here
 p.setState(ProducerState::Active, qpcNow());
 
 for (;;) {
@@ -184,6 +184,6 @@ for (;;) {
 - Declare every channel before `commitLayout()`. Changing the set later means another `commitLayout()`, and
   `setCar()` after the commit publishes a new layout on its own.
 - While the sim is not running, set `Inactive` and keep calling `setState(Inactive, qpcNow())` as a heartbeat.
-- `ProducerSection::pollReturn()` tells you which channels irTactile accepted (name and properties are valid) and
+- `ProducerSegment::pollReturn()` tells you which channels irTactile accepted (name and properties are valid) and
   which it demands (something consumes them). You may skip channels nobody demands, but you don't have to.
 - `tests/telemetry_conformance_runner` runs the vectors in `conformance/telemetry-shm/v1`.

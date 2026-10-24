@@ -73,7 +73,7 @@
   .detail .fmeta { color: var(--dim); font-family: var(--mono); font-size: 12px; margin: 2px 0 6px; }
   .detail .empty { color: var(--dim); font-style: italic; }
 
-  /* ---------- section overview diagram ---------- */
+  /* ---------- segment overview diagram ---------- */
   .membar { display: flex; align-items: stretch; height: 58px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); font-family: var(--mono); font-size: 12px; }
   .membar > div { display: flex; align-items: center; justify-content: center; padding: 0 6px; text-align: center; white-space: nowrap; overflow: hidden; }
   .slotdiag { display: flex; align-items: stretch; height: 54px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); font-family: var(--mono); font-size: 12px; margin-top: 14px; }
@@ -124,9 +124,9 @@
 </div>
 
 <!-- ==================================================================== -->
-<h2>1 · Section layout at a glance</h2>
+<h2>1 · Segment layout at a glance</h2>
 
-<p>A stream lives in one named shared-memory section. Its bytes, from offset 0:</p>
+<p>A stream lives in one named shared-memory segment. Its bytes, from offset 0:</p>
 
 <div class="membar">
   <div style="flex:0 0 18%; background:var(--c-meta);">ShmStreamHeader<br>256 B</div>
@@ -187,7 +187,7 @@ must be a multiple of <code>bytesPerSample</code>, and a header violating that i
 <p>The header splits into three access classes:</p>
 <ul style="font-size:14px;">
   <li><span class="pill" style="background:var(--c-hot); color:#000;">bytes [80, 112)</span> - the <b>only concurrently written fields</b>. Read directly, per field, with acquire loads.</li>
-  <li><span class="pill" style="background:var(--c-meta); color:#fff;">pinned</span> - <code>magic</code>, <code>versionMajor</code>, <code>headerBytes</code>, <code>totalBytes</code>, <code>slotArrayOffset</code>. A rewrite MUST NOT change these: consumers map once, blind, against them and never remap, and a Win32 section cannot grow. Changing one requires a different section, and therefore a different name.</li>
+  <li><span class="pill" style="background:var(--c-meta); color:#fff;">pinned</span> - <code>magic</code>, <code>versionMajor</code>, <code>headerBytes</code>, <code>totalBytes</code>, <code>slotArrayOffset</code>. A rewrite MUST NOT change these: consumers map once, blind, against them and never remap, and a Win32 segment cannot grow. Changing one requires a different segment, and therefore a different name.</li>
   <li><span class="pill" style="background:var(--c-cfg); color:#000;">layout</span> - stream configuration and addressing fields. Protected by the <code>layoutSeq</code> seqlock; a producer restart may rewrite them in place.</li>
 </ul>
 
@@ -208,8 +208,8 @@ must be a multiple of <code>bytesPerSample</code>, and a header violating that i
 
 <h3><code>producerPid</code> - diagnostics only, never load-bearing</h3>
 <p>The process id of the producer that last (re)wrote the header, stored under the same <code>layoutSeq</code>
-rewrite that stamps the identity strings. It answers one question: <i>is the process that owns this section
-still alive?</i> - which makes zombie adjudication (a section left behind by a crashed producer, kept alive by
+rewrite that stamps the identity strings. It answers one question: <i>is the process that owns this segment
+still alive?</i> - which makes zombie adjudication (a segment left behind by a crashed producer, kept alive by
 a consumer's open handle) deterministic instead of purely staleness-based.</p>
 <p><b>PIDs are reused by every OS.</b> A liveness verdict may treat "PID no longer names a running process" as
 proof of abandonment, but never the converse: <code>producerPid</code> alive says nothing by itself, and it
@@ -239,7 +239,7 @@ re-checking the descriptor, finding the previous block's seq still there, and re
 <!-- ==================================================================== -->
 <h2>4 · Ring protocol - interactive</h2>
 
-<p>The section is a ring of <code>ringBlocks</code> slots addressed by <code>seq % ringBlocks</code>.
+<p>The segment is a ring of <code>ringBlocks</code> slots addressed by <code>seq % ringBlocks</code>.
 The writer publishes blocks at a fixed cadence
 (<code>periodSeconds = samplesPerBlock / (sampleRateMilliHz / 1000)</code>); the reader keeps a cursor and copies
 blocks out. The readable window is <b><code>ringBlocks − 1</code></b>, never <code>ringBlocks</code>: the writer owns
@@ -301,14 +301,14 @@ Two waiting processes each miss half the wakeups. It is signalled as the <i>last
 earlier, so a woken reader always finds <code>writeSeq</code> already advanced - but wakes coalesce, so one wake is
 not one block once you fall behind: always drain (<code>while (next(b))</code>). <b>Open the event, never create it</b>
 - <code>CreateEventW</code> on an existing name silently ignores the manual-reset and initial-state arguments.
-Polling <code>writeSeq</code> carries none of these restrictions and lets several consumers share one section;
+Polling <code>writeSeq</code> carries none of these restrictions and lets several consumers share one segment;
 derive the poll interval from <code>periodMs</code>, never from a constant.</div>
 
 <!-- ==================================================================== -->
 <h2>5 · The layoutSeq seqlock</h2>
 
 <p>Layout fields are protected by the <code>layoutSeq</code> seqlock; a producer restart may rewrite them in place.
-Pinned fields are never rewritten while the section exists. The seqlock makes changes detectable:</p>
+Pinned fields are never rewritten while the segment exists. The seqlock makes changes detectable:</p>
 
 <pre>reader:                             producer (start / restart / reconfigure):
   s1 = load(layoutSeq)                next = old + ((old &amp; 1) ? 2 : 1)  // step PAST a leftover odd value
@@ -319,14 +319,14 @@ Pinned fields are never rewritten while the section exists. The seqlock makes ch
 
 <ul style="font-size:14px;">
   <li><b>Odd</b> ⇒ rewrite in progress; <b>even</b> ⇒ stable.</li>
-  <li><b>A producer restarting into an existing section MUST cycle the seqlock, even when it rewrites nothing.</b>
+  <li><b>A producer restarting into an existing segment MUST cycle the seqlock, even when it rewrites nothing.</b>
       The bump is the only restart signal a holding consumer gets: it is what triggers re-reading
       <code>deviceName</code>, re-checking any structural assertion, and knowing that
       <code>firstSampleIndex</code> restarted at 0 while <code>writeSeq</code> kept running. A leftover
       <b>odd</b> value - a producer that crashed mid-rewrite - is stepped <i>past</i>, never decremented, so the
       final value is even and greater than anything a spinning reader has seen.</li>
   <li>A producer that died mid-rewrite therefore leaves <code>layoutSeq</code> odd, and an attaching consumer sees
-      <code>NotReady</code> on every retry until a producer restarts into the section. That is not a consumer
+      <code>NotReady</code> on every retry until a producer restarts into the segment. That is not a consumer
       error.</li>
   <li>The reader re-checks <code>layoutSeq</code> on <i>every</i> read cycle, not only at attach. It is free - the whole
       hot range <code>[80, 112)</code> sits in one cache line (64–127), so the load rides along with the
@@ -348,7 +348,7 @@ Pinned fields are never rewritten while the section exists. The seqlock makes ch
       <thead><tr><th>Value</th><th>Meaning</th><th>Retry?</th></tr></thead>
       <tbody>
         <tr><td><code>Ok</code></td><td>Attached.</td><td>-</td></tr>
-        <tr><td><code>NotReady</code></td><td><code>magic == 0</code>: section exists, header not written yet - or a header snapshot that will not settle, which is what a producer that died mid-rewrite (<code>layoutSeq</code> left odd) looks like.</td><td><b>yes</b></td></tr>
+        <tr><td><code>NotReady</code></td><td><code>magic == 0</code>: segment exists, header not written yet - or a header snapshot that will not settle, which is what a producer that died mid-rewrite (<code>layoutSeq</code> left odd) looks like.</td><td><b>yes</b></td></tr>
         <tr><td><code>BadVersion</code></td><td>Major mismatch or unknown enum value. Higher <i>minor</i> is fine.</td><td>no</td></tr>
         <tr><td><code>Malformed</code></td><td>Wrong magic, an offset that doesn't fit <code>mappedBytes</code>, or a violated alignment invariant (§1).</td><td>no</td></tr>
         <tr><td><code>Mismatch</code></td><td>Valid, but not the structure the consumer expects (profile drift). Waiting won't fix it.</td><td>no</td></tr>
@@ -368,7 +368,7 @@ Pinned fields are never rewritten while the section exists. The seqlock makes ch
     </table>
   </div>
 </div>
-<div class="note blue"><code>DeviceState::Inactive = 0</code> on purpose: a freshly created, zero-filled section reads
+<div class="note blue"><code>DeviceState::Inactive = 0</code> on purpose: a freshly created, zero-filled segment reads
 as "not being driven" during the window before the header is written - the conservative answer. <code>magic</code>
 guards that window regardless.</div>
 
@@ -415,7 +415,7 @@ guards that window regardless.</div>
     period from <code>samplesPerBlock</code> and <code>sampleRateMilliHz</code>; hardcode nothing.</p>
     <h3>Size classes (normative)</h3>
     <table><tbody>
-      <tr><th>Class</th><th class="num">Section bytes</th><th>Name suffix</th><th>Envelope (sized as Float32)</th></tr>
+      <tr><th>Class</th><th class="num">Segment bytes</th><th>Name suffix</th><th>Envelope (sized as Float32)</th></tr>
       <tr><td><code>"256k"</code></td><td class="num">256 KiB</td><td><code>_256k</code></td><td><code>computeTotalSize(layout) ≤ 256 KiB</code></td></tr>
       <tr><td><code>"512k"</code></td><td class="num">512 KiB</td><td><code>_512k</code></td><td><code>computeTotalSize(layout) ≤ 512 KiB</code></td></tr>
       <tr><td><code>"1m"</code></td><td class="num">1 MiB</td><td><code>_1m</code></td><td><code>computeTotalSize(layout) ≤ 1 MiB</code></td></tr>
@@ -424,7 +424,7 @@ guards that window regardless.</div>
     <p style="font-size:13.5px;"><b>Resolved names and handover.</b> The configured <code>shmName</code> and <code>eventName</code> are base names; the producer appends the class suffix before creating the kernel objects:</p>
     <pre style="font-size:12.5px;">resolvedShmName   = shmName   + sizeClassSuffix
 resolvedEventName = eventName + sizeClassSuffix</pre>
-    <p style="font-size:13.5px;">A class switch therefore creates a new section and a new event. Before the new section is created, any abandoned leftover section at the old class name (matching magic, <code>deviceGuid</code>, and a stale <code>lastPublishQpc</code>) is stamped <code>Closed</code> and its event is signalled, so a parked consumer on the old name wakes with <code>WaitResult::Closed</code> instead of waiting out a timeout.</p>
+    <p style="font-size:13.5px;">A class switch therefore creates a new segment and a new event. Before the new segment is created, any abandoned leftover segment at the old class name (matching magic, <code>deviceGuid</code>, and a stale <code>lastPublishQpc</code>) is stamped <code>Closed</code> and its event is signalled, so a parked consumer on the old name wakes with <code>WaitResult::Closed</code> instead of waiting out a timeout.</p>
     <h3>Size formulas <span class="dim">(producer-side; consumers read the header)</span></h3>
     <pre style="font-size:12.5px;">bytesPerSample      = fmt==Int16 ? 2 : 4
 channelPlaneBytes   = samplesPerBlock × bytesPerSample
@@ -491,7 +491,7 @@ const HDR_FIELDS = [
   {off:4,  size:2, name:'versionMajor',        type:'uint16',  cat:'meta', desc:'Layout-break number. Reader must reject a mismatch (= 1 for v1.0).'},
   {off:6,  size:2, name:'versionMinor',        type:'uint16',  cat:'metaL', desc:'Additive only. Reader must tolerate a higher value.'},
   {off:8,  size:4, name:'headerBytes',         type:'uint32',  cat:'meta', desc:'Size of THIS header. Never copy more than this - a v1.0 reader facing a larger v1.1 header clamps.'},
-  {off:12, size:4, name:'totalBytes',          type:'uint32',  cat:'meta', desc:'Size of the whole section; equals the chosen size class, not the live layout footprint.'},
+  {off:12, size:4, name:'totalBytes',          type:'uint32',  cat:'meta', desc:'Size of the whole segment; equals the chosen size class, not the live layout footprint.'},
   {off:16, size:4, name:'sampleFormat',        type:'uint32',  cat:'cfg',  desc:'SampleFormat enum: 1 = Float32, 2 = Int16. Unknown value ⇒ BadVersion.'},
   {off:20, size:4, name:'channelLayout',       type:'uint32',  cat:'cfg',  desc:'ChannelLayout enum: 1 = Planar, 2 = Interleaved (reserved; v1 produces planar only).'},
   {off:24, size:4, name:'channelCount',        type:'uint32',  cat:'cfg',  desc:'Number of channels, 1…32. A uint32 channel mask covers this exactly.'},
@@ -503,7 +503,7 @@ const HDR_FIELDS = [
   {off:48, size:4, name:'bytesPerSample',      type:'uint32',  cat:'cfg',  desc:'4 (Float32) or 2 (Int16). Must agree with sampleFormat.'},
   {off:52, size:4, name:'slotPayloadOffset',   type:'uint32',  cat:'addr', desc:'Slot base → plane 0 (= 64, sizeof(ShmBlockDesc)). Not a hardcoded constant: protects bindings from assuming the descriptor size forever.'},
   {off:56, size:4, name:'channelArrayOffset',  type:'uint32',  cat:'addr', desc:'0 in v1: there is no channel table.'},
-  {off:60, size:4, name:'slotArrayOffset',     type:'uint32',  cat:'meta', desc:'Section base → slot[0] (= 256, align64 of the header). PINNED: a rewrite must never move it, because consumers map blind against it.'},
+  {off:60, size:4, name:'slotArrayOffset',     type:'uint32',  cat:'meta', desc:'Segment base → slot[0] (= 256, align64 of the header). PINNED: a rewrite must never move it, because consumers map blind against it.'},
   {off:64, size:4, name:'slotBytes',           type:'uint32',  cat:'addr', desc:'Slot-to-slot stride; a multiple of 64 so filling and copying never share a cache line.'},
   {off:68, size:4, name:'channelPlaneBytes',   type:'uint32',  cat:'addr', desc:'Plane-to-plane stride inside a slot (≥ samplesPerBlock × bytesPerSample).'},
   {off:72, size:4, name:'diagEngineBlockSize', type:'uint32',  cat:'diag', desc:'irTactile DSP block size: 32/64/128. Diagnostic only - never derive behaviour from it; unrelated to samplesPerBlock.'},
@@ -515,9 +515,9 @@ const HDR_FIELDS = [
   {off:104,size:4, name:'wiredChannelMask',    type:'uint32',  cat:'hot',  desc:'Bit c ⇒ channel c has a source in the live graph. Changes on every graph rebuild - read live, not from the snapshot.'},
   {off:108,size:4, name:'reserved1',           type:'uint32',  cat:'hot',  desc:'Producer zeroes; reader ignores.'},
   {off:112,size:8, name:'qpcFrequency',        type:'uint64',  cat:'metaL', desc:'QPC ticks per second; applies to both QPC fields.'},
-  {off:120,size:40,name:'deviceGuid[40]',      type:'char[40]',cat:'str',  desc:'UTF-8, NUL-terminated device GUID string. A layout field: a restart that hands the section to a different device instance rewrites it under the seqlock. Producer must zero the unused tail so a byte-wise comparison of two headers is meaningful.'},
+  {off:120,size:40,name:'deviceGuid[40]',      type:'char[40]',cat:'str',  desc:'UTF-8, NUL-terminated device GUID string. A layout field: a restart that hands the segment to a different device instance rewrites it under the seqlock. Producer must zero the unused tail so a byte-wise comparison of two headers is meaningful.'},
   {off:160,size:64,name:'deviceName[64]',      type:'char[64]',cat:'str',  desc:'UTF-8, NUL-terminated friendly device name. A layout field: a restart that renames the device rewrites it, so re-read after any layoutSeq change. Producer must zero the unused tail.'},
-  {off:224,size:4, name:'producerPid',         type:'uint32',  cat:'diag', desc:"Producer's OS process id; 0 ⇒ unknown. Diagnostics and zombie adjudication only - is the process that owns this section still alive? PIDs are reused by every OS: a liveness verdict may treat 'PID no longer names a running process' as proof of abandonment, but never the converse. Always combine with deviceState/lastPublishQpc; never a substitute, and never derive addressing or timing from it."},
+  {off:224,size:4, name:'producerPid',         type:'uint32',  cat:'diag', desc:"Producer's OS process id; 0 ⇒ unknown. Diagnostics and zombie adjudication only - is the process that owns this segment still alive? PIDs are reused by every OS: a liveness verdict may treat 'PID no longer names a running process' as proof of abandonment, but never the converse. Always combine with deviceState/lastPublishQpc; never a substitute, and never derive addressing or timing from it."},
   {off:228,size:28,name:'reserved[28]',        type:'uint8[28]',cat:'res', desc:'Padding to 256 B. Producer zeroes; reader IGNORES.'},
 ];
 

@@ -1,6 +1,6 @@
 // irtactile/shm/common/qpc.h - QueryPerformanceCounter time stamps, the clock
 // of every *Qpc field in the shm formats. Windows only; nothing else from the
-// section handling is pulled in.
+// segment handling is pulled in.
 //
 // SPDX-License-Identifier: MIT
 

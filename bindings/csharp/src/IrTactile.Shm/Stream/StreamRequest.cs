@@ -42,7 +42,7 @@ public sealed class StreamRequest
 /// <summary>
 /// A block, copied out of the ring: the protocol requires a copy bracketed by
 /// descriptor re-checks. Channel data is planar, converted to float32 whatever
-/// the section's format, so a consumer never branches on sampleFormat.
+/// the segment's format, so a consumer never branches on sampleFormat.
 /// </summary>
 public sealed class BlockView
 {

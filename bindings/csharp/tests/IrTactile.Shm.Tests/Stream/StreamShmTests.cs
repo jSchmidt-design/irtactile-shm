@@ -22,9 +22,9 @@ public unsafe class StreamShmTests
     // =========================================================================
 
     [Fact]
-    public void Attach_ZeroFilledSection_IsNotReadyAndRetryable()
+    public void Attach_ZeroFilledSegment_IsNotReadyAndRetryable()
     {
-        using var zeros = new PinnedSection(HeaderBytes + 4096);
+        using var zeros = new PinnedSegment(HeaderBytes + 4096);
         var r = new Reader();
         AttachResult ar = r.Attach(zeros.Ptr, zeros.Length);
         Assert.Equal(AttachResult.NotReady, ar);
@@ -34,8 +34,8 @@ public unsafe class StreamShmTests
     [Fact]
     public void Attach_WrongMagic_IsMalformedAndFatal()
     {
-        using var s = new PinnedSection(HeaderBytes + 4096);
-        SectionMemory.SetU32(s.Raw, HeaderOffset.Magic, 0xDEADBEEFu);
+        using var s = new PinnedSegment(HeaderBytes + 4096);
+        SegmentMemory.SetU32(s.Raw, HeaderOffset.Magic, 0xDEADBEEFu);
         var r = new Reader();
         AttachResult ar = r.Attach(s.Ptr, s.Length);
         Assert.Equal(AttachResult.Malformed, ar);
@@ -46,7 +46,7 @@ public unsafe class StreamShmTests
     public void Attach_HigherVersionMajor_IsBadVersionAndNotRetryable()
     {
         using var prod = new TestProducer(DefaultParams());
-        SectionMemory.SetU16(prod.Raw, HeaderOffset.VersionMajor, (ushort)(VersionMajor + 1));
+        SegmentMemory.SetU16(prod.Raw, HeaderOffset.VersionMajor, (ushort)(VersionMajor + 1));
         var r = new Reader();
         AttachResult ar = r.Attach(prod.BasePtr, prod.Size);
         Assert.Equal(AttachResult.BadVersion, ar);
@@ -57,7 +57,7 @@ public unsafe class StreamShmTests
     public void Attach_HigherVersionMinor_IsTolerated()
     {
         using var prod = new TestProducer(DefaultParams());
-        SectionMemory.SetU16(prod.Raw, HeaderOffset.VersionMinor, (ushort)(VersionMinor + 5));
+        SegmentMemory.SetU16(prod.Raw, HeaderOffset.VersionMinor, (ushort)(VersionMinor + 5));
         var r = new Reader();
         Assert.Equal(AttachResult.Ok, r.Attach(prod.BasePtr, prod.Size));
     }
@@ -66,7 +66,7 @@ public unsafe class StreamShmTests
     public void Attach_UnknownSampleFormat_IsRejectedNotDefaulted()
     {
         using var prod = new TestProducer(DefaultParams());
-        SectionMemory.SetU32(prod.Raw, HeaderOffset.SampleFormat, 99u);
+        SegmentMemory.SetU32(prod.Raw, HeaderOffset.SampleFormat, 99u);
         var r = new Reader();
         Assert.Equal(AttachResult.BadVersion, r.Attach(prod.BasePtr, prod.Size));
     }
@@ -75,7 +75,7 @@ public unsafe class StreamShmTests
     public void Attach_UnknownChannelLayout_IsRejectedNotDefaulted()
     {
         using var prod = new TestProducer(DefaultParams());
-        SectionMemory.SetU32(prod.Raw, HeaderOffset.ChannelLayout, 99u);
+        SegmentMemory.SetU32(prod.Raw, HeaderOffset.ChannelLayout, 99u);
         var r = new Reader();
         Assert.Equal(AttachResult.BadVersion, r.Attach(prod.BasePtr, prod.Size));
     }
@@ -85,7 +85,7 @@ public unsafe class StreamShmTests
     {
         using var prod = new TestProducer(DefaultParams());
         var r = new Reader();
-        // Map fewer bytes than the section claims.
+        // Map fewer bytes than the segment claims.
         Assert.Equal(AttachResult.Malformed, r.Attach(prod.BasePtr, prod.Size - 1));
     }
 
@@ -104,24 +104,24 @@ public unsafe class StreamShmTests
         using var prod = new TestProducer(DefaultParams());   // CPB 32, slotBytes 192, bps 4
         byte[] copy = new byte[prod.Size + 4096];
         System.Runtime.InteropServices.Marshal.Copy(prod.BasePtr, copy, 0, (int)prod.Size);
-        using var s = new PinnedSection(copy);
-        SectionMemory.SetU32(s.Raw, HeaderOffset.TotalBytes, (uint)s.Length);
+        using var s = new PinnedSegment(copy);
+        SegmentMemory.SetU32(s.Raw, HeaderOffset.TotalBytes, (uint)s.Length);
 
         switch (term)
         {
             case "channelPlaneBytes":
-                SectionMemory.SetU32(s.Raw, HeaderOffset.ChannelPlaneBytes, 34u);
-                SectionMemory.SetU32(s.Raw, HeaderOffset.SlotBytes, 256u);
+                SegmentMemory.SetU32(s.Raw, HeaderOffset.ChannelPlaneBytes, 34u);
+                SegmentMemory.SetU32(s.Raw, HeaderOffset.SlotBytes, 256u);
                 break;
             case "slotPayloadOffset":
-                SectionMemory.SetU32(s.Raw, HeaderOffset.SlotPayloadOffset, 66u);
-                SectionMemory.SetU32(s.Raw, HeaderOffset.SlotBytes, 256u);
+                SegmentMemory.SetU32(s.Raw, HeaderOffset.SlotPayloadOffset, 66u);
+                SegmentMemory.SetU32(s.Raw, HeaderOffset.SlotBytes, 256u);
                 break;
             case "slotBytes":
-                SectionMemory.SetU32(s.Raw, HeaderOffset.SlotBytes, 194u);
+                SegmentMemory.SetU32(s.Raw, HeaderOffset.SlotBytes, 194u);
                 break;
             case "slotArrayOffset":
-                SectionMemory.SetU32(s.Raw, HeaderOffset.SlotArrayOffset, 258u);
+                SegmentMemory.SetU32(s.Raw, HeaderOffset.SlotArrayOffset, 258u);
                 break;
         }
 
@@ -142,29 +142,29 @@ public unsafe class StreamShmTests
         uint slotB = SlotBytesOf(p);
         ulong total = grownSlotArrayOff + (ulong)p.RingBlocks * slotB;
 
-        using var s = new PinnedSection((long)total);
+        using var s = new PinnedSegment((long)total);
         byte* b = s.Raw;
-        SectionMemory.SetU16(b, HeaderOffset.VersionMajor, VersionMajor);
-        SectionMemory.SetU16(b, HeaderOffset.VersionMinor, VersionMinor);
-        SectionMemory.SetU32(b, HeaderOffset.HeaderBytes, grownHeaderBytes);   // > 256
-        SectionMemory.SetU32(b, HeaderOffset.TotalBytes, (uint)total);
-        SectionMemory.SetU32(b, HeaderOffset.SampleFormat, (uint)p.Format);
-        SectionMemory.SetU32(b, HeaderOffset.ChannelLayout, (uint)ChannelLayout.Planar);
-        SectionMemory.SetU32(b, HeaderOffset.ChannelCount, p.ChannelCount);
-        SectionMemory.SetU32(b, HeaderOffset.SampleRateMilliHz, 3_000_000u);
-        SectionMemory.SetU32(b, HeaderOffset.SourceSampleRate, 48000u);
-        SectionMemory.SetU32(b, HeaderOffset.RateDivisor, 16u);
-        SectionMemory.SetU32(b, HeaderOffset.SamplesPerBlock, p.SamplesPerBlock);
-        SectionMemory.SetU32(b, HeaderOffset.RingBlocks, p.RingBlocks);
-        SectionMemory.SetU32(b, HeaderOffset.BytesPerSample, BytesPerSampleOf(p.Format));
-        SectionMemory.SetU32(b, HeaderOffset.SlotPayloadOffset, SlotPayloadOffsetOf());
-        SectionMemory.SetU32(b, HeaderOffset.ChannelArrayOffset, 0u);
-        SectionMemory.SetU32(b, HeaderOffset.SlotArrayOffset, grownSlotArrayOff);
-        SectionMemory.SetU32(b, HeaderOffset.SlotBytes, slotB);
-        SectionMemory.SetU32(b, HeaderOffset.ChannelPlaneBytes, cpb);
-        SectionMemory.SetU64(b, HeaderOffset.QpcFrequency, 10_000_000ul);
-        SectionMemory.SetU32(b, HeaderOffset.DeviceState, (uint)DeviceState.Active);
-        SectionMemory.Release32(b, HeaderOffset.Magic, Magic);
+        SegmentMemory.SetU16(b, HeaderOffset.VersionMajor, VersionMajor);
+        SegmentMemory.SetU16(b, HeaderOffset.VersionMinor, VersionMinor);
+        SegmentMemory.SetU32(b, HeaderOffset.HeaderBytes, grownHeaderBytes);   // > 256
+        SegmentMemory.SetU32(b, HeaderOffset.TotalBytes, (uint)total);
+        SegmentMemory.SetU32(b, HeaderOffset.SampleFormat, (uint)p.Format);
+        SegmentMemory.SetU32(b, HeaderOffset.ChannelLayout, (uint)ChannelLayout.Planar);
+        SegmentMemory.SetU32(b, HeaderOffset.ChannelCount, p.ChannelCount);
+        SegmentMemory.SetU32(b, HeaderOffset.SampleRateMilliHz, 3_000_000u);
+        SegmentMemory.SetU32(b, HeaderOffset.SourceSampleRate, 48000u);
+        SegmentMemory.SetU32(b, HeaderOffset.RateDivisor, 16u);
+        SegmentMemory.SetU32(b, HeaderOffset.SamplesPerBlock, p.SamplesPerBlock);
+        SegmentMemory.SetU32(b, HeaderOffset.RingBlocks, p.RingBlocks);
+        SegmentMemory.SetU32(b, HeaderOffset.BytesPerSample, BytesPerSampleOf(p.Format));
+        SegmentMemory.SetU32(b, HeaderOffset.SlotPayloadOffset, SlotPayloadOffsetOf());
+        SegmentMemory.SetU32(b, HeaderOffset.ChannelArrayOffset, 0u);
+        SegmentMemory.SetU32(b, HeaderOffset.SlotArrayOffset, grownSlotArrayOff);
+        SegmentMemory.SetU32(b, HeaderOffset.SlotBytes, slotB);
+        SegmentMemory.SetU32(b, HeaderOffset.ChannelPlaneBytes, cpb);
+        SegmentMemory.SetU64(b, HeaderOffset.QpcFrequency, 10_000_000ul);
+        SegmentMemory.SetU32(b, HeaderOffset.DeviceState, (uint)DeviceState.Active);
+        SegmentMemory.Release32(b, HeaderOffset.Magic, Magic);
 
         // Attach must clamp its snapshot copy to min(headerBytes, 256) - never
         // headerBytes, which would read past the reader's own snapshot buffer.
@@ -190,7 +190,7 @@ public unsafe class StreamShmTests
         // "Producer has been running for hours": jump writeSeq far ahead
         // without publishing that many blocks - what matters is that attach
         // reads it rather than assuming 0.
-        SectionMemory.Release64(prod.Raw, HeaderOffset.WriteSeq, 10_000_000ul);
+        SegmentMemory.Release64(prod.Raw, HeaderOffset.WriteSeq, 10_000_000ul);
 
         var r = new Reader();
         Assert.Equal(AttachResult.Ok, r.Attach(prod.BasePtr, prod.Size));
@@ -260,10 +260,10 @@ public unsafe class StreamShmTests
     public void Attach_SamplesPerBlockOverrunningThePlane_IsRejected()
     {
         // The copy bound is header.samplesPerBlock, so THIS is the check that
-        // stands between a corrupt section and a read past the mapping.
+        // stands between a corrupt segment and a read past the mapping.
         using var prod = new TestProducer(new LayoutParams(2, 4, 2, SampleFormat.Float32));
         // channelPlaneBytes still says 4 samples; the header now claims 4096.
-        SectionMemory.SetU32(prod.Raw, HeaderOffset.SamplesPerBlock, 4096u);
+        SegmentMemory.SetU32(prod.Raw, HeaderOffset.SamplesPerBlock, 4096u);
 
         var r = new Reader();
         Assert.Equal(AttachResult.Malformed, r.Attach(prod.BasePtr, prod.Size));
@@ -273,7 +273,7 @@ public unsafe class StreamShmTests
     [Fact]
     public void RefreshSnapshot_RewriteOverrunningThePlane_DetachesTheReader()
     {
-        // Same bound, reached the other way: the section validated at attach
+        // Same bound, reached the other way: the segment validated at attach
         // and was then rewritten with a hostile samplesPerBlock under a
         // layoutSeq bump. The reader must fail validation and detach.
         using var prod = new TestProducer(new LayoutParams(2, 4, 2, SampleFormat.Float32));
@@ -281,9 +281,9 @@ public unsafe class StreamShmTests
         Assert.Equal(AttachResult.Ok, r.Attach(prod.BasePtr, prod.Size));
         prod.Publish();
 
-        SectionMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq,
-            SectionMemory.U32(prod.Raw, HeaderOffset.LayoutSeq) + 2u);
-        SectionMemory.SetU32(prod.Raw, HeaderOffset.SamplesPerBlock, 4096u);
+        SegmentMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq,
+            SegmentMemory.U32(prod.Raw, HeaderOffset.LayoutSeq) + 2u);
+        SegmentMemory.SetU32(prod.Raw, HeaderOffset.SamplesPerBlock, 4096u);
 
         var b = new BlockView();
         Assert.False(r.Next(b));
@@ -306,9 +306,9 @@ public unsafe class StreamShmTests
         Assert.Equal(AttachResult.Ok, r.Attach(prod.BasePtr, prod.Size));
         prod.Publish();
 
-        SectionMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq,
-            SectionMemory.U32(prod.Raw, HeaderOffset.LayoutSeq) + 2u);
-        SectionMemory.SetU32(prod.Raw, offset, value);
+        SegmentMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq,
+            SegmentMemory.U32(prod.Raw, HeaderOffset.LayoutSeq) + 2u);
+        SegmentMemory.SetU32(prod.Raw, offset, value);
 
         var b = new BlockView();
         Assert.False(r.Next(b));
@@ -411,7 +411,7 @@ public unsafe class StreamShmTests
         prod.BeginPartialPublish();
         // Force writeSeq forward without publishing seq 2's descriptor, to put
         // seq=2 inside the reader's requested range while the slot is kSlotBusy.
-        SectionMemory.Release64(prod.Raw, HeaderOffset.WriteSeq, 3ul);
+        SegmentMemory.Release64(prod.Raw, HeaderOffset.WriteSeq, 3ul);
 
         // The reader must reject the busy slot rather than return torn/garbage
         // data, and must not crash.
@@ -466,12 +466,12 @@ public unsafe class StreamShmTests
         Assert.True(r.Next(b));
         Assert.Equal(4u, r.ChannelCount);
 
-        // A producer restart into a reused, differently-configured section
+        // A producer restart into a reused, differently-configured segment
         // bumps layoutSeq odd → rewrite → even.
-        uint seq = SectionMemory.U32(prod.Raw, HeaderOffset.LayoutSeq);
-        SectionMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq, ++seq);   // odd
-        SectionMemory.SetU32(prod.Raw, HeaderOffset.ChannelCount, 2u);
-        SectionMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq, ++seq);   // even
+        uint seq = SegmentMemory.U32(prod.Raw, HeaderOffset.LayoutSeq);
+        SegmentMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq, ++seq);   // odd
+        SegmentMemory.SetU32(prod.Raw, HeaderOffset.ChannelCount, 2u);
+        SegmentMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq, ++seq);   // even
 
         // The re-snapshot happens on the next read cycle, not merely by
         // polling an accessor - Next/Latest are what call the refresh.
@@ -493,8 +493,8 @@ public unsafe class StreamShmTests
         Assert.Equal(AttachResult.Ok, r.Attach(prod.BasePtr, prod.Size));
         prod.Publish();
 
-        SectionMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq,
-            SectionMemory.U32(prod.Raw, HeaderOffset.LayoutSeq) + 2u);
+        SegmentMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq,
+            SegmentMemory.U32(prod.Raw, HeaderOffset.LayoutSeq) + 2u);
 
         // The block's own layoutEpoch is 0 and so is the injected snapshot
         // value, so the epoch check cannot be what rejects this: only the
@@ -521,13 +521,13 @@ public unsafe class StreamShmTests
         var r = new Reader();
         Assert.Equal(AttachResult.Ok, r.Attach(prod.BasePtr, prod.Size));
 
-        uint seq = SectionMemory.U32(prod.Raw, HeaderOffset.LayoutSeq);
-        SectionMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq, ++seq);   // odd
-        SectionMemory.SetU32(prod.Raw, HeaderOffset.ChannelCount, 2u);
-        uint cpb = SectionMemory.U32(prod.Raw, HeaderOffset.ChannelPlaneBytes);
+        uint seq = SegmentMemory.U32(prod.Raw, HeaderOffset.LayoutSeq);
+        SegmentMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq, ++seq);   // odd
+        SegmentMemory.SetU32(prod.Raw, HeaderOffset.ChannelCount, 2u);
+        uint cpb = SegmentMemory.U32(prod.Raw, HeaderOffset.ChannelPlaneBytes);
         uint newSlotBytes = Align64(SlotPayloadOffsetOf() + 2u * cpb);
-        SectionMemory.SetU32(prod.Raw, HeaderOffset.SlotBytes, newSlotBytes);
-        SectionMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq, ++seq);   // even
+        SegmentMemory.SetU32(prod.Raw, HeaderOffset.SlotBytes, newSlotBytes);
+        SegmentMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq, ++seq);   // even
 
         Assert.True(r.RefreshSnapshot());
         Assert.Equal(Reader.ReconfigureKind.Geometry, r.LastReconfigureKind);
@@ -542,13 +542,13 @@ public unsafe class StreamShmTests
         var r = new Reader();
         Assert.Equal(AttachResult.Ok, r.Attach(prod.BasePtr, prod.Size));
 
-        uint seq = SectionMemory.U32(prod.Raw, HeaderOffset.LayoutSeq);
-        SectionMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq, ++seq);   // odd
-        SectionMemory.SetU32(prod.Raw, HeaderOffset.SourceSampleRate, 96000u);
-        SectionMemory.SetU32(prod.Raw, HeaderOffset.RateDivisor, 8u);
-        SectionMemory.SetU32(prod.Raw, HeaderOffset.DiagEngineBlockSize, 128u);
-        SectionMemory.SetU32(prod.Raw, HeaderOffset.DiagFramesPerPublish, 4u);
-        SectionMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq, ++seq);   // even
+        uint seq = SegmentMemory.U32(prod.Raw, HeaderOffset.LayoutSeq);
+        SegmentMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq, ++seq);   // odd
+        SegmentMemory.SetU32(prod.Raw, HeaderOffset.SourceSampleRate, 96000u);
+        SegmentMemory.SetU32(prod.Raw, HeaderOffset.RateDivisor, 8u);
+        SegmentMemory.SetU32(prod.Raw, HeaderOffset.DiagEngineBlockSize, 128u);
+        SegmentMemory.SetU32(prod.Raw, HeaderOffset.DiagFramesPerPublish, 4u);
+        SegmentMemory.Release32(prod.Raw, HeaderOffset.LayoutSeq, ++seq);   // even
 
         Assert.True(r.RefreshSnapshot());
         Assert.Equal(Reader.ReconfigureKind.Cosmetic, r.LastReconfigureKind);
@@ -568,11 +568,11 @@ public unsafe class StreamShmTests
         Assert.Equal(AttachResult.Ok, r.Attach(prod.BasePtr, prod.Size));
         prod.Publish();
 
-        uint slotArrayOffset = SectionMemory.U32(prod.Raw, HeaderOffset.SlotArrayOffset);
+        uint slotArrayOffset = SegmentMemory.U32(prod.Raw, HeaderOffset.SlotArrayOffset);
         byte* slot = prod.Raw + slotArrayOffset;   // seq 0 → slot 0
         // Corrupt the epoch without changing the snapshot's layoutSeq or the
         // descriptor seq. Only the layoutEpoch check can catch this.
-        SectionMemory.Release32(slot, DescOffset.LayoutEpoch, 0xDEADBEEFu);
+        SegmentMemory.Release32(slot, DescOffset.LayoutEpoch, 0xDEADBEEFu);
 
         var b = new BlockView();
         Assert.False(r.Next(b));
@@ -590,7 +590,7 @@ public unsafe class StreamShmTests
         // Changed live, with layoutSeq untouched - this field is deliberately
         // outside the seqlock, so no re-snapshot should be required.
         uint layoutBefore = r.LayoutSeq;
-        SectionMemory.Release32(prod.Raw, HeaderOffset.WiredChannelMask, 0x5u);
+        SegmentMemory.Release32(prod.Raw, HeaderOffset.WiredChannelMask, 0x5u);
         Assert.Equal(0x5u, r.WiredChannelMask);
         Assert.Equal(layoutBefore, r.LayoutSeq);
     }
@@ -637,11 +637,11 @@ public unsafe class StreamShmTests
         Assert.Equal(StreamState.Stalled, r.State(lastQpc + staleTicks));
 
         // Inactive, however stale → Quiet, not Stalled.
-        SectionMemory.Release32(prod.Raw, HeaderOffset.DeviceState, (uint)DeviceState.Inactive);
+        SegmentMemory.Release32(prod.Raw, HeaderOffset.DeviceState, (uint)DeviceState.Inactive);
         Assert.Equal(StreamState.Quiet, r.State(lastQpc + staleTicks));
 
         // Closed → Closed regardless.
-        SectionMemory.Release32(prod.Raw, HeaderOffset.DeviceState, (uint)DeviceState.Closed);
+        SegmentMemory.Release32(prod.Raw, HeaderOffset.DeviceState, (uint)DeviceState.Closed);
         Assert.Equal(StreamState.Closed, r.State(lastQpc + staleTicks));
     }
 
@@ -650,7 +650,7 @@ public unsafe class StreamShmTests
     // =========================================================================
 
     [Fact]
-    public void Int16Section_DecodesViaTheSameBlockViewApi()
+    public void Int16Segment_DecodesViaTheSameBlockViewApi()
     {
         using var prod = new TestProducer(new LayoutParams(2, 4, 2, SampleFormat.Int16));
         var r = new Reader();
@@ -684,28 +684,28 @@ public unsafe class StreamShmTests
         uint slotArrayOffset = SlotArrayOffsetOf();
         ulong totalBytes = slotArrayOffset + (ulong)p.RingBlocks * inflatedSlotBytes;
 
-        using var s = new PinnedSection((long)totalBytes);
+        using var s = new PinnedSegment((long)totalBytes);
         byte* b = s.Raw;
-        SectionMemory.SetU16(b, HeaderOffset.VersionMajor, VersionMajor);
-        SectionMemory.SetU16(b, HeaderOffset.VersionMinor, VersionMinor);
-        SectionMemory.SetU32(b, HeaderOffset.HeaderBytes, HeaderBytes);
-        SectionMemory.SetU32(b, HeaderOffset.TotalBytes, (uint)totalBytes);
-        SectionMemory.SetU32(b, HeaderOffset.SampleFormat, (uint)p.Format);
-        SectionMemory.SetU32(b, HeaderOffset.ChannelLayout, (uint)ChannelLayout.Planar);
-        SectionMemory.SetU32(b, HeaderOffset.ChannelCount, p.ChannelCount);
-        SectionMemory.SetU32(b, HeaderOffset.SampleRateMilliHz, 3_000_000u);
-        SectionMemory.SetU32(b, HeaderOffset.SourceSampleRate, 48000u);
-        SectionMemory.SetU32(b, HeaderOffset.RateDivisor, 16u);
-        SectionMemory.SetU32(b, HeaderOffset.SamplesPerBlock, p.SamplesPerBlock);
-        SectionMemory.SetU32(b, HeaderOffset.RingBlocks, p.RingBlocks);
-        SectionMemory.SetU32(b, HeaderOffset.BytesPerSample, BytesPerSampleOf(p.Format));
-        SectionMemory.SetU32(b, HeaderOffset.SlotPayloadOffset, inflatedPayloadOffset);
-        SectionMemory.SetU32(b, HeaderOffset.ChannelArrayOffset, 0u);
-        SectionMemory.SetU32(b, HeaderOffset.SlotArrayOffset, slotArrayOffset);
-        SectionMemory.SetU32(b, HeaderOffset.SlotBytes, inflatedSlotBytes);
-        SectionMemory.SetU32(b, HeaderOffset.ChannelPlaneBytes, cpb);
-        SectionMemory.SetU64(b, HeaderOffset.QpcFrequency, 10_000_000ul);
-        SectionMemory.SetU32(b, HeaderOffset.DeviceState, (uint)DeviceState.Active);
+        SegmentMemory.SetU16(b, HeaderOffset.VersionMajor, VersionMajor);
+        SegmentMemory.SetU16(b, HeaderOffset.VersionMinor, VersionMinor);
+        SegmentMemory.SetU32(b, HeaderOffset.HeaderBytes, HeaderBytes);
+        SegmentMemory.SetU32(b, HeaderOffset.TotalBytes, (uint)totalBytes);
+        SegmentMemory.SetU32(b, HeaderOffset.SampleFormat, (uint)p.Format);
+        SegmentMemory.SetU32(b, HeaderOffset.ChannelLayout, (uint)ChannelLayout.Planar);
+        SegmentMemory.SetU32(b, HeaderOffset.ChannelCount, p.ChannelCount);
+        SegmentMemory.SetU32(b, HeaderOffset.SampleRateMilliHz, 3_000_000u);
+        SegmentMemory.SetU32(b, HeaderOffset.SourceSampleRate, 48000u);
+        SegmentMemory.SetU32(b, HeaderOffset.RateDivisor, 16u);
+        SegmentMemory.SetU32(b, HeaderOffset.SamplesPerBlock, p.SamplesPerBlock);
+        SegmentMemory.SetU32(b, HeaderOffset.RingBlocks, p.RingBlocks);
+        SegmentMemory.SetU32(b, HeaderOffset.BytesPerSample, BytesPerSampleOf(p.Format));
+        SegmentMemory.SetU32(b, HeaderOffset.SlotPayloadOffset, inflatedPayloadOffset);
+        SegmentMemory.SetU32(b, HeaderOffset.ChannelArrayOffset, 0u);
+        SegmentMemory.SetU32(b, HeaderOffset.SlotArrayOffset, slotArrayOffset);
+        SegmentMemory.SetU32(b, HeaderOffset.SlotBytes, inflatedSlotBytes);
+        SegmentMemory.SetU32(b, HeaderOffset.ChannelPlaneBytes, cpb);
+        SegmentMemory.SetU64(b, HeaderOffset.QpcFrequency, 10_000_000ul);
+        SegmentMemory.SetU32(b, HeaderOffset.DeviceState, (uint)DeviceState.Active);
 
         // Write one block using exactly the arithmetic a real producer uses:
         // slot/plane off the header's own (inflated) fields, nothing hardcoded.
@@ -716,13 +716,13 @@ public unsafe class StreamShmTests
             for (uint i = 0; i < p.SamplesPerBlock; ++i)
                 *(float*)(plane + i * 4) = i + ch * 1000.0f;
         }
-        SectionMemory.SetU64(slot, DescOffset.FirstSampleIndex, 0ul);
-        SectionMemory.SetU64(slot, DescOffset.TimestampQpc, 1000ul);
-        SectionMemory.SetU32(slot, DescOffset.Flags, 0u);
-        SectionMemory.SetU32(slot, DescOffset.SilentChannelMask, 0u);
-        SectionMemory.Release64(slot, DescOffset.Seq, 0ul);
-        SectionMemory.Release64(b, HeaderOffset.LastPublishQpc, 1000ul);
-        SectionMemory.Release32(b, HeaderOffset.Magic, Magic);   // writeSeq still 0: attach first
+        SegmentMemory.SetU64(slot, DescOffset.FirstSampleIndex, 0ul);
+        SegmentMemory.SetU64(slot, DescOffset.TimestampQpc, 1000ul);
+        SegmentMemory.SetU32(slot, DescOffset.Flags, 0u);
+        SegmentMemory.SetU32(slot, DescOffset.SilentChannelMask, 0u);
+        SegmentMemory.Release64(slot, DescOffset.Seq, 0ul);
+        SegmentMemory.Release64(b, HeaderOffset.LastPublishQpc, 1000ul);
+        SegmentMemory.Release32(b, HeaderOffset.Magic, Magic);   // writeSeq still 0: attach first
 
         var r = new Reader();
         Assert.Equal(AttachResult.Ok, r.Attach(s.Ptr, s.Length));
@@ -730,7 +730,7 @@ public unsafe class StreamShmTests
         // Publish is now "observed": bump writeSeq after attach, as a real
         // producer would - attach seeds the cursor at whatever writeSeq
         // already is, so this ordering is what makes the block "new".
-        SectionMemory.Release64(b, HeaderOffset.WriteSeq, 1ul);
+        SegmentMemory.Release64(b, HeaderOffset.WriteSeq, 1ul);
 
         var view = new BlockView();
         Assert.True(r.Next(view));
@@ -748,9 +748,9 @@ public unsafe class StreamShmTests
 
         prod.Publish();
 
-        uint slotArrayOffset = SectionMemory.U32(prod.Raw, HeaderOffset.SlotArrayOffset);
-        uint slotPayloadOffset = SectionMemory.U32(prod.Raw, HeaderOffset.SlotPayloadOffset);
-        uint channelPlaneBytes = SectionMemory.U32(prod.Raw, HeaderOffset.ChannelPlaneBytes);
+        uint slotArrayOffset = SegmentMemory.U32(prod.Raw, HeaderOffset.SlotArrayOffset);
+        uint slotPayloadOffset = SegmentMemory.U32(prod.Raw, HeaderOffset.SlotPayloadOffset);
+        uint channelPlaneBytes = SegmentMemory.U32(prod.Raw, HeaderOffset.ChannelPlaneBytes);
         byte* slot = prod.Raw + slotArrayOffset;            // seq 0 → slot 0
         byte* plane1 = slot + slotPayloadOffset + channelPlaneBytes;
         float manualSample0 = *(float*)plane1;

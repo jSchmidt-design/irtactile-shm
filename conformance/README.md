@@ -1,7 +1,7 @@
 ﻿# Conformance vectors
 
 Tests that live inside one binding are that binding's opinion. This directory is the
-opinion-free half of the test strategy: golden binary sections plus a JSON manifest of
+opinion-free half of the test strategy: golden binary segments plus a JSON manifest of
 expected results, emitted from the *producer* side by
 [`tools/mkvectors`](../tools/mkvectors) and committed to the repo. Every binding's test
 suite decodes the same blobs and compares against the same expectations.
@@ -13,7 +13,7 @@ A binding that passes the suite here has implemented the spec, not the C++ heade
 ```
 conformance/
 └─ <api>/v<N>/
-   ├─ decode/            # golden sections → expected results (the binding READS)
+   ├─ decode/            # golden segments → expected results (the binding READS)
    ├─ encode/            # scripted writes → expected bytes  (the binding WRITES)
    └─ manifest.json      # the suite: cases, steps, expectations
 ```
@@ -48,7 +48,7 @@ here; the telemetry-shm manifest is described at the end.
 Then, for each case in `manifest.json`:
 
 1. Load `blob` (paths are relative to the manifest's directory) into a byte buffer.
-   The buffer *is* the mapped section: `mappedBytes = blob length`. A blob that is
+   The buffer *is* the mapped segment: `mappedBytes = blob length`. A blob that is
    missing, empty or short **fails the case** - it must never be treated as a case
    with nothing to do, which reports as a pass.
 2. Execute `steps` in order against a fresh reader instance over that buffer.
@@ -65,7 +65,7 @@ its op dispatch is the normative reading of the table below.
 | Op | Arguments | Semantics |
 |---|---|---|
 | `attach` | `expect`, optional `request` | Attach to the buffer. `expect.result` is one of `Ok` / `NotReady` / `BadVersion` / `Malformed` / `Mismatch`; `expect.retry` is whether a consumer may wait and try again (only `NotReady`). On `Ok`, optional `expect.fields` asserts observable reader state (same keys as `header` below, plus `sampleFormat`, `writeSeq`). On `Mismatch`, `expect.mismatchDetailContains` asserts the diagnostic names the disagreeing field. `request` is the structural assertion object (`channelCount`, `sampleRateMilliHz`, `samplesPerBlock`, `sampleFormat`; absent or 0 = don't check). |
-| `patch` | `blob` | The producer advanced (or rewrote) the section: replace the **whole** buffer with the named blob. Sizes always match - a patch is a rewrite, never a remap. This is what makes seqlock rewrites, slot recycling and liveness changes expressible without threads. |
+| `patch` | `blob` | The producer advanced (or rewrote) the segment: replace the **whole** buffer with the named blob. Sizes always match - a patch is a rewrite, never a remap. This is what makes seqlock rewrites, slot recycling and liveness changes expressible without threads. |
 | `rewindToOldest` | - | Move the cursor to the oldest block the ring still holds. |
 | `next` | `block` *or* `"expect": "end"` | Lossless read: either a block matching `block` is delivered, or the reader reports it is caught up. |
 | `latest` | `block` *or* `"expect": "end"` | Latest-value-wins read, same expectation shape. Lossy **by contract**: the blocks it steps over are not gaps, so they must not reach `droppedBlocks`. |
@@ -128,7 +128,7 @@ notes say so.
 
 | Test case | Vector(s) |
 |---|---|
-| zero-filled section is NotReady and retryable | `attach.zero_filled` |
+| zero-filled segment is NotReady and retryable | `attach.zero_filled` |
 | wrong magic is Malformed and fatal | `attach.bad_magic` |
 | higher versionMajor is BadVersion / higher versionMinor tolerated | `attach.higher_version_major` / `attach.higher_version_minor` |
 | unknown sampleFormat / channelLayout rejected, not defaulted | `attach.unknown_sample_format`, `attach.unknown_channel_layout`, `attach.reserved_channel_layout` |
@@ -175,7 +175,7 @@ terms - `unaligned_slot_array_offset`, `unaligned_slot_bytes`, `unaligned_payloa
 
 Three properties of that family are deliberate:
 
-- **One rule per vector.** Each section is otherwise valid and is grown where needed
+- **One rule per vector.** Each segment is otherwise valid and is grown where needed
   so no second rule fires as collateral. A vector breaking two rules still passes on
   a binding that implements only one of them, which defeats the purpose.
   `attach.header_bytes_below_minimum` is the unavoidable exception: a reader clamps
@@ -197,7 +197,7 @@ list of steps:
 
 | Op | Fields | Semantics |
 |---|---|---|
-| `attach` | `file`, optional `mappedBytes`, `expect` | Attach a consumer to the inbound section. `expect.attach` is `Ok` / `NotReady` / `BadVersion` / `Malformed`. On `Ok`, optional keys assert the snapshot: `capacity`, `channelCount`, `simId`, `simName`, `carId`, `carName`, `wheelsPerAxle`, `layoutSeq`, `descNames` (slot order), and `descs` (per `slot`: `name`, `unit`, `kind`, `flags`, `arrayIndex`, `arrayCapacity`, `provenance`, `layout`; `valid` = passes the per-descriptor rules, `tableMatch` = a `std.*` name whose properties equal the table). |
+| `attach` | `file`, optional `mappedBytes`, `expect` | Attach a consumer to the inbound segment. `expect.attach` is `Ok` / `NotReady` / `BadVersion` / `Malformed`. On `Ok`, optional keys assert the snapshot: `capacity`, `channelCount`, `simId`, `simName`, `carId`, `carName`, `wheelsPerAxle`, `layoutSeq`, `descNames` (slot order), and `descs` (per `slot`: `name`, `unit`, `kind`, `flags`, `arrayIndex`, `arrayCapacity`, `provenance`, `layout`; `valid` = passes the per-descriptor rules, `tableMatch` = a `std.*` name whose properties equal the table). |
 | `frame` | `file`, optional `lastSeen`, `expect` | Attach (expected `Ok` unless `expect.attach` says otherwise), then read one frame given the last seen `frameSeq` (default 0). `expect.result` is `NewFrame` / `NoNewFrame` / `Torn` / `LayoutChanged` / `LayoutBusy` / `Detached`. Optional `producerState`, `lastPublishQpc`; on `NewFrame` also `frameSeq`, `frameQpc`, `values` (slot -> float, exact), `validSlots` (the exact set of valid slots), `eventCounts` (slot -> count). |
 | `return` | `file`, `expect` | Attach a producer-side reader to the return region (`expect.attach`); if `expect.read` is present, read once and compare `capacity`, `forLayoutSeq`, `consumerState`, `lastConsumeQpc`, and `accepted` / `demanded` (exact slot sets, `demanded` read with the "not Active = every accepted slot" rule). |
 | `encode` | `script`, `bytes`, `file`, optional `initial` | Start from a zeroed buffer of `bytes` (or the `initial` blob, a restart), run `script` through the binding's producer, and compare the whole buffer with `file` byte for byte. |

@@ -25,8 +25,8 @@ using System.Text;
 namespace IrTactile.Shm.Stream;
 
 /// <summary>
-/// The 256-byte section header, as a blittable snapshot. <see cref="Reader"/>
-/// copies this out of the section under the layoutSeq seqlock; the concurrent
+/// The 256-byte segment header, as a blittable snapshot. <see cref="Reader"/>
+/// copies this out of the segment under the layoutSeq seqlock; the concurrent
 /// range (bytes [80, 112)) inside a snapshot is stale by definition and is
 /// never read from it.
 /// </summary>
@@ -42,7 +42,7 @@ public unsafe struct ShmStreamHeader
     [FieldOffset(6)] public ushort VersionMinor;
     /// <summary>*pinned; size of THIS header; never copy more.</summary>
     [FieldOffset(8)] public uint HeaderBytes;
-    /// <summary>*pinned; size of the whole section.</summary>
+    /// <summary>*pinned; size of the whole segment.</summary>
     [FieldOffset(12)] public uint TotalBytes;
 
     /// <summary><see cref="Stream.SampleFormat"/>; reject an unknown value.</summary>
@@ -69,7 +69,7 @@ public unsafe struct ShmStreamHeader
     [FieldOffset(52)] public uint SlotPayloadOffset;
     /// <summary>0 in v1: no channel table.</summary>
     [FieldOffset(56)] public uint ChannelArrayOffset;
-    /// <summary>*pinned; section base → slot[0].</summary>
+    /// <summary>*pinned; segment base → slot[0].</summary>
     [FieldOffset(60)] public uint SlotArrayOffset;
     /// <summary>Slot to slot; multiple of 64.</summary>
     [FieldOffset(64)] public uint SlotBytes;
@@ -82,7 +82,7 @@ public unsafe struct ShmStreamHeader
     /// <summary>irTactile frames batched per publish.</summary>
     [FieldOffset(76)] public uint DiagFramesPerPublish;
 
-    // --- concurrent fields; read directly from the section with Volatile.Read ---
+    // --- concurrent fields; read directly from the segment with Volatile.Read ---
     /// <summary>Blocks published [acq/rel].</summary>
     [FieldOffset(80)] public ulong WriteSeq;
     /// <summary>QPC at the last publish [acq/rel].</summary>

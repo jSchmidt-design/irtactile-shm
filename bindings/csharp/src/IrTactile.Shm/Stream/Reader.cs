@@ -1,4 +1,4 @@
-﻿// IrTactile.Shm.Stream - Reader: bytes in a mapped section to blocks.
+﻿// IrTactile.Shm.Stream - Reader: bytes in a mapped segment to blocks.
 //
 // SPDX-License-Identifier: MIT
 //
@@ -17,7 +17,7 @@
 //             foreach (float s in b.Channel(ch)) use(s);
 //
 // Threading: a Reader instance is single-threaded, like the C++ one. The
-// section it reads is concurrently written by the producer - all cross-thread
+// segment it reads is concurrently written by the producer - all cross-thread
 // fields are touched exclusively through Volatile.Read (acquire).
 
 using System.Runtime.CompilerServices;
@@ -25,7 +25,7 @@ using System.Runtime.CompilerServices;
 namespace IrTactile.Shm.Stream;
 
 /// <summary>
-/// Bytes in a mapped section to blocks. The liveness helpers take a synthetic
+/// Bytes in a mapped segment to blocks. The liveness helpers take a synthetic
 /// clock reading as a parameter so they are unit-testable.
 /// </summary>
 public sealed unsafe class Reader
@@ -44,7 +44,7 @@ public sealed unsafe class Reader
     }
 
     /// <summary>
-    /// Attach to a mapped section. <paramref name="expected"/> may be null ⇒
+    /// Attach to a mapped segment. <paramref name="expected"/> may be null ⇒
     /// no structural assertion. The pointer must stay valid for the reader's
     /// lifetime (<see cref="Client"/> owns that for real mappings).
     /// </summary>
@@ -59,7 +59,7 @@ public sealed unsafe class Reader
         if (_base == null || mappedBytes < StreamLayout.HeaderBytes)
             return AttachResult.Malformed;
 
-        // A section is zero-filled at creation: magic == 0 means "header not
+        // A segment is zero-filled at creation: magic == 0 means "header not
         // written yet", not an error.
         uint magic = AcquireU32(StreamLayout.HeaderOffset.Magic);
         if (magic == 0) return AttachResult.NotReady;
@@ -267,7 +267,7 @@ public sealed unsafe class Reader
     public ref readonly ShmStreamHeader Header => ref _hdr;
 
     /// <summary>
-    /// Drop the section pointer without disturbing <see cref="MismatchDetail"/>.
+    /// Drop the segment pointer without disturbing <see cref="MismatchDetail"/>.
     /// <see cref="Client.ReleaseHandles"/> calls this before unmapping the
     /// view, so no later call can dereference the released mapping. Re-attach
     /// with <see cref="Attach"/>; a full reset is Attach(IntPtr.Zero, 0), which
@@ -446,7 +446,7 @@ public sealed unsafe class Reader
         void Note(string field, ulong got, ulong expect)
         {
             if (sb.Length != 0) sb.Append("; ");
-            sb.Append(field).Append(": section has ").Append(got)
+            sb.Append(field).Append(": segment has ").Append(got)
               .Append(", this build expects ").Append(expect);
         }
 

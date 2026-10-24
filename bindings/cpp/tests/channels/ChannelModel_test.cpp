@@ -76,7 +76,7 @@ TEST_CASE("owner id rule and reserved ids") {
 
 namespace {
 
-// Names and order copied from drafts/sim_channel_coverage_proposal.md section 2.2 (the ids follow the order).
+// Names and order copied from drafts/sim_channel_coverage_proposal.md segment 2.2 (the ids follow the order).
 const char* const kScalarNames[] = {
     "std.session.status",
     "std.input.throttle", "std.input.brake", "std.input.clutch", "std.input.steering", "std.input.handbrake",

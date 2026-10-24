@@ -59,7 +59,7 @@ public unsafe class LayoutTests
 
         // Marshal.SizeOf describes the MARSHALLED layout. The reader never
         // marshals: it snapshots with Buffer.MemoryCopy into a stack
-        // ShmStreamHeader and addresses the section through raw pointers, so
+        // ShmStreamHeader and addresses the segment through raw pointers, so
         // the managed layout is what has to be 256/64. They coincide for a
         // blittable explicit-layout struct - pinned here so they cannot quietly
         // stop coinciding.
@@ -150,8 +150,8 @@ public unsafe class LayoutTests
     public void NoChannelTableInV1()
     {
         using var prod = new TestProducer(DefaultParams());
-        Assert.Equal(0u, SectionMemory.U32(prod.Raw, HeaderOffset.ChannelArrayOffset));
-        Assert.Equal(Align64(HeaderBytes), SectionMemory.U32(prod.Raw, HeaderOffset.SlotArrayOffset));
+        Assert.Equal(0u, SegmentMemory.U32(prod.Raw, HeaderOffset.ChannelArrayOffset));
+        Assert.Equal(Align64(HeaderBytes), SegmentMemory.U32(prod.Raw, HeaderOffset.SlotArrayOffset));
     }
 
     internal static LayoutParams DefaultParams() =>

@@ -1,8 +1,8 @@
-// mkvectors_telemetry - writes conformance/telemetry-shm/v1: golden sections plus manifest.json.
+// mkvectors_telemetry - writes conformance/telemetry-shm/v1: golden segments plus manifest.json.
 //
 //   mkvectors_telemetry <output dir>
 //
-// Section bytes come from the C++ producer (scripts) with byte surgery for hostile states; the
+// Segment bytes come from the C++ producer (scripts) with byte surgery for hostile states; the
 // expectations are literals in this file, written from the spec, not computed from the binding.
 
 #include "telemetry_script.h"
@@ -20,7 +20,7 @@ namespace {
 constexpr uint32_t kCap = 64;
 const Layout kL = layoutFor(kCap);
 
-std::vector<uint64_t> makeSection(const json& script)
+std::vector<uint64_t> makeSegment(const json& script)
 {
     std::vector<uint64_t> buf((kL.totalBytes + 7) / 8, 0);
     telemetry_script::run(script, buf);
@@ -66,8 +66,8 @@ struct Suite {
     fs::path dir;
     json cases = json::array();
 
-    // A decode-side section: file under decode/, case referencing it.
-    void section(const std::string& name, const std::string& op, const std::vector<uint64_t>& buf, size_t bytes,
+    // A decode-side segment: file under decode/, case referencing it.
+    void segment(const std::string& name, const std::string& op, const std::vector<uint64_t>& buf, size_t bytes,
                  json expect, json extra = json::object())
     {
         writeFile(dir / "decode" / (name + ".bin"), buf, bytes);
@@ -91,7 +91,7 @@ int main(int argc, char** argv)
     fs::create_directories(s.dir / "encode");
 
     const size_t total = kL.totalBytes;
-    const auto good = makeSection(baseScript());
+    const auto good = makeSegment(baseScript());
     // --- attach -------------------------------------------------------------
     {
         json ex = {{"attach", "Ok"}, {"capacity", 64}, {"channelCount", 14}, {"simId", "demo"}, {"simName", "Demo Sim"},
@@ -108,7 +108,7 @@ int main(int argc, char** argv)
             {{"slot", 7}, {"name", "std.wheel.load[1]"}, {"arrayIndex", 1}, {"arrayCapacity", 8}, {"flags", 2}, {"layout", 1},
              {"valid", true}, {"tableMatch", true}},
         });
-        s.section("attach_valid_basic", "attach", good, total, ex);
+        s.segment("attach_valid_basic", "attach", good, total, ex);
     }
 
     auto mutated = [&](auto mutate) {
@@ -117,7 +117,7 @@ int main(int argc, char** argv)
         return b;
     };
     auto attach = [&](const std::string& name, const std::string& result, auto mutate, json extra = json::object()) {
-        s.section(name, "attach", mutated(mutate), total, {{"attach", result}}, std::move(extra));
+        s.segment(name, "attach", mutated(mutate), total, {{"attach", result}}, std::move(extra));
     };
 
     attach("attach_magic_zero", "NotReady", [](auto& b) { poke<uint32_t>(b, 0, 0); });
@@ -140,10 +140,10 @@ int main(int argc, char** argv)
     attach("attach_sim_id_without_nul", "Malformed", [](auto& b) { std::memset(reinterpret_cast<uint8_t*>(b.data()) + 56, 'a', 24); });
     attach("attach_car_id_without_nul", "Malformed", [](auto& b) { std::memset(reinterpret_cast<uint8_t*>(b.data()) + 152, 'x', 64); });
     attach("attach_layout_seq_odd", "NotReady", [](auto& b) { poke<uint32_t>(b, 100, 3); });
-    s.section("attach_sim_id_builtin_allowed", "attach",
+    s.segment("attach_sim_id_builtin_allowed", "attach",
               mutated([](auto& b) { std::memset(reinterpret_cast<uint8_t*>(b.data()) + 56, 0, 24); std::memcpy(reinterpret_cast<uint8_t*>(b.data()) + 56, "lmu", 3); }),
               total, {{"attach", "Ok"}, {"simId", "lmu"}});
-    s.section("attach_sim_id_empty", "attach",
+    s.segment("attach_sim_id_empty", "attach",
               mutated([](auto& b) { std::memset(reinterpret_cast<uint8_t*>(b.data()) + 56, 0, 24); }),
               total, {{"attach", "Ok"}, {"simId", ""}});
 
@@ -154,11 +154,11 @@ int main(int argc, char** argv)
         size_t i = 0;
         for (uint8_t n : w) p[i++] = n;
     };
-    s.section("attach_wheel_layout_valid", "attach", mutated([&](auto& b) { setWheels(b, {2, 4, 4}); }), total,
+    s.segment("attach_wheel_layout_valid", "attach", mutated([&](auto& b) { setWheels(b, {2, 4, 4}); }), total,
               {{"attach", "Ok"}, {"wheelsPerAxle", json::array({2, 4, 4, 0, 0, 0, 0, 0})}});
-    s.section("attach_wheel_layout_unknown", "attach", mutated([&](auto& b) { setWheels(b, {}); }), total,
+    s.segment("attach_wheel_layout_unknown", "attach", mutated([&](auto& b) { setWheels(b, {}); }), total,
               {{"attach", "Ok"}, {"wheelsPerAxle", json::array({0, 0, 0, 0, 0, 0, 0, 0})}});
-    s.section("attach_wheel_layout_eight_axles", "attach", mutated([&](auto& b) { setWheels(b, {1, 1, 1, 1, 1, 1, 1, 8}); }), total,
+    s.segment("attach_wheel_layout_eight_axles", "attach", mutated([&](auto& b) { setWheels(b, {1, 1, 1, 1, 1, 1, 1, 8}); }), total,
               {{"attach", "Ok"}});
     attach("attach_wheel_layout_gap", "Malformed", [&](auto& b) { setWheels(b, {0, 2}); });
     attach("attach_wheel_layout_too_many_wheels", "Malformed", [&](auto& b) { setWheels(b, {9}); });
@@ -166,37 +166,37 @@ int main(int argc, char** argv)
 
     // Descriptor-level rules: the header stays valid, the descriptor is judged on its own.
     auto descOf = [&](uint32_t slot) { return static_cast<size_t>(kL.descOffset) + slot * kDescBytes; };
-    s.section("attach_desc_bad_layout", "attach",
+    s.segment("attach_desc_bad_layout", "attach",
               mutated([&](auto& b) { poke<uint8_t>(b, descOf(7) + offsetof(ChannelDesc, layout), 3); }), total,
               {{"attach", "Ok"}, {"descs", json::array({{{"slot", 7}, {"valid", false}, {"tableMatch", false}}, {{"slot", 6}, {"valid", true}}})}});
-    s.section("attach_desc_bad_provenance", "attach",
+    s.segment("attach_desc_bad_provenance", "attach",
               mutated([&](auto& b) { poke<uint8_t>(b, descOf(0) + offsetof(ChannelDesc, provenance), 4); }), total,
               {{"attach", "Ok"}, {"descs", json::array({{{"slot", 0}, {"valid", false}}})}});
-    s.section("attach_desc_scalar_with_layout", "attach",
+    s.segment("attach_desc_scalar_with_layout", "attach",
               mutated([&](auto& b) { poke<uint8_t>(b, descOf(1) + offsetof(ChannelDesc, layout), 1); }), total,
               {{"attach", "Ok"}, {"descs", json::array({{{"slot", 1}, {"valid", false}, {"tableMatch", false}}})}});
-    s.section("attach_desc_array_index_not_below_capacity", "attach",
+    s.segment("attach_desc_array_index_not_below_capacity", "attach",
               mutated([&](auto& b) { poke<uint16_t>(b, descOf(6) + offsetof(ChannelDesc, arrayCapacity), 4);
                                      poke<uint16_t>(b, descOf(6) + offsetof(ChannelDesc, arrayIndex), 4); }), total,
               {{"attach", "Ok"}, {"descs", json::array({{{"slot", 6}, {"valid", false}, {"tableMatch", false}}})}});
-    s.section("attach_desc_capacity_above_table", "attach",
+    s.segment("attach_desc_capacity_above_table", "attach",
               mutated([&](auto& b) { poke<uint16_t>(b, descOf(6) + offsetof(ChannelDesc, arrayCapacity), 9); }), total,
               {{"attach", "Ok"}, {"descs", json::array({{{"slot", 6}, {"valid", true}, {"tableMatch", false}}})}});
-    s.section("attach_desc_capacity_zero_on_table_array", "attach",
+    s.segment("attach_desc_capacity_zero_on_table_array", "attach",
               mutated([&](auto& b) { poke<uint16_t>(b, descOf(6) + offsetof(ChannelDesc, arrayCapacity), 0); }), total,
               {{"attach", "Ok"}, {"descs", json::array({{{"slot", 6}, {"tableMatch", false}}})}});
-    s.section("attach_desc_layout_mismatch_with_table", "attach",
+    s.segment("attach_desc_layout_mismatch_with_table", "attach",
               mutated([&](auto& b) { poke<uint8_t>(b, descOf(6) + offsetof(ChannelDesc, layout), 2); }), total,
               {{"attach", "Ok"}, {"descs", json::array({{{"slot", 6}, {"valid", true}, {"tableMatch", false}}})}});
     {
         // A producer built against a smaller capacity: 4 of the table's 8 elements.
-        const auto small = makeSection(json::array({
+        const auto small = makeSegment(json::array({
             {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}},
             {{"op", "declare"}, {"name", "std.suspension.deflection"}, {"count", 4}, {"provenance", 1}},
             {{"op", "wheels"}, {"list", json::array({2, 2})}},
             {{"op", "commit"}},
         }));
-        s.section("attach_desc_smaller_capacity_accepted", "attach", small, total,
+        s.segment("attach_desc_smaller_capacity_accepted", "attach", small, total,
                   {{"attach", "Ok"}, {"channelCount", 4},
                    {"descs", json::array({
                        {{"slot", 0}, {"name", "std.suspension.deflection[0]"}, {"arrayIndex", 0}, {"arrayCapacity", 4}, {"layout", 1},
@@ -212,20 +212,20 @@ int main(int argc, char** argv)
                    {"lastPublishQpc", 2001},
                    {"values", {{"0", 6500.0}, {"1", 42.5}, {"2", 3.0}, {"3", -0.5}, {"4", 0.75}}},
                    {"validSlots", json::array({0, 1, 2, 3, 4})}, {"eventCounts", {{"4", 1}}}};
-        s.section("frame_new", "frame", good, total, ex);
-        s.section("frame_no_new", "frame", good, total, {{"result", "NoNewFrame"}}, {{"lastSeen", 2}});
+        s.segment("frame_new", "frame", good, total, ex);
+        s.segment("frame_no_new", "frame", good, total, {{"result", "NoNewFrame"}}, {{"lastSeen", 2}});
     }
-    s.section("frame_before_first", "frame", makeSection(baseScript(false)), total, {{"result", "NoNewFrame"}, {"producerState", "active"}});
-    s.section("frame_odd_frame_seq_torn", "frame", mutated([](auto& b) { poke<uint64_t>(b, 80, 3); }), total, {{"result", "Torn"}});
-    s.section("frame_seq_end_mismatch_torn", "frame", mutated([](auto& b) { poke<uint64_t>(b, 104, 99); }), total, {{"result", "Torn"}});
-    s.section("frame_producer_inactive", "frame",
+    s.segment("frame_before_first", "frame", makeSegment(baseScript(false)), total, {{"result", "NoNewFrame"}, {"producerState", "active"}});
+    s.segment("frame_odd_frame_seq_torn", "frame", mutated([](auto& b) { poke<uint64_t>(b, 80, 3); }), total, {{"result", "Torn"}});
+    s.segment("frame_seq_end_mismatch_torn", "frame", mutated([](auto& b) { poke<uint64_t>(b, 104, 99); }), total, {{"result", "Torn"}});
+    s.segment("frame_producer_inactive", "frame",
               mutated([](auto& b) { poke<uint32_t>(b, 96, 0); }), total, {{"result", "NewFrame"}, {"producerState", "inactive"}});
-    s.section("frame_producer_closed", "frame",
+    s.segment("frame_producer_closed", "frame",
               mutated([](auto& b) { poke<uint32_t>(b, 96, 2); }), total, {{"result", "NewFrame"}, {"producerState", "closed"}});
-    s.section("frame_event_counter_wrap", "frame",
+    s.segment("frame_event_counter_wrap", "frame",
               mutated([](auto& b) { poke<uint32_t>(b, kL.eventCountOffset + 4 * 4, 0xFFFFFFFFu); }), total,
               {{"result", "NewFrame"}, {"eventCounts", {{"4", 4294967295u}}}});
-    s.section("frame_values_nan_passes_through", "frame",
+    s.segment("frame_values_nan_passes_through", "frame",
               mutated([](auto& b) { poke<uint32_t>(b, kL.valuesOffset + 3 * 4, 0x7FC00000u); }), total,
               {{"result", "NewFrame"}, {"frameSeq", 2}});
 
@@ -240,29 +240,29 @@ int main(int argc, char** argv)
         w.publishMasks(64, 2, acc.data(), dem.data());
         w.setState(ConsumerState::Active);
         w.touch(3000);
-        s.section("return_valid_active", "return", ret, kReturnBytes,
+        s.segment("return_valid_active", "return", ret, kReturnBytes,
                   {{"attach", "Ok"}, {"read", true}, {"capacity", 64}, {"forLayoutSeq", 2}, {"consumerState", "active"},
                    {"lastConsumeQpc", 3000}, {"accepted", json::array({0, 1, 2, 3, 4, 5, 6})},
                    {"demanded", json::array({0, 4, 6})}});
 
         auto idle = ret;
         poke<uint32_t>(idle, offsetof(ReturnHeader, consumerState), 0);
-        s.section("return_idle_everything_accepted_is_demanded", "return", idle, kReturnBytes,
+        s.segment("return_idle_everything_accepted_is_demanded", "return", idle, kReturnBytes,
                   {{"attach", "Ok"}, {"read", true}, {"consumerState", "idle"},
                    {"accepted", json::array({0, 1, 2, 3, 4, 5, 6})}, {"demanded", json::array({0, 1, 2, 3, 4, 5, 6})}});
 
         auto bad = ret; poke<uint32_t>(bad, 0, 0);
-        s.section("return_magic_zero", "return", bad, kReturnBytes, {{"attach", "NotReady"}});
+        s.segment("return_magic_zero", "return", bad, kReturnBytes, {{"attach", "NotReady"}});
         bad = ret; poke<uint32_t>(bad, 0, 0x12345678);
-        s.section("return_bad_magic", "return", bad, kReturnBytes, {{"attach", "Malformed"}});
+        s.segment("return_bad_magic", "return", bad, kReturnBytes, {{"attach", "Malformed"}});
         bad = ret; poke<uint16_t>(bad, 4, 2);
-        s.section("return_version_major_2", "return", bad, kReturnBytes, {{"attach", "BadVersion"}});
+        s.segment("return_version_major_2", "return", bad, kReturnBytes, {{"attach", "BadVersion"}});
         bad = ret; poke<uint64_t>(bad, offsetof(ReturnHeader, retSeq), 5);
-        s.section("return_torn_odd_ret_seq", "return", bad, kReturnBytes, {{"attach", "Ok"}, {"read", false}});
+        s.segment("return_torn_odd_ret_seq", "return", bad, kReturnBytes, {{"attach", "Ok"}, {"read", false}});
         bad = ret; poke<uint32_t>(bad, offsetof(ReturnHeader, capacity), 100);
-        s.section("return_capacity_invalid", "return", bad, kReturnBytes, {{"attach", "Malformed"}});
+        s.segment("return_capacity_invalid", "return", bad, kReturnBytes, {{"attach", "Malformed"}});
         bad = ret; poke<uint32_t>(bad, offsetof(ReturnHeader, consumerState), 9);
-        s.section("return_unknown_consumer_state", "return", bad, kReturnBytes, {{"attach", "Malformed"}});
+        s.segment("return_unknown_consumer_state", "return", bad, kReturnBytes, {{"attach", "Malformed"}});
     }
 
     // --- encode -------------------------------------------------------------

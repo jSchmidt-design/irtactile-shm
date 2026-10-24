@@ -1,4 +1,4 @@
-// StreamViewer -- a small GDI window on the shm stream: pick a section,
+// StreamViewer -- a small GDI window on the shm stream: pick a segment,
 // pick a channel, watch that channel's waveform at 60 Hz.
 //
 // Single-threaded by design: pump messages, wait until the next 60 Hz frame
@@ -13,8 +13,8 @@
 // order, so waiting on the event buys real power savings. Above that, the
 // frame loop drains whatever arrived anyway, so the event is ignored.
 //
-// ASSUMPTION: the producer's event is named after the section itself (this
-// demo passes the section name as both names). Real producers append their
+// ASSUMPTION: the producer's event is named after the segment itself (this
+// demo passes the segment name as both names). Real producers append their
 // own suffixes to the base names -- see samples/StreamReader for the
 // resolved names -- and Client silently falls back to polling when no event
 // of the given name exists, so a wrong event name costs latency, not
@@ -69,7 +69,7 @@ internal sealed class ViewerForm : Form
     private const long kFramePeriodMs = 16;      // ~60 Hz
     private const double kEventModeMaxRateHz = 60.0;
     private const int kNameBufferChars = 256;
-    private const string kDefaultSectionName = "irTactile_Stream_Primary_256k";
+    private const string kDefaultSegmentName = "irTactile_Stream_Primary_256k";
 
     private static readonly Color kBackgroundColor = Color.FromArgb(18, 20, 24);
     private static readonly Color kStatusTextColor = Color.FromArgb(190, 195, 200);
@@ -99,7 +99,7 @@ internal sealed class ViewerForm : Form
     private bool _eventMode;
     private int _selectedChannel;
     private int _traceCapacity = 640;
-    private string _statusText = "Not connected. Enter the resolved shm section name and press Connect.";
+    private string _statusText = "Not connected. Enter the resolved shm segment name and press Connect.";
 
     public ViewerForm()
     {
@@ -127,7 +127,7 @@ internal sealed class ViewerForm : Form
         };
         _deviceEdit = new TextBox
         {
-            Text = kDefaultSectionName,
+            Text = kDefaultSegmentName,
             MaxLength = kNameBufferChars - 1,
             BorderStyle = BorderStyle.Fixed3D,
         };
@@ -289,17 +289,17 @@ internal sealed class ViewerForm : Form
 
     private void ConnectNow()
     {
-        string sectionName = _deviceEdit.Text.Trim();
-        if (string.IsNullOrEmpty(sectionName))
+        string segmentName = _deviceEdit.Text.Trim();
+        if (string.IsNullOrEmpty(segmentName))
         {
-            _statusText = "Enter a section name first.";
+            _statusText = "Enter a segment name first.";
             UpdateStatus();
             return;
         }
 
-        // Event name == section name by demo assumption; a missing event just
+        // Event name == segment name by demo assumption; a missing event just
         // leaves Client in polling mode.
-        OpenResult openResult = _client.Open(sectionName, sectionName, null);
+        OpenResult openResult = _client.Open(segmentName, segmentName, null);
 
         if (openResult != OpenResult.Ok)
         {

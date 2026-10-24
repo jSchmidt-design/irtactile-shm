@@ -15,9 +15,9 @@ namespace channels = irtactile::shm::channels;
 
 namespace {
 
-// 8-byte aligned storage, like a mapped section.
-struct Section {
-    explicit Section(size_t bytes) : words((bytes + 7) / 8, 0), size(bytes) {}
+// 8-byte aligned storage, like a mapped segment.
+struct Segment {
+    explicit Segment(size_t bytes) : words((bytes + 7) / 8, 0), size(bytes) {}
     void* data() { return words.data(); }
     uint8_t* bytes() { return reinterpret_cast<uint8_t*>(words.data()); }
     Header& header() { return *reinterpret_cast<Header*>(words.data()); }
@@ -77,11 +77,11 @@ TEST_CASE("layoutFor keeps every array 8-byte aligned and inside totalBytes")
     CHECK(returnDemandedOffset(kMaxCapacity) + kMaxCapacity / 8 <= kReturnBytes);
 }
 
-TEST_CASE("section names")
+TEST_CASE("segment names")
 {
     CHECK(inboundName("demo") == "irTactile_Telemetry_demo");
     CHECK(returnNameFor("irTactile_Telemetry_demo") == "irTactile_TelemetryReturn_demo");
-    CHECK(returnNameFor("MySection") == "MySection_Return");
+    CHECK(returnNameFor("MySegment") == "MySegment_Return");
     CHECK(returnNameFor("irTactile_Telemetry_") == "irTactile_Telemetry__Return");
 }
 
@@ -92,9 +92,9 @@ TEST_CASE("eventsSince is a modular difference")
     CHECK(eventsSince(0xFFFFFFFFu, 1u) == 2);
 }
 
-TEST_CASE("a fresh section is NotReady until the first commitLayout")
+TEST_CASE("a fresh segment is NotReady until the first commitLayout")
 {
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     Reader r;
     CHECK(r.attach(s.data(), s.size) == AttachResult::NotReady);
 
@@ -111,7 +111,7 @@ TEST_CASE("a fresh section is NotReady until the first commitLayout")
 
 TEST_CASE("table declarations copy the table properties; arrays declare every element")
 {
-    Section s(Producer::requiredBytes(128));
+    Segment s(Producer::requiredBytes(128));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 128, identity()) == OpenResult::Ok);
     const int rpm = p.declare(channels::standard::Id::EngineRpm);
@@ -135,7 +135,7 @@ TEST_CASE("table declarations copy the table properties; arrays declare every el
 
 TEST_CASE("declareLocal rejects invalid names; declarations stop at capacity")
 {
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
     CHECK(p.declareLocal("", "", 0, 1, channels::Kind::Continuous) == Producer::kInvalidSlot);
@@ -150,7 +150,7 @@ TEST_CASE("declareLocal rejects invalid names; declarations stop at capacity")
 
 TEST_CASE("LocalChannel declarations, local arrays and SlotRange")
 {
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
 
@@ -193,7 +193,7 @@ TEST_CASE("LocalChannel declarations, local arrays and SlotRange")
 
 TEST_CASE("declareLocalArray is all or nothing")
 {
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
     LocalChannel bad;
@@ -228,7 +228,7 @@ TEST_CASE("result enums have names")
 
 TEST_CASE("frames round-trip values, valid bits, events and QPC")
 {
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
     const int rpm = p.declare(channels::standard::Id::EngineRpm);
@@ -269,7 +269,7 @@ TEST_CASE("frames round-trip values, valid bits, events and QPC")
 
 TEST_CASE("a frame being written is Torn, never a mix")
 {
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
     p.declare(channels::standard::Id::EngineRpm);
@@ -283,7 +283,7 @@ TEST_CASE("a frame being written is Torn, never a mix")
 
 TEST_CASE("layout rewrite: readers see LayoutChanged, then the new descriptors")
 {
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
     p.declare(channels::standard::Id::EngineRpm);
@@ -306,7 +306,7 @@ TEST_CASE("layout rewrite: readers see LayoutChanged, then the new descriptors")
 
 TEST_CASE("strings are truncated to the field without splitting a UTF-8 sequence")
 {
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
     const std::string x30(30, 'x');
@@ -317,7 +317,7 @@ TEST_CASE("strings are truncated to the field without splitting a UTF-8 sequence
 
 TEST_CASE("a layout rewrite that crashed mid-way leaves an odd layoutSeq: NotReady, and a restart steps past it")
 {
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
     p.declare(channels::standard::Id::EngineRpm);
@@ -339,9 +339,9 @@ TEST_CASE("a layout rewrite that crashed mid-way leaves an odd layoutSeq: NotRea
     CHECK(r.refreshLayout() == AttachResult::Ok);
 }
 
-TEST_CASE("a restart into an existing section keeps the pinned fields and refuses a layout that no longer fits")
+TEST_CASE("a restart into an existing segment keeps the pinned fields and refuses a layout that no longer fits")
 {
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     {
         Producer p;
         REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
@@ -356,12 +356,12 @@ TEST_CASE("a restart into an existing section keeps the pinned fields and refuse
     CHECK(s.header().totalBytes == total);
 }
 
-TEST_CASE("open rejects a section that is too small and a bad simId")
+TEST_CASE("open rejects a segment that is too small and a bad simId")
 {
-    Section tiny(100);
+    Segment tiny(100);
     Producer p;
     CHECK(p.open(tiny.data(), tiny.size, 64, identity()) == OpenResult::TooSmall);
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     CHECK(p.open(s.data(), s.size, 64, identity("std")) == OpenResult::BadIdentity);
     CHECK(p.open(s.data(), s.size, 64, identity("Bad-Id")) == OpenResult::BadIdentity);
     CHECK(p.open(s.data(), s.size, 64, identity("lmu")) == OpenResult::Ok);   // a built-in simId is allowed
@@ -370,7 +370,7 @@ TEST_CASE("open rejects a section that is too small and a bad simId")
 
 TEST_CASE("validateHeader rejections")
 {
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
     p.declare(channels::standard::Id::EngineRpm);
@@ -420,7 +420,7 @@ TEST_CASE("validateHeader rejections")
 
 TEST_CASE("return region round trip: masks, forLayoutSeq, consumer state")
 {
-    Section ret(kReturnBytes);
+    Segment ret(kReturnBytes);
     ReturnWriter w;
     REQUIRE(w.init(ret.data(), ret.size, 99));
     ReturnReader rr;
@@ -451,7 +451,7 @@ TEST_CASE("return region round trip: masks, forLayoutSeq, consumer state")
 
 TEST_CASE("return region: absent, torn and malformed")
 {
-    Section ret(kReturnBytes);
+    Segment ret(kReturnBytes);
     ReturnReader rr;
     CHECK(rr.attach(ret.data(), ret.size) == AttachResult::NotReady);   // created, header not yet written
     ReturnWriter w;
@@ -474,7 +474,7 @@ TEST_CASE("return region: absent, torn and malformed")
 
 TEST_CASE("return region: the offsets follow capacity, consumerPid is a live load")
 {
-    Section ret(kReturnBytes);
+    Segment ret(kReturnBytes);
     ReturnWriter w;
     REQUIRE(w.init(ret.data(), ret.size, 11));
     ReturnReader rr;
@@ -494,7 +494,7 @@ TEST_CASE("return region: the offsets follow capacity, consumerPid is a live loa
     CHECK(v.demanded[3] == 0x5);
     CHECK(v.consumerPid == 11);
 
-    REQUIRE(w.init(ret.data(), ret.size, 12));                           // irTactile restart: the section survives
+    REQUIRE(w.init(ret.data(), ret.size, 12));                           // irTactile restart: the segment survives
     REQUIRE(rr.read(v));
     CHECK(v.consumerPid == 12);
     CHECK(v.capacity == 256);
@@ -502,7 +502,7 @@ TEST_CASE("return region: the offsets follow capacity, consumerPid is a live loa
 
 TEST_CASE("the producer writes provenance, layout and the wheel layout")
 {
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
     const int rpm = p.declare(channels::standard::Id::EngineRpm, channels::Provenance::Native);
@@ -544,7 +544,7 @@ TEST_CASE("validateDescriptor and matchesTable")
     const channels::ChannelDef& defl = st::kArrays[static_cast<uint32_t>(st::ArrayId::SuspensionDeflection)];
     const channels::ChannelDef& rpm = st::kChannels[static_cast<uint32_t>(st::Id::EngineRpm)];
 
-    Section s(Producer::requiredBytes(64));
+    Segment s(Producer::requiredBytes(64));
     Producer p;
     REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
     const int e = p.declare(st::Id::EngineRpm);
@@ -583,3 +583,4 @@ TEST_CASE("validateDescriptor and matchesTable")
     x = scalar; x.provenance = 3;
     CHECK(matchesTable(x, rpm, 0));              // provenance is not compared
 }
+

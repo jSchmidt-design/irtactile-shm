@@ -54,7 +54,7 @@ public:
         h.qpcFrequency         = 10'000'000;
         std::snprintf(h.deviceName, sizeof(h.deviceName), "toy");
         h.producerPid          = 0;                       // 0 ⇒ unknown; a real producer stores its own PID
-        h.layoutSeq            = 0;                       // even: readable (fresh section never needs an odd rewrite)
+        h.layoutSeq            = 0;                       // even: readable (fresh segment never needs an odd rewrite)
 
         // Creation ordering (normative): magic is the LAST store, released,
         // after every other header field is in place. A reader that passes the

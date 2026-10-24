@@ -1,6 +1,6 @@
 # telemetry-shm v1 - field tables
 
-All integers little-endian. All offsets are bytes from the section base. 64-bit fields are 8-byte aligned. Strings
+All integers little-endian. All offsets are bytes from the segment base. 64-bit fields are 8-byte aligned. Strings
 are UTF-8, NUL-terminated within the field, tail zeroed. **Class** is the concurrency class
 ([concurrency.md](../../common/concurrency.md)): *pinned*, *layout* (under `layoutSeq`), *concurrent*
 (per-field acquire loads), *frame* (under the region's frame seqlock: `frameSeq` inbound, `retSeq` return; never
@@ -14,7 +14,7 @@ cached across reads).
 | 4 | 2 | `versionMajor` | pinned | `1`; reject a mismatch |
 | 6 | 2 | `versionMinor` | pinned | `0`; tolerate higher |
 | 8 | 4 | `headerBytes` | pinned | `256`; never copy more than this |
-| 12 | 4 | `totalBytes` | pinned | section size; must not exceed the mapped size |
+| 12 | 4 | `totalBytes` | pinned | segment size; must not exceed the mapped size |
 | 16 | 4 | `capacity` | layout | descriptor / value slots, multiple of 64, `[64, 8192]` |
 | 20 | 4 | `channelCount` | layout | highest used slot + 1 (`<= capacity`) |
 | 24 | 4 | `descOffset` | layout | `ChannelDesc[capacity]` |

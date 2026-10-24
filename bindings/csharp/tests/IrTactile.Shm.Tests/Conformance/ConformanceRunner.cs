@@ -29,7 +29,7 @@ internal static class ConformanceRunner
         byte[] blob = ReadBlob(Path.Combine(baseDir, c.GetProperty("blob").GetString()!), Fail);
         if (blob.Length == 0) return failures;
 
-        using var section = new PinnedSection(blob);
+        using var segment = new PinnedSegment(blob);
         var reader = new Reader();
         var block = new BlockView();
 
@@ -64,7 +64,7 @@ internal static class ConformanceRunner
                     }
                 }
 
-                AttachResult got = reader.Attach(section.Ptr, section.Length, req);
+                AttachResult got = reader.Attach(segment.Ptr, segment.Length, req);
 
                 JsonElement expect = step.GetProperty("expect");
                 RequireKnownKeys(expect, "attach expectation", failures,
@@ -93,14 +93,14 @@ internal static class ConformanceRunner
             }
             case "patch":
             {
-                // The producer advanced the section: the blob replaces the
+                // The producer advanced the segment: the blob replaces the
                 // whole buffer. Sizes must match - a patch is a rewrite, not a
                 // remap.
                 byte[] next = ReadBlob(Path.Combine(baseDir, step.GetProperty("blob").GetString()!), Fail);
-                if (next.Length != section.Bytes.Length)
+                if (next.Length != segment.Bytes.Length)
                     Fail("patch blob size differs from the case blob");
                 else
-                    Array.Copy(next, section.Bytes, next.Length);
+                    Array.Copy(next, segment.Bytes, next.Length);
                 break;
             }
             case "rewindToOldest":

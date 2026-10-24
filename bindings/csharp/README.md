@@ -7,8 +7,8 @@ dependency, no P/Invoke.
 
 | Namespace | Content |
 |---|---|
-| `IrTactile.Shm.Stream` | [stream-shm v1](../../spec/stream-shm/v1/README.md) consumer: `Reader`, `Client`. Reader-side only; the section is mapped read-only. |
-| `IrTactile.Shm.Telemetry` | [telemetry-shm v1](../../spec/telemetry-shm/v1/README.md) producer: `TelemetryProducer`, `TelemetrySection`. See *telemetry-shm: your first producer*. |
+| `IrTactile.Shm.Stream` | [stream-shm v1](../../spec/stream-shm/v1/README.md) consumer: `Reader`, `Client`. Reader-side only; the segment is mapped read-only. |
+| `IrTactile.Shm.Telemetry` | [telemetry-shm v1](../../spec/telemetry-shm/v1/README.md) producer: `TelemetryProducer`, `TelemetrySegment`. See *telemetry-shm: your first producer*. |
 | `IrTactile.Shm.Channels` | The [channel model](../../spec/channels/README.md): `ChannelModel` (kinds, flags, name rules) and the generated `std.*` table `Std`. |
 
 Most of this guide is the stream consumer; the telemetry producer is at the end.
@@ -40,7 +40,7 @@ dependencies at all.
 
 ## Platform
 
-**64-bit hosts only**, and Windows for `Client` (the section and the event are
+**64-bit hosts only**, and Windows for `Client` (the segment and the event are
 named kernel objects; `Reader` itself is portable and runs over any mapped
 buffer). The bitness is a real constraint, not caution:
 [`spec/common/concurrency.md`](../../spec/common/concurrency.md)
@@ -75,7 +75,7 @@ SDK, and `dotnet pack src/IrTactile.Shm -c Release` produces the package plus it
 | `src/IrTactile.Shm/Stream/Reader.cs` | `Reader` / `BlockView` / `StreamRequest` / `AttachResult` / `StreamState`. Portable. |
 | `src/IrTactile.Shm/Stream/Client.cs` | Mapping, event, blocking `Wait()`, liveness. |
 | `samples/StreamReader/Program.cs` | The whole thing via `Client`. |
-| `src/IrTactile.Shm/Telemetry/TelemetryProducer.cs` | telemetry-shm: `TelemetryProducer`, `TelemetrySection`, layout constants. |
+| `src/IrTactile.Shm/Telemetry/TelemetryProducer.cs` | telemetry-shm: `TelemetryProducer`, `TelemetrySegment`, layout constants. |
 | `src/IrTactile.Shm/Channels/` | `ChannelModel.cs` (hand-written) and `StdChannels.g.cs` (generated). |
 | `samples/TelemetryDemoProducer/Program.cs` | A complete telemetry producer. |
 
@@ -119,7 +119,7 @@ if (c.State() == StreamState.Stalled) Warn();
   hands out the `EventWaitHandle` for `WaitHandle.WaitAny` alongside your own
   handles; `State()` and `Next` are unchanged.
 
-The section is opened read-only (`MemoryMappedFileRights.Read`, the managed
+The segment is opened read-only (`MemoryMappedFileRights.Read`, the managed
 `FILE_MAP_READ`), so a consumer bug faults instead of corrupting the producer's
 ring. The **event** is the one place this binding asks for more than the spec's
 `SYNCHRONIZE`: .NET's in-box `EventWaitHandle.OpenExisting` requests
@@ -134,7 +134,7 @@ of the two causes it was.
 ## Contract checking
 
 `StreamRequest` compares counts and rates, not strings. `Mismatch` is
-deliberately **not retryable**: the section is valid and the producer healthy,
+deliberately **not retryable**: the segment is valid and the producer healthy,
 so waiting changes nothing. `Reader.MismatchDetail` names the disagreeing
 fields - it survives `Open` returning `Mismatch` precisely so the failure can
 be reported with an actionable remedy.
@@ -175,7 +175,7 @@ The suites mirror the C++ binding's:
 | Suite | Mirrors | What it proves |
 |---|---|---|
 | `tests/IrTactile.Shm.Tests/Stream/LayoutTests.cs` | the header's `static_assert`s + size-arithmetic tests | Offset pinning via `Marshal.OffsetOf`/`Marshal.SizeOf` against `spec/stream-shm/v1/fields.md` - the guard against the silent-garbage class of error |
-| `tests/IrTactile.Shm.Tests/Stream/StreamShmTests.cs` | `bindings/cpp/tests/stream/StreamShm_test.cpp`, case for case | The publish/read protocol over an in-memory section |
+| `tests/IrTactile.Shm.Tests/Stream/StreamShmTests.cs` | `bindings/cpp/tests/stream/StreamShm_test.cpp`, case for case | The publish/read protocol over an in-memory segment |
 | `tests/IrTactile.Shm.Tests/Conformance/` | `bindings/cpp/tests/conformance_runner.cpp` | The binding-independent vector suite: all of `conformance/stream-shm/v1/` decoded and compared |
 | `tests/IrTactile.Shm.Tests/Telemetry/` | `bindings/cpp/tests/telemetry/` | Producer behaviour, plus the telemetry-shm `encode` vectors compared byte for byte |
 | `tests/IrTactile.Shm.Tests/Channels/` | `bindings/cpp/tests/channels/` | Name rules and the generated `std.*` table |
@@ -189,14 +189,14 @@ it means multi-targeting the test project to `net8.0;net48`.
 
 ## telemetry-shm: your first producer
 
-`IrTactile.Shm.Telemetry.TelemetryProducer` / `TelemetrySection` implement the producer side of the
-[telemetry-shm v1 format](../../spec/telemetry-shm/v1/README.md) (Windows; the section is a named file mapping).
+`IrTactile.Shm.Telemetry.TelemetryProducer` / `TelemetrySegment` implement the producer side of the
+[telemetry-shm v1 format](../../spec/telemetry-shm/v1/README.md) (Windows; the segment is a named file mapping).
 
 ```csharp
 using IrTactile.Shm.Channels;
 using IrTactile.Shm.Telemetry;
 
-using var s = TelemetrySection.Create(TelemetryLayout.InboundName("mysim"), 256,
+using var s = TelemetrySegment.Create(TelemetryLayout.InboundName("mysim"), 256,
                                       new ProducerIdentity { SimName = "My Sim" });
 TelemetryProducer p = s.Producer;
 // Table channels copy their unit, range and kind from the table.
@@ -205,7 +205,7 @@ int defl = p.DeclareArray(Std.Arrays[(int)StdArray.SuspensionDeflection], 4);   
 p.SetWheelLayout(2, 2);                                                         // front to back
 // A local channel; irTactile sees it as sim.<simId>.pump_pressure.
 int pump = p.DeclareLocal("pump_pressure", "bar", 0, 10, SignalKind.Continuous);
-p.CommitLayout();   // the section becomes visible here
+p.CommitLayout();   // the segment becomes visible here
 p.SetState(ProducerState.Active, TelemetryClock.Now);
 
 while (running)
@@ -217,7 +217,7 @@ while (running)
 }
 ```
 
-`Create` throws `InvalidOperationException` when the section cannot hold the layout or the `SimId` is invalid.
+`Create` throws `InvalidOperationException` when the segment cannot hold the layout or the `SimId` is invalid.
 `PollReturn` tells you which channels irTactile accepted and which it demands, the same as the C++
 `pollReturn()`. `samples/TelemetryDemoProducer` is the full example.
 

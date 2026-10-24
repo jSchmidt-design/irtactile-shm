@@ -4,15 +4,15 @@
 //
 // Publishes std.input.throttle, std.engine.rpm, std.suspension.deflection[0..3] (4 of 8 elements, wheels {2,2}), a local
 // channel (demo_wave -> sim.<sim id>.demo_wave) and an event (demo_bump, every 2 s) at 100 Hz.
-// 'a' toggles Active / Inactive, 'q' quits. The section name is fixed
+// 'a' toggles Active / Inactive, 'q' quits. The segment name is fixed
 // (irTactile_Telemetry_demo): configure a sim in irTactile with that shared memory name to read it.
 
 using IrTactile.Shm.Channels;
 using IrTactile.Shm.Telemetry;
 
 string name = TelemetryLayout.InboundName("demo");
-using var section = TelemetrySection.Create(name, 256, new ProducerIdentity { SimName = "telemetry_demo_cs" });
-TelemetryProducer p = section.Producer;
+using var segment = TelemetrySegment.Create(name, 256, new ProducerIdentity { SimName = "telemetry_demo_cs" });
+TelemetryProducer p = segment.Producer;
 
 int thr = p.Declare(Std.All[(int)StdChannel.InputThrottle], Provenance.Native);
 int rpm = p.Declare(Std.All[(int)StdChannel.EngineRpm], Provenance.Native);
@@ -23,7 +23,7 @@ int bump = p.DeclareLocal("demo_bump", "", 0f, 1f, SignalKind.Event);
 p.SetCar("demo_car", "Demo Car");
 p.CommitLayout();
 
-Console.WriteLine($"telemetry_demo: section '{name}'\n  a = toggle Active/Inactive, q = quit");
+Console.WriteLine($"telemetry_demo: segment '{name}'\n  a = toggle Active/Inactive, q = quit");
 
 bool active = true;
 p.SetState(ProducerState.Active, TelemetryClock.Now);
@@ -71,7 +71,7 @@ while (true)
     if (now >= nextReport)
     {
         nextReport = now + (ulong)freq;
-        if (section.PollReturn(rv))
+        if (segment.PollReturn(rv))
         {
             int accepted = 0, demanded = 0;
             for (int s = 0; s < p.ChannelCount; s++)

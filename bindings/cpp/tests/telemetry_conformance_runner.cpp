@@ -3,10 +3,10 @@
 //   telemetry_conformance_runner <path to manifest.json>
 //
 // Case ops:
-//   attach  - Reader::attach on a golden section, compare the verdict and the snapshot
+//   attach  - Reader::attach on a golden segment, compare the verdict and the snapshot
 //   frame   - attach, then readFrame, compare the result and the copied frame
 //   return  - ReturnReader::attach + read on a golden return region
-//   encode  - run a producer script, compare the section bytes with the golden file
+//   encode  - run a producer script, compare the segment bytes with the golden file
 // Exit code: number of failed cases (0 = pass).
 
 #include "telemetry_script.h"

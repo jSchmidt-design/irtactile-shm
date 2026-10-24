@@ -1,5 +1,5 @@
 // irtactile/shm/telemetry.h - umbrella for the portable telemetry-shm v1 headers.
-// The Windows section handling is irtactile/shm/telemetry/win32.h.
+// The Windows segment handling is irtactile/shm/telemetry/win32.h.
 //
 // SPDX-License-Identifier: MIT
 

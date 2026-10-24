@@ -11,7 +11,7 @@ namespace IrTactile.Shm.Tests.Stream;
 
 internal sealed unsafe class TestProducer : IDisposable
 {
-    private readonly PinnedSection? _section;   // null when driving a caller's buffer
+    private readonly PinnedSegment? _segment;   // null when driving a caller's buffer
     private readonly LayoutParams _p;
     private ulong _writeSeq;
     private ulong _first;
@@ -20,7 +20,7 @@ internal sealed unsafe class TestProducer : IDisposable
         : this(p, null, 0, channelsWired) { }
 
     /// <summary>
-    /// Drive a buffer the caller owns - a real mapped section, for the tests
+    /// Drive a buffer the caller owns - a real mapped segment, for the tests
     /// that need a Client rather than a Reader. Pass null to allocate one.
     /// </summary>
     public TestProducer(LayoutParams p, byte* raw, long size, uint channelsWired = 0xFFFFFFFFu)
@@ -28,9 +28,9 @@ internal sealed unsafe class TestProducer : IDisposable
         _p = p;
         if (raw == null)
         {
-            _section = new PinnedSection((long)ComputeTotalSize(p));
-            Raw = _section.Raw;
-            Size = _section.Length;
+            _segment = new PinnedSegment((long)ComputeTotalSize(p));
+            Raw = _segment.Raw;
+            Size = _segment.Length;
         }
         else
         {
@@ -40,28 +40,28 @@ internal sealed unsafe class TestProducer : IDisposable
         byte* b = Raw;
 
         // magic stays 0 until every other field is in place (not-ready window).
-        SectionMemory.SetU16(b, HeaderOffset.VersionMajor, VersionMajor);
-        SectionMemory.SetU16(b, HeaderOffset.VersionMinor, VersionMinor);
-        SectionMemory.SetU32(b, HeaderOffset.HeaderBytes, StreamLayout.HeaderBytes);
-        SectionMemory.SetU32(b, HeaderOffset.TotalBytes, (uint)ComputeTotalSize(p));
-        SectionMemory.SetU32(b, HeaderOffset.SampleFormat, (uint)p.Format);
-        SectionMemory.SetU32(b, HeaderOffset.ChannelLayout, (uint)ChannelLayout.Planar);
-        SectionMemory.SetU32(b, HeaderOffset.ChannelCount, p.ChannelCount);
-        SectionMemory.SetU32(b, HeaderOffset.SampleRateMilliHz, 3_000_000u);
-        SectionMemory.SetU32(b, HeaderOffset.SourceSampleRate, 48000u);
-        SectionMemory.SetU32(b, HeaderOffset.RateDivisor, 16u);
-        SectionMemory.SetU32(b, HeaderOffset.SamplesPerBlock, p.SamplesPerBlock);
-        SectionMemory.SetU32(b, HeaderOffset.RingBlocks, p.RingBlocks);
-        SectionMemory.SetU32(b, HeaderOffset.BytesPerSample, BytesPerSampleOf(p.Format));
-        SectionMemory.SetU32(b, HeaderOffset.SlotPayloadOffset, SlotPayloadOffsetOf());
-        SectionMemory.SetU32(b, HeaderOffset.ChannelArrayOffset, 0u);
-        SectionMemory.SetU32(b, HeaderOffset.SlotArrayOffset, SlotArrayOffsetOf());
-        SectionMemory.SetU32(b, HeaderOffset.SlotBytes, SlotBytesOf(p));
-        SectionMemory.SetU32(b, HeaderOffset.ChannelPlaneBytes, ChannelPlaneBytesOf(p));
-        SectionMemory.SetU64(b, HeaderOffset.QpcFrequency, 10_000_000ul);
-        SectionMemory.SetU32(b, HeaderOffset.WiredChannelMask, channelsWired);
-        SectionMemory.SetU32(b, HeaderOffset.DeviceState, (uint)DeviceState.Active);
-        SectionMemory.Release32(b, HeaderOffset.Magic, Magic);
+        SegmentMemory.SetU16(b, HeaderOffset.VersionMajor, VersionMajor);
+        SegmentMemory.SetU16(b, HeaderOffset.VersionMinor, VersionMinor);
+        SegmentMemory.SetU32(b, HeaderOffset.HeaderBytes, StreamLayout.HeaderBytes);
+        SegmentMemory.SetU32(b, HeaderOffset.TotalBytes, (uint)ComputeTotalSize(p));
+        SegmentMemory.SetU32(b, HeaderOffset.SampleFormat, (uint)p.Format);
+        SegmentMemory.SetU32(b, HeaderOffset.ChannelLayout, (uint)ChannelLayout.Planar);
+        SegmentMemory.SetU32(b, HeaderOffset.ChannelCount, p.ChannelCount);
+        SegmentMemory.SetU32(b, HeaderOffset.SampleRateMilliHz, 3_000_000u);
+        SegmentMemory.SetU32(b, HeaderOffset.SourceSampleRate, 48000u);
+        SegmentMemory.SetU32(b, HeaderOffset.RateDivisor, 16u);
+        SegmentMemory.SetU32(b, HeaderOffset.SamplesPerBlock, p.SamplesPerBlock);
+        SegmentMemory.SetU32(b, HeaderOffset.RingBlocks, p.RingBlocks);
+        SegmentMemory.SetU32(b, HeaderOffset.BytesPerSample, BytesPerSampleOf(p.Format));
+        SegmentMemory.SetU32(b, HeaderOffset.SlotPayloadOffset, SlotPayloadOffsetOf());
+        SegmentMemory.SetU32(b, HeaderOffset.ChannelArrayOffset, 0u);
+        SegmentMemory.SetU32(b, HeaderOffset.SlotArrayOffset, SlotArrayOffsetOf());
+        SegmentMemory.SetU32(b, HeaderOffset.SlotBytes, SlotBytesOf(p));
+        SegmentMemory.SetU32(b, HeaderOffset.ChannelPlaneBytes, ChannelPlaneBytesOf(p));
+        SegmentMemory.SetU64(b, HeaderOffset.QpcFrequency, 10_000_000ul);
+        SegmentMemory.SetU32(b, HeaderOffset.WiredChannelMask, channelsWired);
+        SegmentMemory.SetU32(b, HeaderOffset.DeviceState, (uint)DeviceState.Active);
+        SegmentMemory.Release32(b, HeaderOffset.Magic, Magic);
     }
 
     public byte* Raw { get; }
@@ -69,13 +69,13 @@ internal sealed unsafe class TestProducer : IDisposable
     public long Size { get; }
     public ulong WriteSeq => _writeSeq;
 
-    public void Dispose() => _section?.Dispose();
+    public void Dispose() => _segment?.Dispose();
 
     private byte* SlotAt(ulong seq)
     {
-        uint slotArrayOffset = SectionMemory.U32(Raw, HeaderOffset.SlotArrayOffset);
-        uint ringBlocks = SectionMemory.U32(Raw, HeaderOffset.RingBlocks);
-        uint slotBytes = SectionMemory.U32(Raw, HeaderOffset.SlotBytes);
+        uint slotArrayOffset = SegmentMemory.U32(Raw, HeaderOffset.SlotArrayOffset);
+        uint ringBlocks = SegmentMemory.U32(Raw, HeaderOffset.RingBlocks);
+        uint slotBytes = SegmentMemory.U32(Raw, HeaderOffset.SlotBytes);
         return Raw + slotArrayOffset + (long)(seq % ringBlocks) * slotBytes;
     }
 
@@ -87,13 +87,13 @@ internal sealed unsafe class TestProducer : IDisposable
     {
         byte* b = Raw;
         byte* slot = SlotAt(_writeSeq);
-        uint channelCount = SectionMemory.U32(b, HeaderOffset.ChannelCount);
-        uint samplesPerBlock = SectionMemory.U32(b, HeaderOffset.SamplesPerBlock);
-        uint bytesPerSample = SectionMemory.U32(b, HeaderOffset.BytesPerSample);
-        uint slotPayloadOffset = SectionMemory.U32(b, HeaderOffset.SlotPayloadOffset);
-        uint channelPlaneBytes = SectionMemory.U32(b, HeaderOffset.ChannelPlaneBytes);
+        uint channelCount = SegmentMemory.U32(b, HeaderOffset.ChannelCount);
+        uint samplesPerBlock = SegmentMemory.U32(b, HeaderOffset.SamplesPerBlock);
+        uint bytesPerSample = SegmentMemory.U32(b, HeaderOffset.BytesPerSample);
+        uint slotPayloadOffset = SegmentMemory.U32(b, HeaderOffset.SlotPayloadOffset);
+        uint channelPlaneBytes = SegmentMemory.U32(b, HeaderOffset.ChannelPlaneBytes);
 
-        SectionMemory.Release64(slot, DescOffset.Seq, SlotBusy);
+        SegmentMemory.Release64(slot, DescOffset.Seq, SlotBusy);
 
         uint silent = 0;
         for (uint ch = 0; ch < channelCount; ++ch)
@@ -121,19 +121,19 @@ internal sealed unsafe class TestProducer : IDisposable
         uint flags = silent == fullMask ? (uint)BlockFlags.Silence : 0u;
         if (_writeSeq == 0) flags |= (uint)BlockFlags.Discontinuity;
 
-        SectionMemory.SetU64(slot, DescOffset.FirstSampleIndex, _first);
-        SectionMemory.SetU64(slot, DescOffset.TimestampQpc, (_writeSeq + 1) * 1000);
-        SectionMemory.SetU32(slot, DescOffset.Flags, flags);
-        SectionMemory.SetU32(slot, DescOffset.SilentChannelMask, silent);
+        SegmentMemory.SetU64(slot, DescOffset.FirstSampleIndex, _first);
+        SegmentMemory.SetU64(slot, DescOffset.TimestampQpc, (_writeSeq + 1) * 1000);
+        SegmentMemory.SetU32(slot, DescOffset.Flags, flags);
+        SegmentMemory.SetU32(slot, DescOffset.SilentChannelMask, silent);
         // Producer obligation: stamp the layoutSeq the payload was encoded
         // under, so a consumer that re-snapshots to a newer layout rejects
         // this block instead of decoding it with the wrong strides.
-        SectionMemory.SetU32(slot, DescOffset.LayoutEpoch,
+        SegmentMemory.SetU32(slot, DescOffset.LayoutEpoch,
                              Volatile.Read(ref *(uint*)(b + HeaderOffset.LayoutSeq)));
 
-        SectionMemory.Release64(slot, DescOffset.Seq, _writeSeq);
-        SectionMemory.Release64(b, HeaderOffset.LastPublishQpc, (_writeSeq + 1) * 1000);
-        SectionMemory.Release64(b, HeaderOffset.WriteSeq, _writeSeq + 1);
+        SegmentMemory.Release64(slot, DescOffset.Seq, _writeSeq);
+        SegmentMemory.Release64(b, HeaderOffset.LastPublishQpc, (_writeSeq + 1) * 1000);
+        SegmentMemory.Release64(b, HeaderOffset.WriteSeq, _writeSeq + 1);
 
         ++_writeSeq;
         _first += samplesPerBlock;
@@ -145,7 +145,7 @@ internal sealed unsafe class TestProducer : IDisposable
     /// </summary>
     public void BeginPartialPublish()
     {
-        SectionMemory.Release64(SlotAt(_writeSeq), DescOffset.Seq, SlotBusy);
+        SegmentMemory.Release64(SlotAt(_writeSeq), DescOffset.Seq, SlotBusy);
     }
 
     /// <summary>

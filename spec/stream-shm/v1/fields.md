@@ -1,11 +1,11 @@
 ﻿# stream-shm v1 - field layout *(normative)*
 
-The byte layout of the section. Concurrency classes referenced below
+The byte layout of the segment. Concurrency classes referenced below
 (**pinned** / **layout** / **concurrent**) are defined in
 [../../common/concurrency.md](../../common/concurrency.md); addressing formulas
 that consume these fields are in [README.md - Addressing](README.md).
 
-## Section map
+## Segment map
 
 ```
 byte 0                              ShmStreamHeader          256 B, alignas(64)
@@ -13,7 +13,7 @@ byte 0                              ShmStreamHeader          256 B, alignas(64)
                                     slot[1]               │ slotBytes apart
                                     ...                   │ ringBlocks entries
                                     slot[ringBlocks-1]   ─┘
-     (= header.totalBytes)          end of section
+     (= header.totalBytes)          end of segment
 
 each slot, at slot_base:
      slot_base + 0                            ShmBlockDesc   64 B, alignas(64)
@@ -48,11 +48,11 @@ arrays.
 
 | Off | Size | Type | Field | Class | Meaning |
 |---|---|---|---|---|---|
-| 0 | 4 | u32 | `magic` | **pinned** | `kMagic` = `0x41535449` (`'ITSA'`). `0` ⇒ section created, header not yet written |
+| 0 | 4 | u32 | `magic` | **pinned** | `kMagic` = `0x41535449` (`'ITSA'`). `0` ⇒ segment created, header not yet written |
 | 4 | 2 | u16 | `versionMajor` | **pinned** | Reader must **reject** a mismatch |
 | 6 | 2 | u16 | `versionMinor` | **layout** | Reader must **tolerate** a higher value |
 | 8 | 4 | u32 | `headerBytes` | **pinned** | Size of this header. Never copy more than this |
-| 12 | 4 | u32 | `totalBytes` | **pinned** | Size of the whole section; the size class, not the live footprint |
+| 12 | 4 | u32 | `totalBytes` | **pinned** | Size of the whole segment; the size class, not the live footprint |
 | 16 | 4 | u32 | `sampleFormat` | **layout** | `SampleFormat`. Reject an unknown value |
 | 20 | 4 | u32 | `channelLayout` | **layout** | `ChannelLayout`. Reject an unknown value |
 | 24 | 4 | u32 | `channelCount` | **layout** | 1..32 |
@@ -64,7 +64,7 @@ arrays.
 | 48 | 4 | u32 | `bytesPerSample` | **layout** | 4 (Float32) or 2 (Int16) |
 | 52 | 4 | u32 | `slotPayloadOffset` | **layout** | Slot base → plane 0 |
 | 56 | 4 | u32 | `channelArrayOffset` | **layout** | **`0` in v1 - no channel table** |
-| 60 | 4 | u32 | `slotArrayOffset` | **pinned** | Section base → `slot[0]` |
+| 60 | 4 | u32 | `slotArrayOffset` | **pinned** | Segment base → `slot[0]` |
 | 64 | 4 | u32 | `slotBytes` | **layout** | Slot to slot; multiple of 64 |
 | 68 | 4 | u32 | `channelPlaneBytes` | **layout** | Plane to plane inside a slot |
 | 72 | 4 | u32 | `diagEngineBlockSize` | **layout** | **Diagnostic only** - producer DSP block size. Unrelated to `samplesPerBlock` |
@@ -89,8 +89,8 @@ tail of each array so a byte-wise comparison of two headers is meaningful.
 
 The process id of the producer that last (re)wrote the header, stored under
 the same `layoutSeq` rewrite that stamps the identity strings. It answers one
-question: *is the process that owns this section still alive?* - which makes
-zombie adjudication (a section left behind by a crashed producer, kept alive
+question: *is the process that owns this segment still alive?* - which makes
+zombie adjudication (a segment left behind by a crashed producer, kept alive
 by a consumer's open handle) deterministic instead of purely staleness-based.
 
 **PIDs are reused by every OS.** A liveness verdict may treat "PID no longer
@@ -150,8 +150,8 @@ Zero when continuous; non-zero reports lost samples (ring overrun or an
 abandoned partial block) in *samples*, not blocks. It pairs with
 `BlockDiscontinuity`, which flags the second case without quantifying it.
 
-It is **monotonic within one producer lifetime, not across a section's**: a
-producer restart into a section you still hold keeps `writeSeq` running while
+It is **monotonic within one producer lifetime, not across a segment's**: a
+producer restart into a segment you still hold keeps `writeSeq` running while
 the sample index restarts at 0. `writeSeq` is the counter that always moves
 forward.
 
@@ -167,9 +167,9 @@ without them. All are `uint32_t`.
 | `DeviceState` | `deviceState` | `Inactive` = 0, `Active` = 1, `Closed` = 2 |
 | `BlockFlags` | `flags` | bitmask: `BlockSilence` = 1<<0 (every channel zero in this block), `BlockDiscontinuity` = 1<<1 (first block after start or reconfigure) |
 
-`0` is not a valid `SampleFormat` or `ChannelLayout`, so a zero-filled section
+`0` is not a valid `SampleFormat` or `ChannelLayout`, so a zero-filled segment
 fails the enum check rather than decoding as something. `DeviceState::Inactive`
-*is* 0, deliberately: a freshly created section reads as "not being driven"
+*is* 0, deliberately: a freshly created segment reads as "not being driven"
 before the header is written.
 
 ## Representation, alignment and padding
@@ -179,7 +179,7 @@ every field naturally aligned, **no packing anywhere, and no implicit padding**.
 Every 64-bit field lands on a multiple of 8 by construction.
 
 Both structs are `alignas(64)`, `slotArrayOffset` is a multiple of 64,
-`slotBytes` is padded to a multiple of 64, and mapping the whole section
+`slotBytes` is padded to a multiple of 64, and mapping the whole segment
 returns a 64 KB-aligned base, so those guarantees survive into the mapped view.
 `slotBytes` being cache-line-sized also means the writer's slot never shares a
 cache line with the reader's.

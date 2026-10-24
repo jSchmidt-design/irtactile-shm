@@ -12,14 +12,14 @@ that is not **pinned** is a **layout** field. Layout fields are read under the
 `layoutSeq` seqlock ([seqlock.md](seqlock.md)): take a snapshot while
 `layoutSeq` is even and unchanged, then use that snapshot for all addressing
 and interpretation until the next read cycle. A producer restart into the same
-section may rewrite any layout field; changing one invalidates every cached
+segment may rewrite any layout field; changing one invalidates every cached
 snapshot.
 
 Note what is deliberately a layout field: the **geometry** (`channelCount`,
 `samplesPerBlock`, `ringBlocks`, `sampleFormat`, `slotBytes`,
 `channelPlaneBytes`) and the **identity** (`deviceGuid`, `deviceName`,
 `producerPid`, plus the clock calibration `qpcFrequency`). A restart that
-renames the device, or a different producer process taking the section over,
+renames the device, or a different producer process taking the segment over,
 rewrites them - a consumer that cached `deviceName` at attach must re-read it
 after any `layoutSeq` change.
 
@@ -27,8 +27,8 @@ after any `layoutSeq` change.
 
 A rewrite MUST NOT change `magic`, `versionMajor`, `headerBytes`, `totalBytes`
 or `slotArrayOffset`. Consumers map once, blind, against those five and never
-remap, and an OS section cannot grow. Changing any of them requires a different
-section - which, since the size class is baked into the name, means a different
+remap, and an OS segment cannot grow. Changing any of them requires a different
+segment - which, since the size class is baked into the name, means a different
 name. They are read once, at attach, and never again.
 
 ## Concurrent fields

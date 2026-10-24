@@ -210,7 +210,7 @@ TEST_CASE("No channel table in v1") {
 // ===========================================================================
 // Attach
 // ===========================================================================
-TEST_CASE("attach: zero-filled section is NotReady and retryable") {
+TEST_CASE("attach: zero-filled segment is NotReady and retryable") {
     std::vector<uint8_t> zeros(sizeof(ShmStreamHeader) + 4096, 0);
     Reader r;
     const AttachResult ar = r.attach(zeros.data(), zeros.size());
@@ -262,7 +262,7 @@ TEST_CASE("attach: unknown sampleFormat / channelLayout are rejected, not defaul
 TEST_CASE("attach: an offset past mappedBytes is Malformed") {
     TestProducer prod(defaultParams());
     Reader r;
-    // Map fewer bytes than the section claims.
+    // Map fewer bytes than the segment claims.
     const AttachResult ar = r.attach(prod.base(), prod.size() - 1);
     CHECK(ar == AttachResult::Malformed);
 }
@@ -407,7 +407,7 @@ TEST_CASE("StreamRequest: each field is checked independently") {
 // ===========================================================================
 TEST_CASE("attach: samplesPerBlock overrunning the channel plane is rejected") {
     // The copy bound is header.samplesPerBlock, so THIS is the check that
-    // stands between a corrupt section and a read past the mapping -- the job
+    // stands between a corrupt segment and a read past the mapping -- the job
     // the old per-block sampleCount clamp used to do, moved to the one seam
     // that can do it once instead of per block.
     LayoutParams p{2, 4, 2, SampleFormat::Float32};
@@ -423,7 +423,7 @@ TEST_CASE("attach: samplesPerBlock overrunning the channel plane is rejected") {
 }
 
 TEST_CASE("refreshSnapshot: a rewrite overrunning the channel plane detaches the reader") {
-    // Same bound, reached the other way: the section validated at attach and
+    // Same bound, reached the other way: the segment validated at attach and
     // was then rewritten with a hostile samplesPerBlock under a layoutSeq bump.
     // The reader must fail validation and detach rather than copy to the new
     // bound out of the old planes.
@@ -617,7 +617,7 @@ TEST_CASE("layoutSeq seqlock: a rewrite (odd -> fields change -> even) is picked
     CHECK(r.next(b));
     CHECK(r.channelCount() == 4);
 
-    // A producer restart into a reused, differently-configured section bumps
+    // A producer restart into a reused, differently-configured segment bumps
     // layoutSeq odd -> rewrite -> even. Reproduce just that bump here
     // and confirm the reader re-snapshots rather than continuing against the
     // stale layout it attached with.
@@ -769,7 +769,7 @@ TEST_CASE("Period derivation depends only on samplesPerBlock and sampleRateMilli
 
 TEST_CASE("Size class derivation: smallest fitting class, and the config spelling") {
     // These live in stream/layout.h rather than in the producer because
-    // both the producer and irTactileServer derive section names from them.
+    // both the producer and irTactileServer derive segment names from them.
     // A drift between the two would resolve to different names, which is the
     // one failure mode name derivation is supposed to make impossible.
     SUBCASE("smallestSizeClassFor picks the smallest envelope that fits") {
@@ -818,7 +818,7 @@ TEST_CASE("The reference profile resolves to the class its documentation claims"
     // examples/reader_min.cpp: 8 ch @ 3000 Hz (divisor 16), framesPerPublish 6
     // -> 48 samples/block, ring 2, float32.
     //
-    // This exists because the size class is baked into the section name, so the
+    // This exists because the size class is baked into the segment name, so the
     // class this profile lands in IS the name a third party opens. README.md
     // states it literally and examples/reader_win32.cpp hardcodes it as its
     // default argument; both go stale silently if the sizing ever shifts, and
@@ -971,7 +971,7 @@ TEST_CASE("int16 round-trip is within 1 LSB and clamps rather than wraps") {
     CHECK(floatToInt16(1.0f) >= 32000);
 }
 
-TEST_CASE("Round-trip over int16-formatted section decodes via the same BlockView API") {
+TEST_CASE("Round-trip over int16-formatted segment decodes via the same BlockView API") {
     TestProducer prod(LayoutParams{2, 4, 2, SampleFormat::Int16});
     Reader r;
     REQUIRE(r.attach(prod.base(), prod.size()) == AttachResult::Ok);

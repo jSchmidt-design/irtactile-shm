@@ -5,8 +5,8 @@
 // SPDX-License-Identifier: MIT
 //
 // Portable: it works on a caller-provided, 8-byte-aligned buffer (a mapped
-// section, or a vector in a test) and takes QPC values as parameters. The
-// Windows section handling is win32.h.
+// segment, or a vector in a test) and takes QPC values as parameters. The
+// Windows segment handling is win32.h.
 //
 //     Producer p;
 //     p.open(base, Producer::requiredBytes(256), /*capacity*/ 256, Identity{});
@@ -46,9 +46,9 @@ struct Identity {
 
 enum class OpenResult : uint32_t {
     Ok,
-    TooSmall,      ///< the buffer (or the pinned totalBytes of an existing section) cannot hold the layout
+    TooSmall,      ///< the buffer (or the pinned totalBytes of an existing segment) cannot hold the layout
     BadIdentity,   ///< simId is not a valid owner id or is reserved
-    SectionFailed, ///< ProducerSection only: the OS refused to create or map the section (access, namespace)
+    SegmentFailed, ///< ProducerSegment only: the OS refused to create or map the segment (access, namespace)
 };
 
 inline const char* toCString(OpenResult r) noexcept
@@ -57,7 +57,7 @@ inline const char* toCString(OpenResult r) noexcept
         case OpenResult::Ok:            return "Ok";
         case OpenResult::TooSmall:      return "TooSmall";
         case OpenResult::BadIdentity:   return "BadIdentity";
-        case OpenResult::SectionFailed: return "SectionFailed";
+        case OpenResult::SegmentFailed: return "SegmentFailed";
     }
     return "?";
 }
@@ -98,11 +98,11 @@ class Producer {
 public:
     static constexpr int kInvalidSlot = telemetry::kInvalidSlot;
 
-    /// Bytes a section needs for `capacity` slots.
+    /// Bytes a segment needs for `capacity` slots.
     static constexpr uint32_t requiredBytes(uint32_t capacity) noexcept { return layoutFor(capacity).totalBytes; }
 
     /// Binds to the buffer. `base` must be 8-byte aligned. If the buffer already holds a valid header (a restart
-    /// into an existing section) its pinned fields are kept; `capacity` is clamped to what fits.
+    /// into an existing segment) its pinned fields are kept; `capacity` is clamped to what fits.
     OpenResult open(void* base, size_t bytes, uint32_t capacity, Identity identity)
     {
         if (!channels::isValidOwnerId(identity.simId) && !identity.simId.empty()) return OpenResult::BadIdentity;
@@ -113,7 +113,7 @@ public:
         Header* h = header();
         m_total = static_cast<uint32_t>(bytes);
         if (h->magic == kMagic && h->headerBytes == kHeaderBytes && h->totalBytes <= bytes && h->totalBytes >= kHeaderBytes) {
-            m_total = h->totalBytes;   // restart into an existing section: totalBytes is pinned
+            m_total = h->totalBytes;   // restart into an existing segment: totalBytes is pinned
         }
         while (capacity >= kMinCapacity && layoutFor(capacity).totalBytes > m_total) capacity -= 64;
         if (!isValidCapacity(capacity)) return OpenResult::TooSmall;
@@ -231,7 +231,7 @@ public:
     }
 
     /// Publishes header layout fields and the descriptor table under the layout seqlock. Also the first call
-    /// that makes the section visible (magic is stored last). Clears the frame data.
+    /// that makes the segment visible (magic is stored last). Clears the frame data.
     bool commitLayout()
     {
         if (m_base == nullptr) return false;

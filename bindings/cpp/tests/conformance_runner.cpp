@@ -288,7 +288,7 @@ void runCase(const json& c, const fs::path& base)
                       "mismatchDetail missing expected field name");
             if (expect.contains("fields")) checkFields(reader, expect["fields"]);
         } else if (op == "patch") {
-            // The producer advanced the section: the blob replaces the whole
+            // The producer advanced the segment: the blob replaces the whole
             // buffer. Sizes must match - a patch is a rewrite, not a remap.
             std::vector<uint8_t> next = readBlob(base / step["blob"].get<std::string>());
             check(next.size() == buf.size(), "patch blob size differs from the case blob");

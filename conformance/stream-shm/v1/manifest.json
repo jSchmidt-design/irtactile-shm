@@ -12,7 +12,7 @@
   "cases": [
     {
       "id": "attach.zero_filled",
-      "summary": "zero-filled section is NotReady and retryable",
+      "summary": "zero-filled segment is NotReady and retryable",
       "blob": "decode/attach_zero_filled.bin",
       "steps": [
         {
@@ -117,7 +117,7 @@
     },
     {
       "id": "attach.offset_past_mapped",
-      "summary": "a section smaller than its header's totalBytes is Malformed",
+      "summary": "a segment smaller than its header's totalBytes is Malformed",
       "blob": "decode/attach_offset_past_mapped.bin",
       "steps": [
         {
@@ -257,7 +257,7 @@
     },
     {
       "id": "attach.unaligned_slot_array_offset",
-      "summary": "slotArrayOffset not a multiple of bytesPerSample is Malformed: every plane in the section would be misaligned",
+      "summary": "slotArrayOffset not a multiple of bytesPerSample is Malformed: every plane in the segment would be misaligned",
       "blob": "decode/attach_unaligned_slot_array_offset.bin",
       "steps": [
         {
@@ -355,7 +355,7 @@
     },
     {
       "id": "attach.rewrite_in_progress",
-      "summary": "a section whose layoutSeq is odd is NotReady and retryable, never read torn; the completed rewrite then attaches with the new layout",
+      "summary": "a segment whose layoutSeq is odd is NotReady and retryable, never read torn; the completed rewrite then attaches with the new layout",
       "blob": "decode/attach_rewrite_in_progress_torn.bin",
       "steps": [
         {
@@ -418,7 +418,7 @@
     },
     {
       "id": "attach.request_mismatch",
-      "summary": "a StreamRequest field the section cannot satisfy is Mismatch, not retryable",
+      "summary": "a StreamRequest field the segment cannot satisfy is Mismatch, not retryable",
       "blob": "decode/attach_request_mismatch.bin",
       "steps": [
         {

@@ -4,9 +4,9 @@
 //
 // A managed implementation of spec/telemetry-shm/v1, written against the spec
 // and checked against the same conformance vectors as the C++ binding
-// (the encode cases compare section bytes).
+// (the encode cases compare segment bytes).
 //
-//     using var s = TelemetrySection.Create(TelemetryLayout.InboundName("demo"), 256,
+//     using var s = TelemetrySegment.Create(TelemetryLayout.InboundName("demo"), 256,
 //                                           new ProducerIdentity { SimName = "My Sim" });
 //     TelemetryProducer p = s.Producer;
 //     int rpm = p.Declare(Std.All[(int)StdChannel.EngineRpm]);
@@ -54,7 +54,7 @@ public enum TelemetryOpenResult
     /// <summary>Bound.</summary>
     Ok,
 
-    /// <summary>The buffer (or the pinned totalBytes of an existing section) cannot hold the layout.</summary>
+    /// <summary>The buffer (or the pinned totalBytes of an existing segment) cannot hold the layout.</summary>
     TooSmall,
 
     /// <summary>simId is not a valid owner id or is reserved.</summary>
@@ -134,11 +134,11 @@ public static class TelemetryLayout
     public static bool IsValidCapacity(int capacity) =>
         capacity >= MinCapacity && capacity <= MaxCapacity && capacity % 64 == 0;
 
-    /// <summary>Bytes a section needs for <paramref name="capacity"/> slots.</summary>
+    /// <summary>Bytes a segment needs for <paramref name="capacity"/> slots.</summary>
     public static int RequiredBytes(int capacity) =>
         HeaderBytes + capacity * DescBytes + (capacity / 64) * 8 + capacity * 4 + capacity * 4;
 
-    /// <summary>The recommended section name, <c>irTactile_Telemetry_&lt;simId&gt;</c>.</summary>
+    /// <summary>The recommended segment name, <c>irTactile_Telemetry_&lt;simId&gt;</c>.</summary>
     public static string InboundName(string simId) => "irTactile_Telemetry_" + simId;
 
     /// <summary>Return-region name derived from the inbound name alone.</summary>
@@ -169,7 +169,7 @@ public static class TelemetryLayout
 }
 
 /// <summary>
-/// Declares channels and publishes frames into a caller-provided buffer (a mapped section, or a pinned
+/// Declares channels and publishes frames into a caller-provided buffer (a mapped segment, or a pinned
 /// array in a test). Single-threaded.
 /// </summary>
 public sealed unsafe class TelemetryProducer
@@ -194,7 +194,7 @@ public sealed unsafe class TelemetryProducer
     public int ChannelCount => _stage.Count;
 
     /// <summary>
-    /// Binds to the buffer (8-byte aligned). If it already holds a valid header (a restart into an existing section)
+    /// Binds to the buffer (8-byte aligned). If it already holds a valid header (a restart into an existing segment)
     /// its pinned fields are kept and <paramref name="capacity"/> is clamped to what fits.
     /// </summary>
     public TelemetryOpenResult Open(byte* baseAddress, long bytes, int capacity, ProducerIdentity identity)
@@ -450,11 +450,11 @@ public sealed class TelemetryReturnView
     }
 }
 
-/// <summary>Owns the named inbound section (Windows) and the <see cref="TelemetryProducer"/> bound to it.</summary>
+/// <summary>Owns the named inbound segment (Windows) and the <see cref="TelemetryProducer"/> bound to it.</summary>
 #if NET5_0_OR_GREATER
 [SupportedOSPlatform("windows")]
 #endif
-public sealed unsafe class TelemetrySection : IDisposable
+public sealed unsafe class TelemetrySegment : IDisposable
 {
     private readonly MemoryMappedFile _inbound;
     private readonly MemoryMappedViewAccessor _view;
@@ -463,7 +463,7 @@ public sealed unsafe class TelemetrySection : IDisposable
     private MemoryMappedViewAccessor? _returnView;
     private byte* _ptr;
 
-    private TelemetrySection(MemoryMappedFile file, MemoryMappedViewAccessor view, byte* ptr, string returnName, TelemetryProducer producer)
+    private TelemetrySegment(MemoryMappedFile file, MemoryMappedViewAccessor view, byte* ptr, string returnName, TelemetryProducer producer)
     {
         _inbound = file;
         _view = view;
@@ -472,11 +472,11 @@ public sealed unsafe class TelemetrySection : IDisposable
         Producer = producer;
     }
 
-    /// <summary>The producer bound to the section.</summary>
+    /// <summary>The producer bound to the segment.</summary>
     public TelemetryProducer Producer { get; }
 
-    /// <summary>Creates (or restarts into) the named section. Windows only.</summary>
-    public static TelemetrySection Create(string inboundName, int capacity, ProducerIdentity identity)
+    /// <summary>Creates (or restarts into) the named segment. Windows only.</summary>
+    public static TelemetrySegment Create(string inboundName, int capacity, ProducerIdentity identity)
     {
         long bytes = TelemetryLayout.RequiredBytes(capacity);
         var file = MemoryMappedFile.CreateOrOpen(inboundName, bytes, MemoryMappedFileAccess.ReadWrite);
@@ -492,7 +492,7 @@ public sealed unsafe class TelemetrySection : IDisposable
             file.Dispose();
             throw new InvalidOperationException("telemetry-shm: " + result);
         }
-        return new TelemetrySection(file, view, ptr, TelemetryLayout.ReturnNameFor(inboundName), producer);
+        return new TelemetrySegment(file, view, ptr, TelemetryLayout.ReturnNameFor(inboundName), producer);
     }
 
     /// <summary>
@@ -571,3 +571,4 @@ public sealed unsafe class TelemetrySection : IDisposable
         _inbound.Dispose();
     }
 }
+

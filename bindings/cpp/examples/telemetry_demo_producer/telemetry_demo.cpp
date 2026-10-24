@@ -9,7 +9,7 @@
 //   demo_bump                              EVENT, one every 2 s
 // Keys: 'a' toggles Active / Inactive (sim running vs. sitting in a menu), 'q' quits.
 //
-// The section name is fixed: configure a sim in irTactile with the shared memory name irTactile_Telemetry_demo
+// The segment name is fixed: configure a sim in irTactile with the shared memory name irTactile_Telemetry_demo
 // to read it. Once a second it prints how many channels irTactile accepted and demanded.
 
 #include <irtactile/shm/telemetry.h>
@@ -27,15 +27,15 @@ namespace channels = irtactile::shm::channels;
 
 int main()
 {
-    const std::string section = inboundName("demo");
+    const std::string segment = inboundName("demo");
 
     Identity id;
     id.simId = "";               // empty: irTactile uses the id of the sim it is configured for (sim.<id>.*)
     id.simName = "telemetry_demo";
 
-    ProducerSection s;
-    if (s.create(section, 256, id) != OpenResult::Ok) {
-        std::fprintf(stderr, "cannot create section %s\n", section.c_str());
+    ProducerSegment s;
+    if (s.create(segment, 256, id) != OpenResult::Ok) {
+        std::fprintf(stderr, "cannot create segment %s\n", segment.c_str());
         return 1;
     }
     Producer& p = s.producer();
@@ -47,9 +47,9 @@ int main()
     const int wave = p.declareLocal("demo_wave", "", -1.0f, 1.0f, channels::Kind::Continuous);
     const int bump = p.declareLocal("demo_bump", "", 0.0f, 1.0f, channels::Kind::Event);
     p.setCar("demo_car", "Demo Car");
-    p.commitLayout();   // the section becomes visible here
+    p.commitLayout();   // the segment becomes visible here
 
-    std::printf("telemetry_demo: section '%s'\n  a = toggle Active/Inactive, q = quit\n", section.c_str());
+    std::printf("telemetry_demo: segment '%s'\n  a = toggle Active/Inactive, q = quit\n", segment.c_str());
 
     bool active = true;
     p.setState(ProducerState::Active, qpcNow());

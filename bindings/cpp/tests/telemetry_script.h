@@ -1,7 +1,7 @@
 // Scripted producer calls for the telemetry-shm vector suite (conformance/telemetry-shm/v1).
 // Shared by the vector generator (tools/mkvectors_telemetry) and the C++ conformance runner: a
 // script is a JSON array of ops that drive a Producer over a byte buffer; the resulting bytes are
-// the golden section.
+// the golden segment.
 //
 // Ops: open{capacity,simId,simName,qpcFrequency,pid}; declare{name,count?,provenance?}; wheels{list}; declareLocal{name,unit,min,max,kind,flags}
 //      car{id,name}; commit; state{state,now}; frame{frameQpc,now,set:{slot:v},event:{slot:amp}}
@@ -48,8 +48,8 @@ inline sh::ProducerState stateOf(const std::string& s)
     throw std::runtime_error("unknown state " + s);
 }
 
-/// Runs `script` against `buffer` (8-byte aligned storage of the section size). The buffer may hold a
-/// previous section (restart).
+/// Runs `script` against `buffer` (8-byte aligned storage of the segment size). The buffer may hold a
+/// previous segment (restart).
 inline void run(const json& script, std::vector<uint64_t>& buffer)
 {
     sh::Producer producer;

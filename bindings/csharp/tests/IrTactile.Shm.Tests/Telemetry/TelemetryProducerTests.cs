@@ -1,5 +1,5 @@
 // telemetry-shm v1 producer: the encode cases of the conformance suite
-// (conformance/telemetry-shm/v1) must reproduce the golden section bytes. The golden bytes come
+// (conformance/telemetry-shm/v1) must reproduce the golden segment bytes. The golden bytes come
 // from the C++ binding, so a pass proves two independent implementations write the same layout.
 //
 // SPDX-License-Identifier: MIT
@@ -101,10 +101,10 @@ public unsafe class TelemetryProducerTests
         {
             byte* raw = (byte*)pin.AddrOfPinnedObject();
             byte* aligned = (byte*)(((long)raw + 7) & ~7L);
-            var section = new Span<byte>(aligned, bytes);
+            var segment = new Span<byte>(aligned, bytes);
             if (c.TryGetProperty("initial", out JsonElement init))
             {
-                File.ReadAllBytes(Path.Combine(Dir, init.GetString()!)).AsSpan(0, bytes).CopyTo(section);
+                File.ReadAllBytes(Path.Combine(Dir, init.GetString()!)).AsSpan(0, bytes).CopyTo(segment);
             }
 
             var p = new TelemetryProducer();
@@ -173,7 +173,7 @@ public unsafe class TelemetryProducerTests
             Assert.Equal(bytes, golden.Length);
             for (int i = 0; i < bytes; i++)
             {
-                if (section[i] != golden[i]) Assert.Fail($"byte {i}: got {section[i]}, want {golden[i]}");
+                if (segment[i] != golden[i]) Assert.Fail($"byte {i}: got {segment[i]}, want {golden[i]}");
             }
         }
         finally

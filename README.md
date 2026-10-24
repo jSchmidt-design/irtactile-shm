@@ -16,12 +16,12 @@ other, so the spec stays the authority either way. One exception: the telemetry-
 *encode* vectors are the C++ producer's output, so they check the C# producer against
 the C++ one; the expectations of every decode case are written from the spec.
 
-**Platform.** The shared section and the event that signals new data are named Windows
+**Platform.** The shared segment and the event that signals new data are named Windows
 kernel objects, so `Client`, which owns the mapping and the waiting, runs only on
 Windows. `Reader` has no such tie: hand it a mapped buffer and it works anywhere, and
 the C++ `reader_min.cpp` example builds on Linux to prove it. The same split holds for
-telemetry-shm: `Producer` works on any buffer, the named sections (`win32.h`,
-`TelemetrySection`) are Windows only. Both sides also need to
+telemetry-shm: `Producer` works on any buffer, the named segments (`win32.h`,
+`TelemetrySegment`) are Windows only. Both sides also need to
 be 64-bit. The protocol depends on 8-byte atomic loads, which x64 gives you for free
 and 32-bit cannot reliably guarantee, and irTactile ships no 32-bit producer in any
 case.
@@ -100,7 +100,7 @@ while (c.Wait() != WaitResult.Closed)
 
 The payload is **planar**: one channel's samples are contiguous, and `channel(ch)`
 hands back that run directly. It is always `float`, converted on the way out when the
-section carries int16, so a consumer never branches on `sampleFormat`. The block
+segment carries int16, so a consumer never branches on `sampleFormat`. The block
 carries the channel count of the layout it was decoded under, which is what makes the
 loop above survive a reconfigure. `silentChannelMask` marks the channels that are
 all-zero in this block, if skipping them is worth the branch.

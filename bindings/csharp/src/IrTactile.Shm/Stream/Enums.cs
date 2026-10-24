@@ -29,7 +29,7 @@ public enum ChannelLayout : uint
 
 /// <summary>
 /// What the producer is doing with this device (header field <c>deviceState</c>).
-/// Inactive is 0 so a freshly created, zero-filled section reads as "not being
+/// Inactive is 0 so a freshly created, zero-filled segment reads as "not being
 /// driven" before the header is written.
 /// </summary>
 public enum DeviceState : uint
@@ -59,19 +59,19 @@ public enum BlockFlags : uint
 }
 
 /// <summary>
-/// Sections are sized into three discrete buckets; the suffix is part of the
-/// section and event names. A restart needing a larger layout switches name
-/// instead of colliding with a consumer still holding the old section open.
+/// Segments are sized into three discrete buckets; the suffix is part of the
+/// segment and event names. A restart needing a larger layout switches name
+/// instead of colliding with a consumer still holding the old segment open.
 /// </summary>
 public enum SizeClass : uint
 {
-    /// <summary>256 KiB section.</summary>
+    /// <summary>256 KiB segment.</summary>
     S256K = 0,
 
-    /// <summary>512 KiB section.</summary>
+    /// <summary>512 KiB segment.</summary>
     S512K = 1,
 
-    /// <summary>1 MiB section.</summary>
+    /// <summary>1 MiB segment.</summary>
     S1M = 2,
 }
 
@@ -81,7 +81,7 @@ public enum AttachResult : uint
     /// <summary>Attached.</summary>
     Ok,
 
-    /// <summary>magic == 0: section exists, header not written yet. RETRY.</summary>
+    /// <summary>magic == 0: segment exists, header not written yet. RETRY.</summary>
     NotReady,
 
     /// <summary>versionMajor mismatch, or an unknown enum value.</summary>
@@ -122,7 +122,7 @@ public enum WaitResult : uint
     NoBlocks,
 
     /// <summary>
-    /// Same-section rewrite of an addressing-relevant field. The snapshot is
+    /// Same-segment rewrite of an addressing-relevant field. The snapshot is
     /// already refreshed, so all layout-derived accessors are valid for the new
     /// layoutSeq. Re-check any <see cref="StreamRequest"/>.
     /// </summary>
@@ -151,10 +151,10 @@ public enum OpenResult : uint
     /// <summary>Opened and attached.</summary>
     Ok,
 
-    /// <summary>Section not found - irTactile is not up yet. RETRY.</summary>
+    /// <summary>Segment not found - irTactile is not up yet. RETRY.</summary>
     NotFound,
 
-    /// <summary>Section exists, header not yet written. RETRY.</summary>
+    /// <summary>Segment exists, header not yet written. RETRY.</summary>
     NotReady,
 
     /// <summary>Wrong session, or a Global\ name without the privilege.</summary>

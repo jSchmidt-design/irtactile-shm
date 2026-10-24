@@ -2,6 +2,11 @@
 
 ## 1.3.0 - Unreleased
 
+- Terminology: "section" is now "segment" (named shared memory; Windows: file mapping) in the bindings, spec and
+  docs. The wire format and the shared memory names are unchanged. Renamed without aliases: C++ `ProducerSection`,
+  `ConsumerSection`, `ReturnSection`, `SectionOpen`, `OpenResult::SectionFailed` (now `ProducerSegment`,
+  `ConsumerSegment`, `ReturnSegment`, `SegmentOpen`, `SegmentFailed`); C# `TelemetrySection` (now
+  `TelemetrySegment`); `irtp_probe --section` (now `--segment`).
 - `bindings/cpp`, additive (no wire-format change):
   - `LocalChannel` + `Producer::declareLocal(const LocalChannel&)`: named fields instead of seven positional
     arguments (the positional overload stays).
@@ -9,8 +14,8 @@
     all or nothing.
   - `SlotRange` + `Producer::declareArrayRange()`: every element slot of an array, not only element 0.
   - `Frame::isValid(slot)`; `kindOf` / `provenanceOf` / `layoutOf` typed views of a `ChannelDesc`.
-  - `toCString()` for `OpenResult`, `ReadResult`, `ProducerState`, `SectionOpen`.
-  - `irtactile/shm/common/qpc.h`: `shm::qpcNow()` / `shm::qpcFrequency()` without the section handling;
+  - `toCString()` for `OpenResult`, `ReadResult`, `ProducerState`, `SegmentOpen`.
+  - `irtactile/shm/common/qpc.h`: `shm::qpcNow()` / `shm::qpcFrequency()` without the segment handling;
     `telemetry::qpcNow` / `qpcFrequency` remain as aliases.
 
 ## 1.2.0 - Unreleased
