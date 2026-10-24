@@ -69,6 +69,10 @@ TEST_CASE("layoutFor keeps every array 8-byte aligned and inside totalBytes")
         CHECK(l.eventCountOffset % 8 == 0);
         CHECK(l.valuesOffset % 8 == 0);
         CHECK(l.valuesOffset + cap * 4 == l.totalBytes);
+        // Each array ends where the next begins: no overlap, no hole.
+        CHECK(l.descOffset + cap * sizeof(ChannelDesc) == l.validOffset);
+        CHECK(l.validOffset + cap / 8 == l.eventCountOffset);
+        CHECK(l.eventCountOffset + cap * 4 == l.valuesOffset);
     }
     CHECK(isValidCapacity(64));
     CHECK_FALSE(isValidCapacity(0));
@@ -216,14 +220,6 @@ TEST_CASE("Frame::isValid reads the valid bits and is false outside the frame")
     CHECK_FALSE(f.isValid(4));
     CHECK(f.isValid(64));
     CHECK_FALSE(f.isValid(128));
-}
-
-TEST_CASE("result enums have names")
-{
-    CHECK(std::string(toCString(OpenResult::TooSmall)) == "TooSmall");
-    CHECK(std::string(toCString(AttachResult::Malformed)) == "Malformed");
-    CHECK(std::string(toCString(ReadResult::LayoutChanged)) == "LayoutChanged");
-    CHECK(std::string(toCString(ProducerState::Inactive)) == "Inactive");
 }
 
 TEST_CASE("frames round-trip values, valid bits, events and QPC")

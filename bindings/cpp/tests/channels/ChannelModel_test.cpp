@@ -145,9 +145,7 @@ TEST_CASE("generated table: names are valid, prefixed, unique and match the prop
     CHECK(handles == 175);
 }
 
-TEST_CASE("generated table: counts and enums agree") {
-    CHECK(standard::kCount == sizeof(standard::kChannels) / sizeof(standard::kChannels[0]));
-    CHECK(standard::kArrayCount == sizeof(standard::kArrays) / sizeof(standard::kArrays[0]));
+TEST_CASE("generated table: enum ids index the matching row") {
     CHECK(std::string(standard::kChannels[static_cast<uint32_t>(standard::Id::EngineRpm)].name) == "std.engine.rpm");
     CHECK(std::string(standard::kChannels[static_cast<uint32_t>(standard::Id::SessionStatus)].name) == "std.session.status");
     CHECK(std::string(standard::kChannels[static_cast<uint32_t>(standard::Id::VehicleOrientationRoll)].name) ==

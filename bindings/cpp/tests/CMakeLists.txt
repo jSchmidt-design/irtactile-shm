@@ -8,15 +8,18 @@ project(irtactile_shm_tests LANGUAGES CXX)
 #   cmake --build build-tests
 #   ctest --test-dir build-tests
 #
-# Two test targets, both registered with CTest:
+# Five test targets, all registered with CTest:
 #
-#   conformance_runner  - the C++ leg of the vector suite (conformance/
-#     README.md): it drives Reader from manifest.json + the golden blobs, with
-#     no test framework, so the file doubles as the reference harness for
-#     other bindings.
+#   conformance_runner  - the C++ leg of the stream-shm vector suite
+#     (conformance/README.md): it drives Reader from manifest.json + the
+#     golden blobs, with no test framework, so the file doubles as the
+#     reference harness for other bindings.
+#   telemetry_conformance_runner - the same for the telemetry-shm vectors.
 #   stream_shm_tests    - the doctest format suite (stream/StreamShm_test.cpp),
 #     covering the publish protocol, the addressing arithmetic and the
 #     reader's forward-compatibility rules over a plain std::vector<uint8_t>.
+#   telemetry_shm_tests - the doctest suite for the telemetry-shm binding.
+#   channels_tests      - the channel-name rules and the generated std table.
 #
 # Both dependencies (nlohmann/json, doctest) are repo-local test tooling,
 # fetched at configure time and never shipped with the binding.

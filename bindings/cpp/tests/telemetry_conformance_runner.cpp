@@ -77,6 +77,17 @@ struct Failures {
             fail(std::string(field) + ": got " + g + ", want " + w);
         }
     }
+    /// Fail on any key the harness does not act on: a misspelled or newly
+    /// added expectation must not pass silently.
+    void knownKeys(const json& obj, const char* what, std::initializer_list<const char*> known)
+    {
+        for (const auto& [k, v] : obj.items()) {
+            (void)v;
+            bool ok = false;
+            for (const char* n : known) ok = ok || k == n;
+            if (!ok) fail(std::string("unknown key in ") + what + ": " + k);
+        }
+    }
 };
 
 void checkAttach(const Reader& r, const json& ex, Failures& f)
@@ -129,6 +140,26 @@ void runCase(const json& c, const std::string& dir, Failures& f)
 {
     const std::string op = c.at("op");
     const json& ex = c.at("expect");
+
+    f.knownKeys(c, "case", {"name", "op", "file", "expect", "mappedBytes", "lastSeen", "bytes", "initial", "script"});
+    if (op == "attach") {
+        f.knownKeys(ex, "attach expectation", {"attach", "capacity", "channelCount", "simId", "simName", "carId",
+                                               "carName", "wheelsPerAxle", "layoutSeq", "descNames", "descs"});
+        if (ex.contains("descs")) {
+            for (const json& d : ex["descs"]) {
+                f.knownKeys(d, "desc expectation", {"slot", "name", "unit", "kind", "flags", "arrayIndex",
+                                                    "arrayCapacity", "provenance", "layout", "valid", "tableMatch"});
+            }
+        }
+    } else if (op == "frame") {
+        f.knownKeys(ex, "frame expectation", {"attach", "result", "producerState", "lastPublishQpc", "frameSeq",
+                                              "frameQpc", "values", "validSlots", "eventCounts"});
+    } else if (op == "return") {
+        f.knownKeys(ex, "return expectation", {"attach", "read", "capacity", "forLayoutSeq", "consumerState",
+                                               "lastConsumeQpc", "accepted", "demanded"});
+    } else if (op == "encode") {
+        f.knownKeys(ex, "encode expectation", {});
+    }
 
     if (op == "encode") {
         std::vector<uint64_t> buf((c.at("bytes").get<size_t>() + 7) / 8, 0);

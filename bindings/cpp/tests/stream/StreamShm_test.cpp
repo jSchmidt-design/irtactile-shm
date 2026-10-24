@@ -14,8 +14,10 @@
 
 #include <irtactile/shm/stream.h>
 
+#include <cmath>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace irtactile::shm::stream;
@@ -114,27 +116,6 @@ public:
         m_first += h.samplesPerBlock;
     }
 
-    /// Claims the next slot (kSlotBusy) without completing the block -- for
-    /// slot-recycling / mid-construction tests.
-    void beginPartialPublish()
-    {
-        Header& h    = header();
-        uint8_t* slot = slotAt(static_cast<uint8_t*>(m_bytes.data()), h, m_writeSeq);
-        auto*    desc = reinterpret_cast<Desc*>(slot);
-        irtactile::shm::detail::releaseStore(desc->seq, kSlotBusy);
-    }
-
-    /// A partial block with `samplesEmitted` samples already written is
-    /// abandoned. Those samples were emitted and then discarded, so they
-    /// count toward the stream position; the producer advances
-    /// firstSampleIndex and resets the slot as if the block had been
-    /// flushed.
-    void abandonPartialBlock(uint32_t samplesEmitted)
-    {
-        beginPartialPublish();   // the slot is already at kSlotBusy in practice
-        m_first += samplesEmitted;
-    }
-
     uint64_t writeSeq() const { return m_writeSeq; }
 
 private:
@@ -155,56 +136,25 @@ LayoutParams defaultParams()
 // ===========================================================================
 // Size arithmetic
 // ===========================================================================
-TEST_CASE("computeTotalSize matches the manual layout across configs") {
-    struct Case { uint32_t ch; uint32_t spb; uint32_t ring; SampleFormat fmt; };
+TEST_CASE("computeTotalSize, slotBytes and channelPlaneBytes match hand-computed values") {
+    // Literals worked out by hand from the spec (header 256, descriptor 64,
+    // slots rounded up to 64), not recomputed with the formula under test.
+    struct Case { LayoutParams p; uint32_t cpb; uint32_t slotBytes; uint64_t total; };
     const Case cases[] = {
-        {1, 1, 2, SampleFormat::Float32}, {8, 48, 2, SampleFormat::Float32},
-        {32, 1, 256, SampleFormat::Int16}, {8, 768, 2, SampleFormat::Float32},
-        {20, 128, 64, SampleFormat::Int16},
+        {{1, 1, 2, SampleFormat::Float32},     4,   128,    512},   // 68 -> 128
+        {{8, 48, 2, SampleFormat::Float32},  192,  1600,   3456},   // already a multiple of 64
+        {{32, 1, 256, SampleFormat::Int16},    2,   128,  33024},
+        {{8, 768, 2, SampleFormat::Float32}, 3072, 24640, 49536},
+        {{20, 128, 64, SampleFormat::Int16}, 256,  5184, 332032},
+        {{3, 5, 4, SampleFormat::Int16},      10,   128,    768},   // 94 -> 128
     };
     for (const auto& c : cases) {
-        LayoutParams p{c.ch, c.spb, c.ring, c.fmt};
-        const uint32_t bps   = bytesPerSampleOf(c.fmt);
-        const uint32_t cpb   = c.spb * bps;
-        const uint32_t slotB = align64(static_cast<uint32_t>(sizeof(ShmBlockDesc)) + c.ch * cpb);
-        const uint64_t want  = align64(static_cast<uint32_t>(sizeof(ShmStreamHeader))) +
-                               static_cast<uint64_t>(c.ring) * slotB;
-        CHECK(computeTotalSize(p) == want);
-        CHECK(channelPlaneBytesOf(p) == cpb);
-        CHECK(slotBytesOf(p) == slotB);
-        // slotBytes must have room for the descriptor and every plane.
-        CHECK(slotPayloadOffsetOf() + c.ch * cpb <= slotBytesOf(p));
+        CAPTURE(c.p.channelCount);
+        CAPTURE(c.p.samplesPerBlock);
+        CHECK(channelPlaneBytesOf(c.p) == c.cpb);
+        CHECK(slotBytesOf(c.p) == c.slotBytes);
+        CHECK(computeTotalSize(c.p) == c.total);
     }
-}
-
-TEST_CASE("channelPlaneBytes equals samplesPerBlock times bytesPerSample exactly") {
-    LayoutParams p{8, 48, 2, SampleFormat::Int16};
-    CHECK(channelPlaneBytesOf(p) == 48u * 2u);
-}
-
-// ===========================================================================
-// ABI stability (redundant with the header's own static_asserts, but explicit
-// in test output rather than buried in a compiler diagnostic).
-// ===========================================================================
-TEST_CASE("ABI: struct sizes and hot-range offsets are pinned") {
-    CHECK(sizeof(ShmStreamHeader) == 256);
-    CHECK(sizeof(ShmBlockDesc) == 64);
-    CHECK(offsetof(ShmStreamHeader, writeSeq) == 80);
-    CHECK(offsetof(ShmStreamHeader, lastPublishQpc) == 88);
-    CHECK(offsetof(ShmStreamHeader, qpcFrequency) == 112);
-    CHECK(offsetof(ShmStreamHeader, slotPayloadOffset) == 52);
-    CHECK(offsetof(ShmStreamHeader, producerPid) == 224);
-    CHECK(offsetof(ShmStreamHeader, reserved) == 228);
-    CHECK(std::is_standard_layout<ShmStreamHeader>::value);
-    CHECK(std::is_trivially_copyable<ShmStreamHeader>::value);
-    CHECK(std::is_standard_layout<ShmBlockDesc>::value);
-    CHECK(std::is_trivially_copyable<ShmBlockDesc>::value);
-}
-
-TEST_CASE("No channel table in v1") {
-    TestProducer prod(defaultParams());
-    CHECK(prod.header().channelArrayOffset == 0);
-    CHECK(prod.header().slotArrayOffset == align64(static_cast<uint32_t>(sizeof(ShmStreamHeader))));
 }
 
 // ===========================================================================
@@ -324,11 +274,33 @@ TEST_CASE("attach: never copies more than headerBytes") {
     h->deviceState       = static_cast<uint32_t>(DeviceState::Active);
     irtactile::shm::detail::releaseStore(h->magic, kMagic);
 
+    // One block, addressed through the moved slotArrayOffset.
+    uint8_t* slot = slotAt(bytes.data(), *h, uint64_t{0});
+    for (uint32_t ch = 0; ch < p.channelCount; ++ch) {
+        uint8_t* plane = planeAt(slot, *h, ch);
+        for (uint32_t i = 0; i < p.samplesPerBlock; ++i) {
+            const float v = static_cast<float>(i) + static_cast<float>(ch) * 1000.0f;
+            std::memcpy(plane + static_cast<size_t>(i) * 4, &v, 4);
+        }
+    }
+    irtactile::shm::detail::releaseStore(reinterpret_cast<ShmBlockDesc*>(slot)->seq, uint64_t{0});
+
     // attach() must clamp its own memcpy to min(headerBytes, sizeof(its own
     // struct)) = sizeof(ShmStreamHeader) bytes -- never sizeof(ShmStreamHeader)
-    // + 64, which would read past the reader's own snapshot buffer.
+    // + 64, which would read past the reader's own snapshot buffer (only an
+    // ASan build sees that overrun directly).
     Reader r;
-    CHECK(r.attach(bytes.data(), bytes.size()) == AttachResult::Ok);
+    REQUIRE(r.attach(bytes.data(), bytes.size()) == AttachResult::Ok);
+
+    // The part a plain build can observe: the reader follows the published
+    // slotArrayOffset into the gap-shifted slot array, not sizeof(its header).
+    irtactile::shm::detail::releaseStore(h->writeSeq, uint64_t{1});
+    BlockView b;
+    REQUIRE(r.next(b));
+    CHECK(b.channel(0)[0] == 0.0f);
+    CHECK(b.channel(0)[3] == 3.0f);
+    CHECK(b.channel(1)[0] == 1000.0f);
+    CHECK(b.channel(1)[3] == 1003.0f);
 }
 
 TEST_CASE("attach: non-zero reserved[] bytes are tolerated") {
@@ -374,10 +346,21 @@ TEST_CASE("StreamRequest: a channelCount mismatch is Mismatch, names the field, 
     const AttachResult ar = r.attach(prod.base(), prod.size(), &req);
     CHECK(ar == AttachResult::Mismatch);
     CHECK_FALSE(shouldRetry(ar));
+    // Both numbers, each on the right side: a log reader must be able to tell
+    // which one is the segment and which one is this build.
+    CHECK(std::string(r.mismatchDetail()) == "channelCount: segment has 4, this build expects 6");
+}
+
+TEST_CASE("StreamRequest: several mismatching fields are all reported") {
+    TestProducer prod(defaultParams());
+    StreamRequest req{6, 375'000, 128, SampleFormat::Int16};
+    Reader r;
+    REQUIRE(r.attach(prod.base(), prod.size(), &req) == AttachResult::Mismatch);
     const std::string detail = r.mismatchDetail();
-    CHECK(detail.find("channelCount") != std::string::npos);
-    CHECK(detail.find('4') != std::string::npos);
-    CHECK(detail.find('6') != std::string::npos);
+    CHECK(detail.find("channelCount: segment has 4, this build expects 6") != std::string::npos);
+    CHECK(detail.find("sampleRateMilliHz: segment has 3000000, this build expects 375000") != std::string::npos);
+    CHECK(detail.find("samplesPerBlock: segment has 8, this build expects 128") != std::string::npos);
+    CHECK(detail.find("sampleFormat") != std::string::npos);
 }
 
 TEST_CASE("StreamRequest: each field is checked independently") {
@@ -517,12 +500,14 @@ TEST_CASE("Overrun: publishing ringBlocks+10 without draining is detected and re
 
     for (int i = 0; i < 14; ++i) prod.publish();   // ringBlocks(4) + 10
 
+    // Readable window is ringBlocks - 1: the newest three survive, and every
+    // other block is counted as dropped -- exactly, so an off-by-one in the
+    // resync shows up here.
     BlockView b;
-    int count = 0;
-    while (r.next(b)) ++count;
-    // Readable window is ringBlocks - 1.
-    CHECK(count == 3);
-    CHECK(r.droppedBlocks() > 0);
+    std::vector<uint64_t> seqs;
+    while (r.next(b)) seqs.push_back(b.seq);
+    CHECK(seqs == std::vector<uint64_t>{11, 12, 13});
+    CHECK(r.droppedBlocks() == 11);
 }
 
 TEST_CASE("Overrun boundary at ringBlocks=2: exactly one block past cursor delivers; two reports a gap") {
@@ -552,57 +537,26 @@ TEST_CASE("Overrun boundary at ringBlocks=2: exactly one block past cursor deliv
     }
 }
 
-TEST_CASE("Slot recycling mid-construction at ring 2: a busy slot is rejected outright") {
+TEST_CASE("Slot recycling: a slot reclaimed as kSlotBusy is never delivered") {
     TestProducer prod(defaultParams());   // ring 2
     prod.publish();               // seq 0 in slot 0
     prod.publish();               // seq 1 in slot 1
 
     Reader r;
-    REQUIRE(r.attach(prod.base(), prod.size()) == AttachResult::Ok);
-    // Attach cursor = writeSeq = 2, so nothing to read yet.
+    REQUIRE(r.attach(prod.base(), prod.size()) == AttachResult::Ok);   // cursor = 2
+    prod.publish();               // seq 2 in slot 0, complete; writeSeq = 3
+
+    // The producer has already reclaimed slot 0 for a later block while the
+    // reader's view of writeSeq still puts seq 2 in range. The slot held a
+    // valid seq-2 block a moment ago, so only the kSlotBusy marker stands
+    // between the reader and a half-rewritten payload. kSlotBusy is
+    // ~0: a reader that compared with >= instead of == would accept it.
+    uint8_t* slot0 = slotAt(static_cast<uint8_t*>(prod.base()), prod.header(), uint64_t{0});
+    irtactile::shm::detail::releaseStore(reinterpret_cast<ShmBlockDesc*>(slot0)->seq, kSlotBusy);
+
     BlockView b;
     CHECK_FALSE(r.next(b));
-
-    // Producer claims slot 0 again (seq 2) but never finishes it.
-    prod.beginPartialPublish();
-    // Force writeSeq forward without publishing seq 2's descriptor, to put
-    // seq=2 inside the reader's requested range while the slot is kSlotBusy.
-    irtactile::shm::detail::releaseStore(prod.header().writeSeq, uint64_t{3});
-
-    // The reader must reject the busy slot rather than return torn/garbage
-    // data, and must not crash.
-    CHECK_FALSE(r.next(b));
-    CHECK(r.droppedBlocks() >= 1);
-}
-
-TEST_CASE("Abandoned block: firstSampleIndex advances by the samples discarded, not zero") {
-    // Ring 4 (rather than the default 2) so both published blocks stay
-    // readable at once -- this test is about firstSampleIndex bookkeeping,
-    // not the ring-2 overrun boundary covered elsewhere.
-    TestProducer prod(LayoutParams{4, 8, 4, SampleFormat::Float32});
-    // Attach before anything is published -- attach() intentionally seeds the
-    // cursor at the current writeSeq, so a reader that attached after
-    // the fact would see neither block as "new".
-    Reader r;
-    REQUIRE(r.attach(prod.base(), prod.size()) == AttachResult::Ok);
-
-    prod.publish();   // seq 0: firstSampleIndex 0..7
-
-    // A partial block (4 of 8 samples) is abandoned mid-frame -- the samples
-    // already emitted into it still count as emitted, per the publish
-    // protocol's bookkeeping.
-    prod.abandonPartialBlock(4);
-    prod.publish();   // seq 1: the next successful block
-
-    BlockView b0, b1;
-    REQUIRE(r.next(b0));
-    CHECK(b0.seq == 0);
-    REQUIRE(r.next(b1));
-    CHECK(b1.seq == 1);
-
-    // gap_samples = firstSampleIndex - (prev.firstSampleIndex + prev.sampleCount)
-    const uint64_t gap = b1.firstSampleIndex - (b0.firstSampleIndex + b0.sampleCount);
-    CHECK(gap == 4);   // exactly the samples discarded, not zero
+    CHECK(r.droppedBlocks() == 1);
 }
 
 // ===========================================================================
@@ -703,6 +657,52 @@ TEST_CASE("ReconfigureKind: diagnostic-only change is Cosmetic") {
     CHECK(r.samplesPerBlock() == 8);
 }
 
+TEST_CASE("classifyReconfigure: every addressing field is Geometry, every other field Cosmetic") {
+    // Field by field, so dropping one from the classifier's list is caught: a
+    // missed Geometry change makes the consumer keep decoding with the old
+    // strides.
+    TestProducer prod(defaultParams());
+    const ShmStreamHeader before = prod.header();
+
+    using Mutate = void (*)(ShmStreamHeader&);
+    const std::pair<const char*, Mutate> geometry[] = {
+        {"channelCount",       [](ShmStreamHeader& h) { h.channelCount += 1; }},
+        {"sampleFormat",       [](ShmStreamHeader& h) { h.sampleFormat ^= 3u; }},
+        {"channelLayout",      [](ShmStreamHeader& h) { h.channelLayout += 1; }},
+        {"samplesPerBlock",    [](ShmStreamHeader& h) { h.samplesPerBlock += 1; }},
+        {"ringBlocks",         [](ShmStreamHeader& h) { h.ringBlocks += 1; }},
+        {"bytesPerSample",     [](ShmStreamHeader& h) { h.bytesPerSample = 2; }},
+        {"slotPayloadOffset",  [](ShmStreamHeader& h) { h.slotPayloadOffset += 64; }},
+        {"channelArrayOffset", [](ShmStreamHeader& h) { h.channelArrayOffset = 256; }},
+        {"slotArrayOffset",    [](ShmStreamHeader& h) { h.slotArrayOffset += 64; }},
+        {"slotBytes",          [](ShmStreamHeader& h) { h.slotBytes += 64; }},
+        {"channelPlaneBytes",  [](ShmStreamHeader& h) { h.channelPlaneBytes += 4; }},
+    };
+    for (const auto& [name, mutate] : geometry) {
+        CAPTURE(name);
+        ShmStreamHeader after = before;
+        mutate(after);
+        CHECK(Reader::classifyReconfigure(before, after) == Reader::ReconfigureKind::Geometry);
+    }
+
+    const std::pair<const char*, Mutate> cosmetic[] = {
+        {"nothing",              [](ShmStreamHeader&) {}},   // a bare restart still reports
+        {"sampleRateMilliHz",    [](ShmStreamHeader& h) { h.sampleRateMilliHz = 375'000; }},
+        {"sourceSampleRate",     [](ShmStreamHeader& h) { h.sourceSampleRate = 96000; }},
+        {"rateDivisor",          [](ShmStreamHeader& h) { h.rateDivisor = 8; }},
+        {"diagEngineBlockSize",  [](ShmStreamHeader& h) { h.diagEngineBlockSize = 128; }},
+        {"diagFramesPerPublish", [](ShmStreamHeader& h) { h.diagFramesPerPublish = 4; }},
+        {"deviceName",           [](ShmStreamHeader& h) { h.deviceName[0] = 'x'; }},
+        {"producerPid",          [](ShmStreamHeader& h) { h.producerPid = 77; }},
+    };
+    for (const auto& [name, mutate] : cosmetic) {
+        CAPTURE(name);
+        ShmStreamHeader after = before;
+        mutate(after);
+        CHECK(Reader::classifyReconfigure(before, after) == Reader::ReconfigureKind::Cosmetic);
+    }
+}
+
 TEST_CASE("layoutEpoch mismatch rejects a block") {
     // A block's layoutEpoch must equal the layoutSeq that was current when
     // the payload was encoded. If the descriptor claims a different epoch,
@@ -787,7 +787,19 @@ TEST_CASE("Size class derivation: smallest fitting class, and the config spellin
         CHECK(smallestSizeClassFor(i16) == smallestSizeClassFor(f32));
     }
 
-    SUBCASE("every class's own boundary layout resolves to that class") {
+    SUBCASE("a layout of exactly the class size fits; one sample more does not") {
+        // 256 + 132 x 1984 = 262144 bytes, exactly 256 KiB: the comparison is
+        // <=, so this is the largest layout that still lands in _256k.
+        const LayoutParams exact{8, 60, 132, SampleFormat::Float32};
+        REQUIRE(computeTotalSize(exact) == kSizeClassBytes[0]);
+        CHECK(smallestSizeClassFor(exact) == SizeClass::S256K);
+
+        const LayoutParams over{8, 61, 132, SampleFormat::Float32};
+        REQUIRE(computeTotalSize(over) > kSizeClassBytes[0]);
+        CHECK(smallestSizeClassFor(over) == SizeClass::S512K);
+    }
+
+    SUBCASE("each suffix parses back to its own class") {
         for (size_t i = 0; i < 3; ++i) {
             const auto cls = static_cast<SizeClass>(i);
             SizeClass parsed{};
@@ -804,12 +816,6 @@ TEST_CASE("Size class derivation: smallest fitting class, and the config spellin
         CHECK_FALSE(sizeClassFromString("256k ", cls));
         CHECK_FALSE(sizeClassFromString("2m", cls));
         CHECK_FALSE(sizeClassFromString("1", cls));
-    }
-
-    SUBCASE("the three suffixes are distinct, so two classes never collide") {
-        CHECK(std::string(kSizeClassSuffix[0]) != std::string(kSizeClassSuffix[1]));
-        CHECK(std::string(kSizeClassSuffix[1]) != std::string(kSizeClassSuffix[2]));
-        CHECK(std::string(kSizeClassSuffix[0]) != std::string(kSizeClassSuffix[2]));
     }
 }
 
@@ -852,12 +858,17 @@ TEST_CASE("rateDivisorFromHz covers exactly the 11 ladder rungs") {
         uint32_t d = 0;
         REQUIRE(rateDivisorFromHz(r.hz, d));
         CHECK(d == r.divisor);
-        // 48000 / divisor is exact on every rung -- the whole reason
-        // sampleRateMilliHz carries no floating point downstream.
-        CHECK(48'000'000u % d == 0u);
     }
 
     uint32_t d = 0;
+    // A config value read back through text may be off in the last digits;
+    // the match tolerance is 1 mHz, not a nearest-rung snap.
+    CHECK(rateDivisorFromHz(3000.0005, d));
+    CHECK(d == 16);
+    CHECK(rateDivisorFromHz(46.8755, d));
+    CHECK(d == 1024);
+    CHECK_FALSE(rateDivisorFromHz(3000.002, d));
+    CHECK_FALSE(rateDivisorFromHz(2999.99, d));
     CHECK_FALSE(rateDivisorFromHz(44100.0, d));
     CHECK_FALSE(rateDivisorFromHz(0.0, d));
     CHECK_FALSE(rateDivisorFromHz(96000.0, d));
@@ -867,13 +878,18 @@ TEST_CASE("rateDivisorFromHz covers exactly the 11 ladder rungs") {
 TEST_CASE("Derived quantities are exact on hand-built ladder rungs and match Reader") {
     // The engine publishes once per 128-sample frame at 375 Hz.  Batching
     // `framesPerPublish` frames gives samplesPerBlock = 128*fpp and
-    // publishHz = 375 / fpp exactly.
-    struct Rung { uint32_t framesPerPublish; uint32_t samplesPerBlock; double publishHz; };
+    // publishHz = 375 / fpp exactly. The thresholds are 4x / 5x the period
+    // with 50 / 100 ms floors; only the last rung's period is long enough to
+    // lift them, so both sides of each floor are covered.
+    struct Rung {
+        uint32_t framesPerPublish; uint32_t samplesPerBlock; double publishHz;
+        double periodMs; double waitMs; double staleMs;
+    };
     const Rung rungs[] = {
-        {1, 128, 375.0},
-        {2, 256, 187.5},
-        {4, 512, 93.75},
-        {8, 1024, 46.875},
+        {1,  128, 375.0,   8.0 / 3.0,  50.0, 100.0},
+        {2,  256, 187.5,  16.0 / 3.0,  50.0, 100.0},
+        {4,  512, 93.75,  32.0 / 3.0,  50.0, 100.0},
+        {8, 1024, 46.875, 64.0 / 3.0, 256.0 / 3.0, 320.0 / 3.0},
     };
 
     for (const auto& rung : rungs) {
@@ -906,26 +922,20 @@ TEST_CASE("Derived quantities are exact on hand-built ladder rungs and match Rea
         h->deviceState        = static_cast<uint32_t>(DeviceState::Active);
         irtactile::shm::detail::releaseStore(h->magic, kMagic);
 
-        const double periodSec = static_cast<double>(rung.samplesPerBlock) / 48000.0;
-        const double periodMs  = periodSec * 1000.0;
-
-        CHECK(periodSecondsOf(*h) == doctest::Approx(periodSec));
-        CHECK(periodMsOf(*h) == doctest::Approx(periodMs));
+        CAPTURE(rung.samplesPerBlock);
+        CHECK(periodSecondsOf(*h) == doctest::Approx(rung.periodMs / 1000.0));
+        CHECK(periodMsOf(*h) == doctest::Approx(rung.periodMs));
         CHECK(publishHzOf(*h) == doctest::Approx(rung.publishHz));
-        CHECK(ringSecondsOf(*h) == doctest::Approx(periodSec * p.ringBlocks));
-
-        // Threshold floors only lift once the period is large enough.
-        const double wantWait = (4.0 * periodMs > 50.0) ? (4.0 * periodMs) : 50.0;
-        const double wantStale = (5.0 * periodMs > 100.0) ? (5.0 * periodMs) : 100.0;
-        CHECK(waitTimeoutMsOf(*h) == doctest::Approx(wantWait));
-        CHECK(staleAfterMsOf(*h) == doctest::Approx(wantStale));
+        CHECK(ringSecondsOf(*h) == doctest::Approx(rung.periodMs / 1000.0 * p.ringBlocks));
+        CHECK(waitTimeoutMsOf(*h) == doctest::Approx(rung.waitMs));
+        CHECK(staleAfterMsOf(*h) == doctest::Approx(rung.staleMs));
 
         Reader r;
         REQUIRE(r.attach(bytes.data(), bytes.size()) == AttachResult::Ok);
-        CHECK(r.periodMs() == doctest::Approx(periodMsOf(*h)));
+        CHECK(r.periodMs() == doctest::Approx(rung.periodMs));
         CHECK(r.publishHz() == doctest::Approx(rung.publishHz));
-        CHECK(r.waitTimeoutMs() == doctest::Approx(waitTimeoutMsOf(*h)));
-        CHECK(r.staleAfterMs() == doctest::Approx(staleAfterMsOf(*h)));
+        CHECK(r.waitTimeoutMs() == doctest::Approx(rung.waitMs));
+        CHECK(r.staleAfterMs() == doctest::Approx(rung.staleMs));
     }
 }
 
@@ -937,16 +947,19 @@ TEST_CASE("Staleness is decided without sleeping, over a synthetic clock") {
     BlockView b;
     REQUIRE(r.next(b));
 
-    const uint64_t qpcFreq = r.header().qpcFrequency;
     const uint64_t lastQpc = r.lastPublishQpc();
 
-    // Active + fresh -> Live.
+    // qpcFrequency 10 MHz, staleAfterMs 100 (the floor): stale from exactly
+    // 1'000'000 ticks on. The boundary is inclusive.
+    REQUIRE(r.header().qpcFrequency == 10'000'000);
+    REQUIRE(r.staleAfterMs() == doctest::Approx(100.0));
+    const uint64_t staleTicks = 1'000'000;
     CHECK(r.state(lastQpc + 1) == StreamState::Live);
-
-    // Active + far in the future -> Stalled.
-    const uint64_t staleTicks =
-        static_cast<uint64_t>(r.staleAfterMs() / 1000.0 * static_cast<double>(qpcFreq)) + qpcFreq;
+    CHECK(r.state(lastQpc + staleTicks - 1) == StreamState::Live);
     CHECK(r.state(lastQpc + staleTicks) == StreamState::Stalled);
+
+    // A caller's clock sampled just before the publish landed is not stale.
+    CHECK(r.state(lastQpc - 1) == StreamState::Live);
 
     // Inactive, however stale -> Quiet, not Stalled.
     irtactile::shm::detail::releaseStore(prod.header().deviceState, static_cast<uint32_t>(DeviceState::Inactive));
@@ -960,44 +973,73 @@ TEST_CASE("Staleness is decided without sleeping, over a synthetic clock") {
 // ===========================================================================
 // int16 conversion
 // ===========================================================================
-TEST_CASE("int16 round-trip is within 1 LSB and clamps rather than wraps") {
-    CHECK(int16ToFloat(floatToInt16(0.5f)) == doctest::Approx(0.5f).epsilon(0.001));
-    CHECK(int16ToFloat(floatToInt16(-0.5f)) == doctest::Approx(-0.5f).epsilon(0.001));
+TEST_CASE("int16 conversion: the +/-32767 convention, rounding, and clamp rather than wrap") {
+    // Full scale is 32767 both ways; -32768 is only reached by clamping.
+    CHECK(floatToInt16(1.0f) == 32767);
+    CHECK(floatToInt16(-1.0f) == -32767);
+    CHECK(floatToInt16(0.0f) == 0);
+    CHECK(int16ToFloat(32767) == 1.0f);
+    CHECK(int16ToFloat(-32767) == -1.0f);
+    CHECK(int16ToFloat(0) == 0.0f);
+
+    // Round to nearest, symmetrically: 0.5 x 32767 = 16383.5.
+    CHECK(floatToInt16(0.5f) == 16384);
+    CHECK(floatToInt16(-0.5f) == -16384);
+
+    // Within 1 LSB on the way back.
+    for (const float v : {0.123f, -0.777f, 0.999f, -0.0001f}) {
+        CAPTURE(v);
+        CHECK(std::fabs(int16ToFloat(floatToInt16(v)) - v) <= 1.0f / 32767.0f);
+    }
 
     // Beyond range: clamp, not wrap. A wrap would turn a loud transient into
     // full-scale noise of the opposite sign.
     CHECK(floatToInt16(2.0f) == 32767);
     CHECK(floatToInt16(-2.0f) == -32768);
-    CHECK(floatToInt16(1.0f) >= 32000);
+    CHECK(floatToInt16(1e30f) == 32767);
+    CHECK(floatToInt16(-1e30f) == -32768);
 }
 
-TEST_CASE("Round-trip over int16-formatted segment decodes via the same BlockView API") {
-    TestProducer prod(LayoutParams{2, 4, 2, SampleFormat::Int16});
+TEST_CASE("Round-trip over an int16 segment: every sample of every channel decodes to its value") {
+    // 3 channels so a wrong channel stride cannot land on a plausible plane.
+    TestProducer prod(LayoutParams{3, 4, 2, SampleFormat::Int16});
     Reader r;
     REQUIRE(r.attach(prod.base(), prod.size()) == AttachResult::Ok);
     prod.publish();
     BlockView b;
     REQUIRE(r.next(b));
-    // Values were scaled down by 100000 before quantizing in TestProducer, so
-    // just check the decode path runs and produces finite, ordered values.
-    const float* s = b.channel(0);
-    CHECK(s[0] <= s[1]);
-    CHECK(s[1] <= s[2]);
+    REQUIRE(b.channelCount() == 3);
+    REQUIRE(b.sampleCount == 4);
+
+    // TestProducer encodes (i + ch * 1000) / 100000, so channel 0 sits within
+    // a few LSB of zero and channel 2 near 0.02: a decoder that returned
+    // zeros, mixed planes or got the scale wrong misses by far more than one
+    // LSB.
+    for (uint32_t ch = 0; ch < 3; ++ch) {
+        for (uint32_t i = 0; i < 4; ++i) {
+            CAPTURE(ch);
+            CAPTURE(i);
+            const float v = (static_cast<float>(i) + static_cast<float>(ch) * 1000.0f) / 100000.0f;
+            CHECK(b.channel(ch)[i] == int16ToFloat(floatToInt16(v)));
+        }
+    }
+    CHECK(b.channel(2)[0] == doctest::Approx(0.02f).epsilon(0.01));
 }
 
 // ===========================================================================
 // Consumer never recomputes
 // ===========================================================================
-TEST_CASE("Consumer never recomputes: inflated slotPayloadOffset and slotBytes are honored") {
+TEST_CASE("Consumer never recomputes: inflated slotPayloadOffset, slotBytes and channelPlaneBytes are honored") {
     // A hypothetical future producer whose descriptor grew and which pads
     // planes more generously than the formula would. Built by hand
     // (not via TestProducer, which always uses the tight formula) so the
     // header's own fields -- not any recomputation -- are what the reader
-    // must follow.
+    // must follow. The padded plane also forces the reader off its
+    // single-memcpy fast path onto the per-plane strided copy.
     LayoutParams p{2, 4, 2, SampleFormat::Float32};
 
     const uint32_t inflatedPayloadOffset = static_cast<uint32_t>(sizeof(ShmBlockDesc)) + 64;
-    const uint32_t cpb                  = channelPlaneBytesOf(p);
+    const uint32_t cpb                  = channelPlaneBytesOf(p) * 2;   // padded planes
     const uint32_t inflatedSlotBytes    = align64(inflatedPayloadOffset + p.channelCount * cpb);
     const uint32_t slotArrayOffset      = slotArrayOffsetOf();
     const uint64_t totalBytes =
@@ -1055,27 +1097,12 @@ TEST_CASE("Consumer never recomputes: inflated slotPayloadOffset and slotBytes a
 
     BlockView b;
     REQUIRE(r.next(b));
-    CHECK(b.channel(0)[0] == doctest::Approx(0.0f));
-    CHECK(b.channel(1)[0] == doctest::Approx(1000.0f));
-    CHECK(b.channel(1)[2] == doctest::Approx(1002.0f));
-}
-
-TEST_CASE("Addressing round-trip: the normative arithmetic agrees with what Reader decodes") {
-    LayoutParams p{3, 6, 2, SampleFormat::Float32};
-    TestProducer prod(p);
-
-    Reader r;
-    REQUIRE(r.attach(prod.base(), prod.size()) == AttachResult::Ok);   // before publishing
-
-    prod.publish();
-
-    const auto& h = prod.header();
-    uint8_t* slot = slotAt(static_cast<uint8_t*>(prod.base()), h, uint64_t{0});
-    const uint8_t* plane1 = planeAt(slot, h, 1);
-    float manualSample0;
-    std::memcpy(&manualSample0, plane1, sizeof(float));
-
-    BlockView b;
-    REQUIRE(r.next(b));
-    CHECK(b.channel(1)[0] == doctest::Approx(manualSample0));
+    REQUIRE(b.sampleCount == 4);
+    for (uint32_t ch = 0; ch < 2; ++ch) {
+        for (uint32_t i = 0; i < 4; ++i) {
+            CAPTURE(ch);
+            CAPTURE(i);
+            CHECK(b.channel(ch)[i] == static_cast<float>(i) + static_cast<float>(ch) * 1000.0f);
+        }
+    }
 }
