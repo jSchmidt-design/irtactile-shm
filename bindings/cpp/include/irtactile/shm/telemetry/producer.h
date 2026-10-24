@@ -38,7 +38,7 @@ namespace telemetry {
 
 /// Identity the producer publishes in the header.
 struct Identity {
-    std::string simId;          ///< namespace of local names; empty = the consumer's sourceId
+    std::string simId;          ///< namespace of local names; empty = chosen by the consumer (irTactile: the configured sim id)
     std::string simName;
     uint64_t    qpcFrequency{0};
     uint32_t    pid{0};
@@ -51,9 +51,52 @@ enum class OpenResult : uint32_t {
     SectionFailed, ///< ProducerSection only: the OS refused to create or map the section (access, namespace)
 };
 
+inline const char* toCString(OpenResult r) noexcept
+{
+    switch (r) {
+        case OpenResult::Ok:            return "Ok";
+        case OpenResult::TooSmall:      return "TooSmall";
+        case OpenResult::BadIdentity:   return "BadIdentity";
+        case OpenResult::SectionFailed: return "SectionFailed";
+    }
+    return "?";
+}
+
+/// Slot value of a failed declaration.
+inline constexpr int kInvalidSlot = -1;
+
+/// Consecutive slots of a declared array, element 0 first. A failed declaration is an empty range.
+struct SlotRange {
+    int      first{kInvalidSlot};
+    uint16_t count{0};
+
+    [[nodiscard]] constexpr bool isValid() const noexcept { return first != kInvalidSlot && count > 0; }
+    /// Slot of `element`; kInvalidSlot outside the range.
+    [[nodiscard]] constexpr int operator[](size_t element) const noexcept
+    {
+        return isValid() && element < count ? first + static_cast<int>(element) : kInvalidSlot;
+    }
+};
+
+/// Properties of a producer-specific channel, for declareLocal() / declareLocalArray():
+///
+///     p.declareLocal({.name = "pump", .unit = "bar", .rangeMin = 0.f, .rangeMax = 10.f,
+///                     .kind = channels::Kind::Continuous, .provenance = channels::Provenance::Native});
+///
+/// (designated initializers need C++20; in C++17 the fields are set in this order).
+struct LocalChannel {
+    std::string_view     name;
+    std::string_view     unit;
+    float                rangeMin{0.f};
+    float                rangeMax{0.f};
+    channels::Kind       kind{channels::Kind::Continuous};
+    channels::Provenance provenance{channels::Provenance::Unspecified};
+    uint32_t             flags{channels::kFlagNone};
+};
+
 class Producer {
 public:
-    static constexpr int kInvalidSlot = -1;
+    static constexpr int kInvalidSlot = telemetry::kInvalidSlot;
 
     /// Bytes a section needs for `capacity` slots.
     static constexpr uint32_t requiredBytes(uint32_t capacity) noexcept { return layoutFor(capacity).totalBytes; }
@@ -121,14 +164,44 @@ public:
         return declareArray(channels::standard::kArrays[static_cast<uint32_t>(id)], count, provenance);
     }
 
+    /// declareArray() returning all element slots instead of element 0 only.
+    SlotRange declareArrayRange(channels::standard::ArrayId id, uint16_t count = 0,
+                                channels::Provenance provenance = channels::Provenance::Unspecified)
+    {
+        const channels::ChannelDef& def = channels::standard::kArrays[static_cast<uint32_t>(id)];
+        const uint16_t elements = count == 0 ? def.arrayCapacity : count;
+        const int first = declareArray(def, elements, provenance);
+        return first == kInvalidSlot ? SlotRange{} : SlotRange{first, elements};
+    }
+
     /// A producer-specific channel; the consumer publishes it as `sim.<simId>.<name>`.
+    int declareLocal(const LocalChannel& channel)
+    {
+        if (!isValidLocalName(channel.name)) return kInvalidSlot;
+        return addDesc(channel.name, channel.unit, channel.rangeMin, channel.rangeMax, channel.kind, channel.flags,
+                       0, 0, channels::ArrayLayout::Index, channel.provenance);
+    }
     int declareLocal(std::string_view name, std::string_view unit, float rangeMin, float rangeMax,
                      channels::Kind kind, uint32_t flags = channels::kFlagNone,
                      channels::Provenance provenance = channels::Provenance::Unspecified)
     {
-        if (name.empty() || name.size() > channels::kNameMax) return kInvalidSlot;
-        if (!channels::isValidChannelName(std::string("sim.x.") + std::string(name))) return kInvalidSlot;
-        return addDesc(name, unit, rangeMin, rangeMax, kind, flags, 0, 0, channels::ArrayLayout::Index, provenance);
+        return declareLocal(LocalChannel{name, unit, rangeMin, rangeMax, kind, provenance, flags});
+    }
+
+    /// A producer-specific array `name[0] .. name[count-1]`. With ArrayLayout::Wheel the elements follow the wheel
+    /// layout (setWheelLayout), e.g. front = 0 and rear = 1 on a motorcycle. All or nothing: a failure stages nothing.
+    SlotRange declareLocalArray(const LocalChannel& channel, uint16_t count,
+                                channels::ArrayLayout layout = channels::ArrayLayout::Index)
+    {
+        if (count == 0 || m_stage.size() + count > m_capacity) return {};
+        if (channel.unit.size() >= sizeof(ChannelDesc::unit)) return {};
+        if (!isValidLocalName(elementName(channel.name, count - 1u))) return {};   // the longest element name
+        const SlotRange range{static_cast<int>(m_stage.size()), count};
+        for (uint16_t element = 0; element < count; ++element) {
+            addDesc(elementName(channel.name, element), channel.unit, channel.rangeMin, channel.rangeMax, channel.kind,
+                    channel.flags, element, count, layout, channel.provenance);
+        }
+        return range;
     }
 
     /// Wheels per axle, front to back (car `{2,2}`, motorcycle `{1,1}`). Empty = unknown. Entries are 1..8, at most 8
@@ -258,6 +331,17 @@ private:
     uint64_t* valid() noexcept { return reinterpret_cast<uint64_t*>(m_base + header()->validOffset); }
     uint32_t* eventCounts() noexcept { return reinterpret_cast<uint32_t*>(m_base + header()->eventCountOffset); }
     float* values() noexcept { return reinterpret_cast<float*>(m_base + header()->valuesOffset); }
+
+    static bool isValidLocalName(std::string_view name)
+    {
+        if (name.empty() || name.size() > channels::kNameMax) return false;
+        return channels::isValidChannelName(std::string("sim.x.") + std::string(name));
+    }
+
+    static std::string elementName(std::string_view arrayName, uint32_t element)
+    {
+        return std::string(arrayName) + "[" + std::to_string(element) + "]";
+    }
 
     /// Longest prefix of `s` of at most `max` bytes that does not split a UTF-8 sequence.
     static size_t utf8Prefix(std::string_view s, size_t max) noexcept

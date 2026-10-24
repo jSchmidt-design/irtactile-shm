@@ -196,14 +196,14 @@ it means multi-targeting the test project to `net8.0;net48`.
 using IrTactile.Shm.Channels;
 using IrTactile.Shm.Telemetry;
 
-using var s = TelemetrySection.Create(TelemetrySection.NameFromEnvironment("mysim"), 256,
+using var s = TelemetrySection.Create(TelemetryLayout.InboundName("mysim"), 256,
                                       new ProducerIdentity { SimName = "My Sim" });
 TelemetryProducer p = s.Producer;
 // Table channels copy their unit, range and kind from the table.
 int rpm  = p.Declare(Std.All[(int)StdChannel.EngineRpm], Provenance.Native);
 int defl = p.DeclareArray(Std.Arrays[(int)StdArray.SuspensionDeflection], 4);   // 4 of 8 elements
 p.SetWheelLayout(2, 2);                                                         // front to back
-// A local channel; irTactile sees it as sim.<sourceId>.pump_pressure.
+// A local channel; irTactile sees it as sim.<simId>.pump_pressure.
 int pump = p.DeclareLocal("pump_pressure", "bar", 0, 10, SignalKind.Continuous);
 p.CommitLayout();   // the section becomes visible here
 p.SetState(ProducerState.Active, TelemetryClock.Now);

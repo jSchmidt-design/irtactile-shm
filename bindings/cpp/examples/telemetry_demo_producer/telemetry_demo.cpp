@@ -9,8 +9,8 @@
 //   demo_bump                              EVENT, one every 2 s
 // Keys: 'a' toggles Active / Inactive (sim running vs. sitting in a menu), 'q' quits.
 //
-// The source id comes from IRTACTILE_TELEMETRY_SOURCE (irTactile sets it when it launches this exe as a
-// companion), else "demo". Once a second it prints how many channels irTactile accepted and demanded.
+// The section name is fixed: configure a sim in irTactile with the shared memory name irTactile_Telemetry_demo
+// to read it. Once a second it prints how many channels irTactile accepted and demanded.
 
 #include <irtactile/shm/telemetry.h>
 #include <irtactile/shm/telemetry/win32.h>
@@ -27,10 +27,10 @@ namespace channels = irtactile::shm::channels;
 
 int main()
 {
-    const std::string section = sectionNameFromEnvironment("demo");
+    const std::string section = inboundName("demo");
 
     Identity id;
-    id.simId = "";               // empty: the consumer uses the sourceId as the namespace (sim.<sourceId>.*)
+    id.simId = "";               // empty: irTactile uses the id of the sim it is configured for (sim.<id>.*)
     id.simName = "telemetry_demo";
 
     ProducerSection s;

@@ -39,6 +39,16 @@ inline constexpr uint32_t kMaxFrameRetries = 4;
 enum class ProducerState : uint32_t { Inactive = 0, Active = 1, Closed = 2 };
 enum class ConsumerState : uint32_t { Idle = 0, Active = 1, Closed = 2 };
 
+inline const char* toCString(ProducerState s) noexcept
+{
+    switch (s) {
+        case ProducerState::Inactive: return "Inactive";
+        case ProducerState::Active:   return "Active";
+        case ProducerState::Closed:   return "Closed";
+    }
+    return "?";
+}
+
 #pragma pack(push, 8)
 
 /// Inbound header, 256 bytes. Field classes: see fields.md.
@@ -88,6 +98,17 @@ struct ChannelDesc {
     uint8_t  layout;         ///< channels::ArrayLayout
     uint8_t  reserved[26];
 };
+
+/// Typed views of the descriptor fields the section stores as plain integers.
+constexpr channels::Kind kindOf(const ChannelDesc& d) noexcept { return static_cast<channels::Kind>(d.kind); }
+constexpr channels::Provenance provenanceOf(const ChannelDesc& d) noexcept
+{
+    return static_cast<channels::Provenance>(d.provenance);
+}
+constexpr channels::ArrayLayout layoutOf(const ChannelDesc& d) noexcept
+{
+    return static_cast<channels::ArrayLayout>(d.layout);
+}
 
 /// Return header, 128 bytes.
 struct ReturnHeader {
@@ -163,9 +184,9 @@ constexpr uint32_t eventsSince(uint32_t previous, uint32_t current) noexcept { r
 inline constexpr std::string_view kInboundPrefix = "irTactile_Telemetry_";
 inline constexpr std::string_view kReturnPrefix  = "irTactile_TelemetryReturn_";
 
-inline std::string inboundName(std::string_view sourceId)
+inline std::string inboundName(std::string_view simId)
 {
-    return std::string(kInboundPrefix) + std::string(sourceId);
+    return std::string(kInboundPrefix) + std::string(simId);
 }
 
 /// Return-region name derived from the inbound name alone (spec: Names).

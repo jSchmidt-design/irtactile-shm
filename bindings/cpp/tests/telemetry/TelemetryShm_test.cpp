@@ -148,6 +148,84 @@ TEST_CASE("declareLocal rejects invalid names; declarations stop at capacity")
     CHECK(p.declareLocal("overflow", "", 0, 1, channels::Kind::Continuous) == Producer::kInvalidSlot);
 }
 
+TEST_CASE("LocalChannel declarations, local arrays and SlotRange")
+{
+    Section s(Producer::requiredBytes(64));
+    Producer p;
+    REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
+
+    LocalChannel pump;
+    pump.name = "pump";
+    pump.unit = "bar";
+    pump.rangeMax = 10.f;
+    pump.kind = channels::Kind::Continuous;
+    pump.provenance = channels::Provenance::Derived;
+    const int pumpSlot = p.declareLocal(pump);
+
+    const SlotRange load = p.declareArrayRange(channels::standard::ArrayId::WheelLoad, 2);
+    LocalChannel wheelSpeed;
+    wheelSpeed.name = "wheel_speed";
+    wheelSpeed.unit = "m/s";
+    const SlotRange speed = p.declareLocalArray(wheelSpeed, 2, channels::ArrayLayout::Wheel);
+    REQUIRE(p.commitLayout());
+
+    CHECK(pumpSlot == 0);
+    CHECK(load.isValid());
+    CHECK(load[0] == 1);
+    CHECK(load[1] == 2);
+    CHECK(load[2] == kInvalidSlot);
+    CHECK(speed[0] == 3);
+    CHECK(speed[1] == 4);
+
+    Reader r;
+    REQUIRE(r.attach(s.data(), s.size) == AttachResult::Ok);
+    const auto& d = r.descriptors();
+    CHECK(provenanceOf(d[pumpSlot]) == channels::Provenance::Derived);
+    CHECK(kindOf(d[pumpSlot]) == channels::Kind::Continuous);
+    CHECK(std::string(d[load[1]].name) == "std.wheel.load[1]");
+    CHECK(d[load[1]].arrayCapacity == 2);
+    CHECK(std::string(d[speed[1]].name) == "wheel_speed[1]");
+    CHECK(d[speed[1]].arrayIndex == 1);
+    CHECK(d[speed[1]].arrayCapacity == 2);
+    CHECK(layoutOf(d[speed[1]]) == channels::ArrayLayout::Wheel);
+    CHECK(validateDescriptor(d[speed[1]]));
+}
+
+TEST_CASE("declareLocalArray is all or nothing")
+{
+    Section s(Producer::requiredBytes(64));
+    Producer p;
+    REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
+    LocalChannel bad;
+    bad.name = "Bad.name";
+    CHECK_FALSE(p.declareLocalArray(bad, 2).isValid());
+    LocalChannel tooMany;
+    tooMany.name = "many";
+    CHECK_FALSE(p.declareLocalArray(tooMany, 65).isValid());
+    CHECK_FALSE(p.declareLocalArray(tooMany, 0).isValid());
+    CHECK(p.channelCount() == 0);
+    CHECK_FALSE(SlotRange{}.isValid());
+    CHECK(SlotRange{}[0] == kInvalidSlot);
+}
+
+TEST_CASE("Frame::isValid reads the valid bits and is false outside the frame")
+{
+    Frame f;
+    f.valid = {uint64_t{1} << 3, uint64_t{1}};
+    CHECK(f.isValid(3));
+    CHECK_FALSE(f.isValid(4));
+    CHECK(f.isValid(64));
+    CHECK_FALSE(f.isValid(128));
+}
+
+TEST_CASE("result enums have names")
+{
+    CHECK(std::string(toCString(OpenResult::TooSmall)) == "TooSmall");
+    CHECK(std::string(toCString(AttachResult::Malformed)) == "Malformed");
+    CHECK(std::string(toCString(ReadResult::LayoutChanged)) == "LayoutChanged");
+    CHECK(std::string(toCString(ProducerState::Inactive)) == "Inactive");
+}
+
 TEST_CASE("frames round-trip values, valid bits, events and QPC")
 {
     Section s(Producer::requiredBytes(64));
@@ -173,8 +251,8 @@ TEST_CASE("frames round-trip values, valid bits, events and QPC")
     CHECK(f.frameSeq == 2);
     CHECK(f.frameQpc == 2000);
     CHECK(f.values[rpm] == 6500.f);
-    CHECK((f.valid[0] >> rpm & 1u) == 1);
-    CHECK((f.valid[0] >> gear & 1u) == 0);          // not written this frame
+    CHECK(f.isValid(rpm));
+    CHECK_FALSE(f.isValid(gear));                   // not written this frame
     CHECK(f.eventCount[bump] == 1);
     CHECK(f.values[bump] == 0.75f);
     CHECK(r.lastPublishQpc() == 2001);
@@ -185,7 +263,7 @@ TEST_CASE("frames round-trip values, valid bits, events and QPC")
     p.set(rpm, 7000.f);
     p.endFrame(3000, 3001);
     REQUIRE(r.readFrame(f, 2) == ReadResult::NewFrame);
-    CHECK((f.valid[0] >> bump & 1u) == 0);          // events are valid only in the frame that carries one
+    CHECK_FALSE(f.isValid(bump));                   // events are valid only in the frame that carries one
     CHECK(f.eventCount[bump] == 1);                 // the counter keeps counting
 }
 
@@ -287,7 +365,7 @@ TEST_CASE("open rejects a section that is too small and a bad simId")
     CHECK(p.open(s.data(), s.size, 64, identity("std")) == OpenResult::BadIdentity);
     CHECK(p.open(s.data(), s.size, 64, identity("Bad-Id")) == OpenResult::BadIdentity);
     CHECK(p.open(s.data(), s.size, 64, identity("lmu")) == OpenResult::Ok);   // a built-in simId is allowed
-    CHECK(p.open(s.data(), s.size, 64, identity("")) == OpenResult::Ok);      // empty = sourceId
+    CHECK(p.open(s.data(), s.size, 64, identity("")) == OpenResult::Ok);      // empty = chosen by the consumer
 }
 
 TEST_CASE("validateHeader rejections")

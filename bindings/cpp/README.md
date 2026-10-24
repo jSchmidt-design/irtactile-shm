@@ -145,7 +145,7 @@ you publish telemetry, irTactile reads it as a source. Header-only, namespace
 | `irtactile/shm/telemetry/layout.h` | Wire structs, offsets, validation, section names. |
 | `irtactile/shm/telemetry/producer.h` | `Producer`: `declare`, `commitLayout`, `beginFrame / set / event / endFrame`, `setState`. Portable (works on any aligned buffer). |
 | `irtactile/shm/telemetry/reader.h` | `Reader` (consumer), `ReturnReader` (producer reads the masks), `ReturnWriter` (irTactile). Portable. |
-| `irtactile/shm/telemetry/win32.h` | `ProducerSection`, `ConsumerSection`, `ReturnSection`, QPC, `sectionNameFromEnvironment()`. Windows only. |
+| `irtactile/shm/telemetry/win32.h` | `ProducerSection`, `ConsumerSection`, `ReturnSection`, QPC. Windows only. |
 | `examples/telemetry_demo_producer` | The whole thing in ~100 lines. |
 
 ```cpp
@@ -153,15 +153,19 @@ using namespace irtactile::shm::telemetry;
 namespace channels = irtactile::shm::channels;
 
 ProducerSection s;
-s.create(sectionNameFromEnvironment("mysim"), /*capacity*/ 256, Identity{/*simId*/ "", "My Sim"});
+s.create(inboundName("mysim"), /*capacity*/ 256, Identity{/*simId*/ "", "My Sim"});
 Producer& p = s.producer();
 
 // Table channels copy their unit, range and kind from the table.
 int rpm  = p.declare(channels::standard::Id::EngineRpm, channels::Provenance::Native);
-int defl = p.declareArray(channels::standard::ArrayId::SuspensionDeflection, 4);   // 4 of 8 elements
-p.setWheelLayout({2, 2});                                                          // front to back
-// A local channel; irTactile sees it as sim.<sourceId>.pump_pressure.
-int pump = p.declareLocal("pump_pressure", "bar", 0, 10, channels::Kind::Continuous);
+SlotRange defl = p.declareArrayRange(channels::standard::ArrayId::SuspensionDeflection, 4);   // 4 of 8 elements
+p.setWheelLayout({2, 2});                                                                    // front to back
+// A local channel; irTactile sees it as sim.<simId>.pump_pressure.
+int pump = p.declareLocal({.name = "pump_pressure", .unit = "bar", .rangeMin = 0.f, .rangeMax = 10.f,
+                           .kind = channels::Kind::Continuous, .provenance = channels::Provenance::Native});
+// A local per-wheel array: sim.<simId>.wheel_speed[0..3], elements in wheel-layout order.
+SlotRange speed = p.declareLocalArray({.name = "wheel_speed", .unit = "m/s", .rangeMin = 0.f, .rangeMax = 100.f},
+                                      4, channels::ArrayLayout::Wheel);
 p.commitLayout();   // the section becomes visible here
 p.setState(ProducerState::Active, qpcNow());
 
@@ -169,10 +173,14 @@ for (;;) {
     p.beginFrame();
     p.set(rpm, 6500.f);
     p.set(pump, 4.2f);
+    p.set(defl[2], 0.01f);
+    p.set(speed[0], 30.f);
     p.endFrame(/*sample*/ qpcNow(), /*publish*/ qpcNow());
 }
 ```
 
+- The `{.name = ...}` designated initializers need C++20; in C++17 fill a `LocalChannel` field by field. The
+  positional `declareLocal(name, unit, min, max, kind, flags, provenance)` still exists.
 - Declare every channel before `commitLayout()`. Changing the set later means another `commitLayout()`, and
   `setCar()` after the commit publishes a new layout on its own.
 - While the sim is not running, set `Inactive` and keep calling `setState(Inactive, qpcNow())` as a heartbeat.

@@ -3,14 +3,14 @@
 // SPDX-License-Identifier: MIT
 //
 // Publishes std.input.throttle, std.engine.rpm, std.suspension.deflection[0..3] (4 of 8 elements, wheels {2,2}), a local
-// channel (demo_wave -> sim.<sourceId>.demo_wave) and an event (demo_bump, every 2 s) at 100 Hz.
-// 'a' toggles Active / Inactive, 'q' quits. The source id comes from IRTACTILE_TELEMETRY_SOURCE
-// (set by irTactile when it launches the exe as a companion), else "demo".
+// channel (demo_wave -> sim.<sim id>.demo_wave) and an event (demo_bump, every 2 s) at 100 Hz.
+// 'a' toggles Active / Inactive, 'q' quits. The section name is fixed
+// (irTactile_Telemetry_demo): configure a sim in irTactile with that shared memory name to read it.
 
 using IrTactile.Shm.Channels;
 using IrTactile.Shm.Telemetry;
 
-string name = TelemetrySection.NameFromEnvironment("demo");
+string name = TelemetryLayout.InboundName("demo");
 using var section = TelemetrySection.Create(name, 256, new ProducerIdentity { SimName = "telemetry_demo_cs" });
 TelemetryProducer p = section.Producer;
 

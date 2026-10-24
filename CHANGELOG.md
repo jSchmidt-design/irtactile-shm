@@ -1,13 +1,26 @@
 # Changelog
 
+## 1.3.0 - Unreleased
+
+- `bindings/cpp`, additive (no wire-format change):
+  - `LocalChannel` + `Producer::declareLocal(const LocalChannel&)`: named fields instead of seven positional
+    arguments (the positional overload stays).
+  - `Producer::declareLocalArray()`: local arrays `name[i]` with an `ArrayLayout` (e.g. per-wheel values),
+    all or nothing.
+  - `SlotRange` + `Producer::declareArrayRange()`: every element slot of an array, not only element 0.
+  - `Frame::isValid(slot)`; `kindOf` / `provenanceOf` / `layoutOf` typed views of a `ChannelDesc`.
+  - `toCString()` for `OpenResult`, `ReadResult`, `ProducerState`, `SectionOpen`.
+  - `irtactile/shm/common/qpc.h`: `shm::qpcNow()` / `shm::qpcFrequency()` without the section handling;
+    `telemetry::qpcNow` / `qpcFrequency` remain as aliases.
+
 ## 1.2.0 - Unreleased
 
 - `spec/telemetry-shm/v1/` - the telemetry-shm wire format: an inbound region the
   producer creates (header, descriptor table, one latest-value frame with a
   frame seqlock) and a return region irTactile creates (`accepted[]`,
-  `demanded[]`, consumer liveness). Names `irTactile_Telemetry_<sourceId>` /
-  `irTactile_TelemetryReturn_<sourceId>`; the producer reads its identity from
-  `IRTACTILE_TELEMETRY_SOURCE` / `IRTACTILE_TELEMETRY_SECTION`. Descriptors carry
+  `demanded[]`, consumer liveness). The producer ships with a fixed section name
+  (recommended `irTactile_Telemetry_<simId>`), the consumer is configured with it
+  and derives the return name from it. Descriptors carry
   `provenance` and the array `layout`; the header carries the vehicle's
   `wheelsPerAxle`. A table array may be declared with fewer elements than the
   table capacity (`1 <= arrayCapacity <= table capacity`).

@@ -24,7 +24,7 @@ cached across reads).
 | 40 | 8 | `qpcFrequency` | layout | `QueryPerformanceFrequency()` of the producer |
 | 48 | 4 | `producerPid` | layout | process id, `0` = unknown |
 | 52 | 4 | `reserved0` | layout | producer zeroes, reader ignores |
-| 56 | 24 | `simId` | layout | namespace of local names (`sim.<simId>.*`); `[a-z0-9_]`, NUL-padded; empty = `sourceId` |
+| 56 | 24 | `simId` | layout | namespace of local names (`sim.<simId>.*`); `[a-z0-9_]`, NUL-padded; empty = chosen by the consumer |
 | 80 | 8 | `frameSeq` | concurrent | frame seqlock: odd = frame being written |
 | 88 | 8 | `lastPublishQpc` | concurrent | QPC of the last publish (liveness field only) |
 | 96 | 4 | `producerState` | concurrent | `0` Inactive, `1` Active, `2` Closed; reject others |

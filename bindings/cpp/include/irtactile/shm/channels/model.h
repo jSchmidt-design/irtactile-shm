@@ -47,7 +47,7 @@ enum class Provenance : uint8_t {
 inline constexpr uint32_t kNameLen = 64;
 /// Longest channel name (kNameLen - 1).
 inline constexpr size_t   kNameMax = kNameLen - 1;
-/// Longest owner id (sourceId / simId / pluginId).
+/// Longest owner id (simId / pluginId).
 inline constexpr size_t   kOwnerIdMax = 24;
 /// Highest array element index representable in a name suffix.
 inline constexpr uint32_t kArrayIndexMax = 65535;

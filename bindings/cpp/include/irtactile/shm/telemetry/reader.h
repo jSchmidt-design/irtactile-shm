@@ -32,6 +32,19 @@ enum class ReadResult : uint32_t {
     Detached,       ///< re-validation of the layout failed; the reader is detached
 };
 
+inline const char* toCString(ReadResult r) noexcept
+{
+    switch (r) {
+        case ReadResult::NewFrame:      return "NewFrame";
+        case ReadResult::NoNewFrame:    return "NoNewFrame";
+        case ReadResult::Torn:          return "Torn";
+        case ReadResult::LayoutChanged: return "LayoutChanged";
+        case ReadResult::LayoutBusy:    return "LayoutBusy";
+        case ReadResult::Detached:      return "Detached";
+    }
+    return "?";
+}
+
 /// One consistent frame, in the producer's slot numbering. Vectors are reused between calls.
 struct Frame {
     std::vector<uint64_t> valid;
@@ -39,6 +52,13 @@ struct Frame {
     std::vector<float>    values;
     uint64_t              frameQpc{0};
     uint64_t              frameSeq{0};
+
+    /// True when the producer wrote `slot` in this frame. A slot outside the frame reads as not valid.
+    [[nodiscard]] bool isValid(uint32_t slot) const noexcept
+    {
+        const size_t word = slot / 64;
+        return word < valid.size() && ((valid[word] >> (slot % 64)) & 1u) != 0;
+    }
 };
 
 class Reader {

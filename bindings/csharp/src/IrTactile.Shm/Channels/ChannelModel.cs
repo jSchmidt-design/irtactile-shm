@@ -81,7 +81,7 @@ public static class ChannelModel
     /// <summary>Longest channel name.</summary>
     public const int NameMax = NameLen - 1;
 
-    /// <summary>Longest owner id (sourceId / simId / pluginId).</summary>
+    /// <summary>Longest owner id (simId / pluginId).</summary>
     public const int OwnerIdMax = 24;
 
     /// <summary>Highest array element index representable in a name suffix.</summary>

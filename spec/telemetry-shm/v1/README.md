@@ -14,8 +14,8 @@ liveness ([liveness.md](../../common/liveness.md)).
 
 | Region | Name | Created by | Direction |
 |---|---|---|---|
-| **inbound** | `irTactile_Telemetry_<sourceId>` | the producer | producer -> irTactile |
-| **return** | `irTactile_TelemetryReturn_<sourceId>` | irTactile | irTactile -> producer |
+| **inbound** | the section name, e.g. `irTactile_Telemetry_<simId>` | the producer | producer -> irTactile |
+| **return** | derived from the inbound name, e.g. `irTactile_TelemetryReturn_<simId>` | irTactile | irTactile -> producer |
 
 Each side **creates the region it writes and only opens the region it reads.** Absence is normal in both directions:
 a producer must run without the return region (irTactile is not up, or does not use this source), and irTactile
@@ -23,12 +23,14 @@ treats a missing inbound region as "source not running".
 
 ### Names
 
-`sourceId` is `[a-z0-9_]{1,24}` (the *owner id* rule of the channel model). Windows cannot list named sections,
-so the consumer only opens names it was configured with. Producer and configuration therefore have to agree on
-the `sourceId`, and nothing else.
+The inbound name (the *section name*) is the whole contract between a producer and irTactile. A producer ships with
+a fixed name and documents it; the user enters that name in the irTactile configuration (sim catalogue). Windows
+cannot list named sections, so the consumer only opens names it was configured with, and irTactile passes nothing
+to the producer.
 
-A configuration may override the inbound name with a free `sectionName`. The return name is then derived from the
-inbound name alone, so both sides compute it without further configuration:
+A section name is 1-200 characters from `[A-Za-z0-9_.-]`. The recommended form is `irTactile_Telemetry_<simId>`
+(the bindings' `inboundName()` builds it). The return name is derived from the inbound name alone, so both sides
+compute it without further configuration:
 
 ```
 inbound starts with "irTactile_Telemetry_"  ->  "irTactile_TelemetryReturn_" + <rest>
@@ -37,10 +39,6 @@ otherwise                                   ->  <inbound> + "_Return"
 
 Both are plain (unprefixed) names, i.e. the session namespace, as in stream-shm. A producer running elevated or as a
 service lives in another namespace and is not found; that is a deployment problem, not a protocol state.
-
-When irTactile launches the producer it passes `IRTACTILE_TELEMETRY_SOURCE=<sourceId>` and
-`IRTACTILE_TELEMETRY_SECTION=<inbound name>` in the environment. A producer takes its identity from them and falls
-back to its own default when they are absent.
 
 ## Inbound region
 
@@ -87,7 +85,7 @@ rejects the source (`Malformed`) when:
 - `simId` is not empty and not a valid owner id, or is `std`, `sim`, `plugin` or `irtactile`
   (a built-in simulator id is allowed - the source then extends that simulator's `sim.*` namespace).
 
-An empty `simId` means "use the `sourceId`". Strings are NUL-terminated within their field; a field without a NUL
+An empty `simId` leaves the namespace to the consumer (irTactile uses the id of the sim the source is configured for). Strings are NUL-terminated within their field; a field without a NUL
 is malformed.
 
 ### Publish protocol (producer)

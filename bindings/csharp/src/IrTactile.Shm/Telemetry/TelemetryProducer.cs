@@ -6,7 +6,7 @@
 // and checked against the same conformance vectors as the C++ binding
 // (the encode cases compare section bytes).
 //
-//     using var s = TelemetrySection.Create(TelemetrySection.NameFromEnvironment("demo"), 256,
+//     using var s = TelemetrySection.Create(TelemetryLayout.InboundName("demo"), 256,
 //                                           new ProducerIdentity { SimName = "My Sim" });
 //     TelemetryProducer p = s.Producer;
 //     int rpm = p.Declare(Std.All[(int)StdChannel.EngineRpm]);
@@ -64,7 +64,7 @@ public enum TelemetryOpenResult
 /// <summary>Identity the producer publishes in the header.</summary>
 public sealed class ProducerIdentity
 {
-    /// <summary>Namespace of local names (<c>sim.&lt;simId&gt;.*</c>); empty = the consumer's sourceId.</summary>
+    /// <summary>Namespace of local names (<c>sim.&lt;simId&gt;.*</c>); empty = chosen by the consumer (irTactile: the configured sim id).</summary>
     public string SimId { get; set; } = "";
 
     /// <summary>Display name of the simulator / source.</summary>
@@ -138,8 +138,8 @@ public static class TelemetryLayout
     public static int RequiredBytes(int capacity) =>
         HeaderBytes + capacity * DescBytes + (capacity / 64) * 8 + capacity * 4 + capacity * 4;
 
-    /// <summary><c>irTactile_Telemetry_&lt;sourceId&gt;</c>.</summary>
-    public static string InboundName(string sourceId) => "irTactile_Telemetry_" + sourceId;
+    /// <summary>The recommended section name, <c>irTactile_Telemetry_&lt;simId&gt;</c>.</summary>
+    public static string InboundName(string simId) => "irTactile_Telemetry_" + simId;
 
     /// <summary>Return-region name derived from the inbound name alone.</summary>
     public static string ReturnNameFor(string inbound)
@@ -474,15 +474,6 @@ public sealed unsafe class TelemetrySection : IDisposable
 
     /// <summary>The producer bound to the section.</summary>
     public TelemetryProducer Producer { get; }
-
-    /// <summary>Inbound section name: <c>IRTACTILE_TELEMETRY_SECTION</c>, else from <c>IRTACTILE_TELEMETRY_SOURCE</c>, else <paramref name="defaultSourceId"/>.</summary>
-    public static string NameFromEnvironment(string defaultSourceId)
-    {
-        string? section = Environment.GetEnvironmentVariable("IRTACTILE_TELEMETRY_SECTION");
-        if (!string.IsNullOrEmpty(section)) return section!;
-        string? source = Environment.GetEnvironmentVariable("IRTACTILE_TELEMETRY_SOURCE");
-        return TelemetryLayout.InboundName(string.IsNullOrEmpty(source) ? defaultSourceId : source!);
-    }
 
     /// <summary>Creates (or restarts into) the named section. Windows only.</summary>
     public static TelemetrySection Create(string inboundName, int capacity, ProducerIdentity identity)

@@ -1,13 +1,13 @@
 // irtactile/shm/telemetry/win32.h - the Windows half of telemetry-shm v1:
 // named sections for the producer (creates the inbound region, opens the
 // return region), and for the consumer (opens the inbound region, creates the
-// return region), plus QPC and the environment contract.
+// return region), plus QPC.
 //
 // SPDX-License-Identifier: MIT
 //
 //     // producer
 //     ProducerSection s;
-//     s.create(sectionNameFromEnvironment("demo"), 256, {"", "My Sim"});
+//     s.create(inboundName("demo"), 256, {"", "My Sim"});
 //     Producer& p = s.producer();
 //     p.declare(channels::standard::Id::EngineRpm);  p.commitLayout();
 //     ...
@@ -19,13 +19,7 @@
 #include "producer.h"
 #include "reader.h"
 
-#ifndef WIN32_LEAN_AND_MEAN
-#  define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#  define NOMINMAX
-#endif
-#include <windows.h>
+#include <irtactile/shm/common/qpc.h>
 
 #include <cstdlib>
 #include <string>
@@ -34,46 +28,17 @@ namespace irtactile {
 namespace shm {
 namespace telemetry {
 
-inline constexpr const char* kEnvSource  = "IRTACTILE_TELEMETRY_SOURCE";
-inline constexpr const char* kEnvSection = "IRTACTILE_TELEMETRY_SECTION";
-
-inline uint64_t qpcNow() noexcept
-{
-    LARGE_INTEGER v;
-    QueryPerformanceCounter(&v);
-    return static_cast<uint64_t>(v.QuadPart);
-}
-inline uint64_t qpcFrequency() noexcept
-{
-    LARGE_INTEGER v;
-    QueryPerformanceFrequency(&v);
-    return static_cast<uint64_t>(v.QuadPart);
-}
+using shm::qpcFrequency;   // common/qpc.h; kept reachable as telemetry::qpcNow / qpcFrequency
+using shm::qpcNow;
 
 namespace detail {
 
-inline std::string getEnv(const char* name)
-{
-    char buf[256];
-    const DWORD n = GetEnvironmentVariableA(name, buf, sizeof(buf));
-    return (n > 0 && n < sizeof(buf)) ? std::string(buf, n) : std::string();
-}
 inline std::wstring widen(const std::string& s)
 {
     return std::wstring(s.begin(), s.end());   // section names are ASCII
 }
 
 }  // namespace detail
-
-/// Inbound section name for this process: `IRTACTILE_TELEMETRY_SECTION`, else derived from
-/// `IRTACTILE_TELEMETRY_SOURCE`, else from `defaultSourceId`.
-inline std::string sectionNameFromEnvironment(const std::string& defaultSourceId)
-{
-    std::string section = detail::getEnv(kEnvSection);
-    if (!section.empty()) return section;
-    std::string source = detail::getEnv(kEnvSource);
-    return inboundName(source.empty() ? defaultSourceId : source);
-}
 
 /// A mapped, named view; closes on destruction.
 class MappedView {
@@ -186,6 +151,17 @@ private:
 
 /// Consumer: opens an inbound section read-only. Result mirrors the retry-vs-give-up split of stream-shm.
 enum class SectionOpen : uint32_t { Ok, NotFound, AccessDenied, Failed };
+
+inline const char* toCString(SectionOpen r) noexcept
+{
+    switch (r) {
+        case SectionOpen::Ok:           return "Ok";
+        case SectionOpen::NotFound:     return "NotFound";
+        case SectionOpen::AccessDenied: return "AccessDenied";
+        case SectionOpen::Failed:       return "Failed";
+    }
+    return "?";
+}
 
 class ConsumerSection {
 public:
