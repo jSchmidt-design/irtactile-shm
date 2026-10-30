@@ -277,6 +277,38 @@ TEST_CASE("a frame being written is Torn, never a mix")
     CHECK(r.readFrame(f, 0) == ReadResult::Torn);
 }
 
+TEST_CASE("a Torn read keeps the previous frame")
+{
+    Segment s(Producer::requiredBytes(64));
+    Producer p;
+    REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
+    const int rpm = p.declare(channels::standard::Id::EngineRpm);
+    REQUIRE(p.commitLayout());
+    Reader r;
+    REQUIRE(r.attach(s.data(), s.size) == AttachResult::Ok);
+
+    p.beginFrame();
+    p.set(rpm, 6500.f);
+    p.endFrame(2000, 2001);
+    Frame f;
+    REQUIRE(r.readFrame(f, 0) == ReadResult::NewFrame);
+    const uint64_t seq = f.frameSeq;
+
+    p.beginFrame();
+    p.set(rpm, 7000.f);
+    p.endFrame(3000, 3001);
+    s.header().frameSeqEnd -= 2;   // even frameSeq, mismatching end: the copy is taken, then rejected
+    CHECK(r.readFrame(f, seq) == ReadResult::Torn);
+    CHECK(f.frameSeq == seq);
+    CHECK(f.frameQpc == 2000);
+    CHECK(f.values[rpm] == 6500.f);
+    CHECK(f.isValid(rpm));
+
+    s.header().frameSeqEnd += 2;
+    REQUIRE(r.readFrame(f, seq) == ReadResult::NewFrame);
+    CHECK(f.values[rpm] == 7000.f);
+}
+
 TEST_CASE("layout rewrite: readers see LayoutChanged, then the new descriptors")
 {
     Segment s(Producer::requiredBytes(64));
@@ -466,6 +498,36 @@ TEST_CASE("return region: absent, torn and malformed")
     CHECK_FALSE(rr.read(v));                                             // unknown live state: rejected on read too
     ReturnReader rr2;
     CHECK(rr2.attach(ret.data(), ret.size) == AttachResult::Malformed);
+}
+
+TEST_CASE("return region: a failed read keeps the previous view")
+{
+    Segment ret(kReturnBytes);
+    ReturnWriter w;
+    REQUIRE(w.init(ret.data(), ret.size, 7));
+    ReturnReader rr;
+    REQUIRE(rr.attach(ret.data(), ret.size) == AttachResult::Ok);
+
+    std::vector<uint64_t> accepted(1, 0b0011), demanded(1, 0b0001);
+    w.publishMasks(64, 4, accepted.data(), demanded.data());
+    w.setState(ConsumerState::Active);
+    ReturnView v;
+    REQUIRE(rr.read(v));
+
+    std::vector<uint64_t> accepted2(2, ~uint64_t{0}), demanded2(2, ~uint64_t{0});
+    w.publishMasks(128, 6, accepted2.data(), demanded2.data());
+    auto* h = reinterpret_cast<ReturnHeader*>(ret.data());
+    h->retSeqEnd -= 2;                                                   // the masks are copied, then rejected
+    CHECK_FALSE(rr.read(v));
+    h->retSeqEnd += 2;
+    h->consumerState = 9;                                                // the masks are copied, then rejected
+    CHECK_FALSE(rr.read(v));
+
+    CHECK(v.capacity == 64);
+    CHECK(v.forLayoutSeq == 4);
+    CHECK(v.accepted == accepted);
+    CHECK(v.demanded == demanded);
+    CHECK(v.consumerState == ConsumerState::Active);
 }
 
 TEST_CASE("return region: the offsets follow capacity, consumerPid is a live load")

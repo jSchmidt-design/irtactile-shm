@@ -22,6 +22,11 @@
   - `toCString()` for `OpenResult`, `ReadResult`, `ProducerState`, `SegmentOpen`.
   - `irtactile/shm/common/qpc.h`: `shm::qpcNow()` / `shm::qpcFrequency()` without the segment handling;
     `telemetry::qpcNow` / `qpcFrequency` remain as aliases.
+- `bindings/cpp` fix: `Reader::readFrame()` and `ReturnReader::read()` copied into the caller's `Frame` /
+  `ReturnView` before the seqlock check, so a `Torn` or `LayoutChanged` read (or a rejected return read) left a
+  torn mix in it. Both now copy into internal scratch storage and swap it in only on success, so a failed read keeps
+  the previous frame or view as documented. `ReturnReader::read()` is no longer `const`. The C# binding was not
+  affected.
 
 ## 1.2.0 - Unreleased
 

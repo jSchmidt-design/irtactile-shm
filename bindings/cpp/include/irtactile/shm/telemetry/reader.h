@@ -103,7 +103,8 @@ public:
         return s <= static_cast<uint32_t>(ProducerState::Closed) ? static_cast<ProducerState>(s) : ProducerState::Closed;
     }
 
-    /// Copies the newest frame of the slots [0, channelCount) of the snapshot.
+    /// Copies the newest frame of the slots [0, channelCount) of the snapshot. `out` is only written on NewFrame;
+    /// every other result leaves the previous frame untouched.
     ReadResult readFrame(Frame& out, uint64_t lastSeenFrameSeq)
     {
         if (!m_attached) return ReadResult::Detached;
@@ -111,26 +112,28 @@ public:
         if (ls & 1u) return ReadResult::LayoutBusy;
         if (ls != m_snapshotSeq) return ReadResult::LayoutChanged;
 
+        // Copy into scratch storage and swap it in once the seqlock checks pass, so a torn copy never reaches `out`.
         const uint32_t words = m_header.capacity / 64;
-        out.valid.resize(words);
-        out.eventCount.resize(m_header.capacity);
-        out.values.resize(m_header.capacity);
+        m_scratch.valid.resize(words);
+        m_scratch.eventCount.resize(m_header.capacity);
+        m_scratch.values.resize(m_header.capacity);
 
         for (uint32_t attempt = 0; attempt < kMaxFrameRetries; ++attempt) {
             const uint64_t f1 = shm::detail::acquireLoad(liveHeader().frameSeq);
             if (f1 & 1u) continue;
             if (f1 == lastSeenFrameSeq) return ReadResult::NoNewFrame;
 
-            std::memcpy(out.valid.data(), m_base + m_header.validOffset, static_cast<size_t>(words) * 8);
-            std::memcpy(out.eventCount.data(), m_base + m_header.eventCountOffset, static_cast<size_t>(m_header.capacity) * 4);
-            std::memcpy(out.values.data(), m_base + m_header.valuesOffset, static_cast<size_t>(m_header.capacity) * 4);
+            std::memcpy(m_scratch.valid.data(), m_base + m_header.validOffset, static_cast<size_t>(words) * 8);
+            std::memcpy(m_scratch.eventCount.data(), m_base + m_header.eventCountOffset, static_cast<size_t>(m_header.capacity) * 4);
+            std::memcpy(m_scratch.values.data(), m_base + m_header.valuesOffset, static_cast<size_t>(m_header.capacity) * 4);
             const uint64_t qpc = liveHeader().frameQpc;
 
             const uint64_t f2 = shm::detail::acquireLoad(liveHeader().frameSeqEnd);
             if (f2 != f1 || shm::detail::acquireLoad(liveHeader().frameSeq) != f1) continue;
             if (layoutSeqLive() != m_snapshotSeq) return ReadResult::LayoutChanged;
-            out.frameQpc = qpc;
-            out.frameSeq = f1;
+            m_scratch.frameQpc = qpc;
+            m_scratch.frameSeq = f1;
+            std::swap(out, m_scratch);   // the previous vectors become the next scratch
             return ReadResult::NewFrame;
         }
         return ReadResult::Torn;
@@ -170,6 +173,7 @@ private:
     Header                   m_header{};
     std::vector<ChannelDesc> m_descs;
     uint32_t                 m_snapshotSeq{0};
+    Frame                    m_scratch;
 };
 
 // ---------------------------------------------------------------------------
@@ -271,8 +275,9 @@ public:
     }
     [[nodiscard]] bool attached() const noexcept { return m_attached; }
 
-    /// Latest consistent state; false when none could be read this time (keep the previous view).
-    bool read(ReturnView& out) const
+    /// Latest consistent state; false when none could be read this time. `out` is only written on true, so a
+    /// failed read keeps the previous view.
+    bool read(ReturnView& out)
     {
         if (!m_attached) return false;
         const ReturnHeader& live = *reinterpret_cast<const ReturnHeader*>(m_base);
@@ -283,21 +288,22 @@ public:
             std::memcpy(&h, m_base, kReturnHeaderBytes);
             if (validateReturnFrame(h, m_mapped) != AttachResult::Ok) return false;
             const uint32_t words = h.capacity / 64;
-            out.accepted.assign(words, 0);
-            out.demanded.assign(words, 0);
+            m_scratch.accepted.resize(words);
+            m_scratch.demanded.resize(words);
             if (words != 0) {
-                std::memcpy(out.accepted.data(), m_base + h.acceptedOffset, static_cast<size_t>(words) * 8);
-                std::memcpy(out.demanded.data(), m_base + h.demandedOffset, static_cast<size_t>(words) * 8);
+                std::memcpy(m_scratch.accepted.data(), m_base + h.acceptedOffset, static_cast<size_t>(words) * 8);
+                std::memcpy(m_scratch.demanded.data(), m_base + h.demandedOffset, static_cast<size_t>(words) * 8);
             }
             if (shm::detail::acquireLoad(live.retSeqEnd) != r1 || shm::detail::acquireLoad(live.retSeq) != r1) continue;
             // Concurrent fields: live loads, never the copy. An unknown state is rejected (as at attach).
             const uint32_t cs = shm::detail::acquireLoad(live.consumerState);
             if (cs > static_cast<uint32_t>(ConsumerState::Closed)) return false;
-            out.capacity = h.capacity;
-            out.forLayoutSeq = h.forLayoutSeq;
-            out.consumerState = static_cast<ConsumerState>(cs);
-            out.lastConsumeQpc = shm::detail::acquireLoad(live.lastConsumeQpc);
-            out.consumerPid = shm::detail::acquireLoad(live.consumerPid);
+            m_scratch.capacity = h.capacity;
+            m_scratch.forLayoutSeq = h.forLayoutSeq;
+            m_scratch.consumerState = static_cast<ConsumerState>(cs);
+            m_scratch.lastConsumeQpc = shm::detail::acquireLoad(live.lastConsumeQpc);
+            m_scratch.consumerPid = shm::detail::acquireLoad(live.consumerPid);
+            std::swap(out, m_scratch);   // the previous vectors become the next scratch
             return true;
         }
         return false;
@@ -307,6 +313,7 @@ private:
     const uint8_t* m_base{nullptr};
     size_t         m_mapped{0};
     bool           m_attached{false};
+    ReturnView     m_scratch;
 };
 
 }  // namespace telemetry
