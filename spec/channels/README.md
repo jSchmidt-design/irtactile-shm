@@ -135,3 +135,34 @@ and meaning forever.
   name. The generated tables follow the JSON order; new entries are appended.
 - `std.*` grows only when at least two sources deliver a value with the same
   unit, sign and meaning. Everything else goes to `sim.<simId>.*`.
+  Rows present at 1.0 that predate the rule say so in their `description`.
+- Until the first release a name may still be deleted instead of marked
+  `"retired": true`.
+
+## Axes and signs
+
+Every source converts to these conventions; the sim API's own convention never
+reaches the bus. The `description` of each `std.json` entry states the meaning,
+sign and zero point of that channel in one sentence; the rules below are the
+shared part.
+
+- Vehicle axes follow ISO 8855: `lon` + forward, `lat` + left, `vert` + up.
+- Rates: yaw + = counter-clockwise seen from above (turning left), pitch + =
+  nose down, roll + = right side down. Orientation angles use the same signs.
+- `vehicle.accel.vert` has gravity removed (0 at rest).
+- Pedals (`throttle`, `brake`, `clutch`, `handbrake`): 0 = released, 1 = fully
+  pressed. `input.steering` and `steering.torque`: + = turned (turning) left.
+- `assist.*_active`: 1 = the system is intervening now, not "switched on".
+- `suspension.deflection`: + = compression, relative to the sim's reference
+  position (not normalised); `suspension.velocity` is its derivative.
+- `wheel.speed` and `wheel.surface_speed`: + = rolling forward.
+  `wheel.slip_ratio` = (omega*r - v) / |v|: 0 = free rolling, -1 = locked,
+  > 0 = wheelspin. `wheel.slip_angle`: + = contact-patch velocity to the left
+  of the wheel heading. `wheel.force.*`: force on the tyre from the road in the
+  wheel's own ISO axes.
+- `tyre.temp.inner` / `.outer`: inner is the side toward the car's centre line
+  on both sides of the car.
+- Channels are provided only when the source delivers the value: no
+  differentiating, integrating or estimating to fill a slot (a producer
+  states `provenance` for what it does convert).
+

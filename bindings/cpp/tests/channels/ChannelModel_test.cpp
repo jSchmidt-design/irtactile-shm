@@ -86,18 +86,18 @@ const char* const kScalarNames[] = {
     "std.vehicle.yaw_rate", "std.vehicle.pitch_rate", "std.vehicle.roll_rate",
     "std.vehicle.orientation.pitch", "std.vehicle.orientation.roll",
     "std.vehicle.pit_limiter", "std.vehicle.boost_active",
-    "std.assist.abs_level", "std.assist.tc_active",
+    "std.assist.abs_active", "std.assist.tc_active",
     "std.engine.rpm", "std.engine.max_rpm", "std.engine.throttle", "std.engine.torque",
-    "std.engine.manifold_pressure", "std.engine.turbo_boost", "std.engine.ignition", "std.engine.starter",
+    "std.engine.manifold_pressure", "std.engine.ignition", "std.engine.starter",
     "std.engine.rev_limiter",
     "std.drivetrain.gear", "std.steering.torque", "std.aero.drs", "std.hybrid.deploy",
 };
 const char* const kWheelArrayNames[] = {
-    "std.suspension.deflection", "std.suspension.velocity", "std.suspension.acceleration", "std.suspension.ride_height",
+    "std.suspension.deflection", "std.suspension.velocity", "std.suspension.ride_height",
     "std.wheel.speed", "std.wheel.load", "std.wheel.slip_ratio", "std.wheel.slip_angle", "std.wheel.surface",
     "std.wheel.force.lat", "std.wheel.force.lon",
-    "std.tyre.temp", "std.tyre.temp.inner", "std.tyre.temp.middle", "std.tyre.temp.outer",
-    "std.tyre.pressure", "std.brake.temp",
+    "std.tyre.temp.inner", "std.tyre.temp.middle", "std.tyre.temp.outer",
+    "std.tyre.pressure", "std.brake.temp", "std.wheel.contact", "std.wheel.surface_speed",
 };
 
 }  // namespace
@@ -139,10 +139,10 @@ TEST_CASE("generated table: names are valid, prefixed, unique and match the prop
     CHECK(std::string(standard::kArrays[wheelArrays].name) == "std.suspension.third");
     CHECK(standard::kArrays[wheelArrays].layout == ArrayLayout::Axle);
 
-    // 35 scalars + 17 wheel arrays x 8 + 1 axle array x 4.
+    // 34 scalars + 17 wheel arrays x 8 + 1 axle array x 4.
     uint32_t handles = standard::kCount;
     for (const ChannelDef& a : standard::kArrays) handles += a.arrayCapacity;
-    CHECK(handles == 175);
+    CHECK(handles == 174);
 }
 
 TEST_CASE("generated table: enum ids index the matching row") {
@@ -150,7 +150,7 @@ TEST_CASE("generated table: enum ids index the matching row") {
     CHECK(std::string(standard::kChannels[static_cast<uint32_t>(standard::Id::SessionStatus)].name) == "std.session.status");
     CHECK(std::string(standard::kChannels[static_cast<uint32_t>(standard::Id::VehicleOrientationRoll)].name) ==
           "std.vehicle.orientation.roll");
-    CHECK(std::string(standard::kArrays[static_cast<uint32_t>(standard::ArrayId::TyreTemp)].name) == "std.tyre.temp");
+    CHECK(std::string(standard::kArrays[static_cast<uint32_t>(standard::ArrayId::TyreTempMiddle)].name) == "std.tyre.temp.middle");
     CHECK(std::string(standard::kArrays[static_cast<uint32_t>(standard::ArrayId::TyreTempInner)].name) == "std.tyre.temp.inner");
     CHECK(std::string(standard::kArrays[static_cast<uint32_t>(standard::ArrayId::SuspensionThird)].name) == "std.suspension.third");
 }

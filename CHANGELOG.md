@@ -7,6 +7,11 @@
   `ConsumerSection`, `ReturnSection`, `SectionOpen`, `OpenResult::SectionFailed` (now `ProducerSegment`,
   `ConsumerSegment`, `ReturnSegment`, `SegmentOpen`, `SegmentFailed`); C# `TelemetrySection` (now
   `TelemetrySegment`); `irtp_probe --section` (now `--segment`).
+- `std.*` table review before the first release: every entry gets a `description` (meaning, sign, zero point; emitted
+  as `///` / `<summary>` by `gen_channels`, not on the wire); `spec/channels/README.md` gains "Axes and signs".
+  `std.wheel.contact` and `std.wheel.surface_speed` added; `std.suspension.acceleration`, `std.engine.turbo_boost`
+  and `std.tyre.temp` removed; `std.assist.abs_level` replaced by discrete `std.assist.abs_active`.
+  The table is now 34 scalars, 17 wheel arrays and 1 axle array (174 handles).
 - `bindings/cpp`, additive (no wire-format change):
   - `LocalChannel` + `Producer::declareLocal(const LocalChannel&)`: named fields instead of seven positional
     arguments (the positional overload stays).

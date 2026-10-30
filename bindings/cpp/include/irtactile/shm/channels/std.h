@@ -37,14 +37,13 @@ enum class Id : uint32_t {
     VehicleOrientationRoll,
     VehiclePitLimiter,
     VehicleBoostActive,
-    AssistAbsLevel,
+    AssistAbsActive,
     AssistTcActive,
     EngineRpm,
     EngineMaxRpm,
     EngineThrottle,
     EngineTorque,
     EngineManifoldPressure,
-    EngineTurboBoost,
     EngineIgnition,
     EngineStarter,
     EngineRevLimiter,
@@ -54,43 +53,76 @@ enum class Id : uint32_t {
     HybridDeploy,
 };
 
-inline constexpr uint32_t kCount = 35;
+inline constexpr uint32_t kCount = 34;
 
 inline constexpr ChannelDef kChannels[kCount] = {
+    /// Connection state of the source (std::ConnectionStatus).
     {"std.session.status", "", 0.0f, 4.0f, Kind::Discrete, kFlagOptional, 0, ArrayLayout::Index},
+    /// Throttle pedal: 0 = released, 1 = fully pressed.
     {"std.input.throttle", "", 0.0f, 1.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Brake pedal: 0 = released, 1 = fully pressed.
     {"std.input.brake", "", 0.0f, 1.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Clutch pedal: 0 = released, 1 = fully pressed (like throttle and brake).
     {"std.input.clutch", "", 0.0f, 1.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Steering wheel angle normalised to full lock: +1 = fully turned left (counter-clockwise seen by the driver), -1 = fully right.
     {"std.input.steering", "", -1.0f, 1.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Handbrake lever: 0 = released, 1 = fully pulled.
     {"std.input.handbrake", "", 0.0f, 1.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Speed over ground, always >= 0.
     {"std.vehicle.speed", "m/s", 0.0f, 120.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Velocity along the vehicle's longitudinal axis, + = forward.
     {"std.vehicle.velocity.lon", "m/s", -120.0f, 120.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Velocity along the vehicle's lateral axis, + = left.
     {"std.vehicle.velocity.lat", "m/s", -120.0f, 120.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Velocity along the vehicle's vertical axis, + = up.
     {"std.vehicle.velocity.vert", "m/s", -120.0f, 120.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Acceleration along the longitudinal axis, + = forward.
     {"std.vehicle.accel.lon", "m/s2", -50.0f, 50.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Acceleration along the lateral axis, + = left (a left turn reads positive).
     {"std.vehicle.accel.lat", "m/s2", -50.0f, 50.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Acceleration along the vertical axis, + = up, gravity removed (0 at rest).
     {"std.vehicle.accel.vert", "m/s2", -50.0f, 50.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Rotation about the vertical axis, + = counter-clockwise seen from above (turning left).
     {"std.vehicle.yaw_rate", "rad/s", -5.0f, 5.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Rotation about the lateral axis, + = nose down.
     {"std.vehicle.pitch_rate", "rad/s", -5.0f, 5.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Rotation about the longitudinal axis, + = right side down.
     {"std.vehicle.roll_rate", "rad/s", -5.0f, 5.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Pitch angle relative to the horizontal plane, + = nose down.
     {"std.vehicle.orientation.pitch", "rad", -1.0f, 1.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Roll angle relative to the horizontal plane, + = right side down.
     {"std.vehicle.orientation.roll", "rad", -1.0f, 1.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// 1 = pit limiter is engaged.
     {"std.vehicle.pit_limiter", "", 0.0f, 1.0f, Kind::Discrete, kFlagOptional, 0, ArrayLayout::Index},
+    /// 1 = a push-to-pass, boost or overtake system is delivering extra power now.
     {"std.vehicle.boost_active", "", 0.0f, 1.0f, Kind::Discrete, kFlagOptional, 0, ArrayLayout::Index},
-    {"std.assist.abs_level", "", 0.0f, 1.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// 1 = ABS is reducing brake pressure on at least one wheel now (not: ABS is switched on).
+    {"std.assist.abs_active", "", 0.0f, 1.0f, Kind::Discrete, kFlagOptional, 0, ArrayLayout::Index},
+    /// 1 = traction control is cutting torque now (not: TC is switched on).
     {"std.assist.tc_active", "", 0.0f, 1.0f, Kind::Discrete, kFlagOptional, 0, ArrayLayout::Index},
+    /// Crankshaft speed.
     {"std.engine.rpm", "rpm", 0.0f, 20000.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Rev limit of the current car.
     {"std.engine.max_rpm", "rpm", 0.0f, 20000.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Throttle plate opening as applied by the engine: 0 = closed, 1 = fully open (differs from input.throttle with electronic throttle or traction control).
     {"std.engine.throttle", "", 0.0f, 1.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Torque at the crankshaft, + = driving.
     {"std.engine.torque", "Nm", -500.0f, 1500.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// Absolute intake manifold pressure. Predates the two-source rule (one source at 1.0).
     {"std.engine.manifold_pressure", "bar", 0.0f, 5.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
-    {"std.engine.turbo_boost", "bar", 0.0f, 3.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// 1 = ignition is on.
     {"std.engine.ignition", "", 0.0f, 1.0f, Kind::Discrete, kFlagOptional, 0, ArrayLayout::Index},
+    /// 1 = starter motor is engaged.
     {"std.engine.starter", "", 0.0f, 1.0f, Kind::Discrete, kFlagOptional, 0, ArrayLayout::Index},
+    /// 1 = the rev limiter is cutting now.
     {"std.engine.rev_limiter", "", 0.0f, 1.0f, Kind::Discrete, kFlagOptional, 0, ArrayLayout::Index},
+    /// Selected gear: -1 = reverse, 0 = neutral, 1.. = forward gears.
     {"std.drivetrain.gear", "", -1.0f, 10.0f, Kind::Discrete, kFlagOptional, 0, ArrayLayout::Index},
+    /// Torque on the steering wheel, + = torque that turns the wheel left.
     {"std.steering.torque", "Nm", -50.0f, 50.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
+    /// 1 = DRS (or an equivalent drag-reduction flap) is open.
     {"std.aero.drs", "", 0.0f, 1.0f, Kind::Discrete, kFlagOptional, 0, ArrayLayout::Index},
+    /// Hybrid or KERS deployment: 0 = none, 1 = maximum.
     {"std.hybrid.deploy", "", 0.0f, 1.0f, Kind::Continuous, kFlagOptional, 0, ArrayLayout::Index},
 };
 
@@ -98,7 +130,6 @@ inline constexpr ChannelDef kChannels[kCount] = {
 enum class ArrayId : uint32_t {
     SuspensionDeflection,
     SuspensionVelocity,
-    SuspensionAcceleration,
     SuspensionRideHeight,
     WheelSpeed,
     WheelLoad,
@@ -107,35 +138,54 @@ enum class ArrayId : uint32_t {
     WheelSurface,
     WheelForceLat,
     WheelForceLon,
-    TyreTemp,
     TyreTempInner,
     TyreTempMiddle,
     TyreTempOuter,
     TyrePressure,
     BrakeTemp,
+    WheelContact,
+    WheelSurfaceSpeed,
     SuspensionThird,
 };
 
 inline constexpr uint32_t kArrayCount = 18;
 
 inline constexpr ChannelDef kArrays[kArrayCount] = {
+    /// Change of the suspension travel from the sim's reference position, + = compression; not normalised. Ride height is in ride_height.
     {"std.suspension.deflection", "m", -0.2f, 0.2f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Rate of change of deflection, same sign: + = compressing.
     {"std.suspension.velocity", "m/s", -2.0f, 2.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
-    {"std.suspension.acceleration", "m/s2", -200.0f, 200.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Height of the chassis above the ground at the wheel.
     {"std.suspension.ride_height", "m", 0.0f, 0.3f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Angular speed of the wheel, + = rolling forward.
     {"std.wheel.speed", "rad/s", -50.0f, 500.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Vertical force on the tyre contact patch, >= 0.
     {"std.wheel.load", "N", 0.0f, 20000.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// (omega*r - v) / |v| of the tyre: 0 = free rolling, -1 = locked, > 0 = wheelspin. Predates the two-source rule.
     {"std.wheel.slip_ratio", "", -1.0f, 3.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Angle of the contact-patch velocity relative to the wheel heading, + = patch moving to the left of the heading. Predates the two-source rule.
     {"std.wheel.slip_angle", "rad", -1.0f, 1.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Surface under the tyre (std::Surface).
     {"std.wheel.surface", "std::Surface", 0.0f, 15.0f, Kind::Discrete, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Lateral force on the tyre from the road in the wheel's axes, + = left.
     {"std.wheel.force.lat", "N", -20000.0f, 20000.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Longitudinal force on the tyre from the road in the wheel's axes, + = forward (traction).
     {"std.wheel.force.lon", "N", -20000.0f, 20000.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
-    {"std.tyre.temp", "degC", 0.0f, 150.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Tread temperature on the side toward the car's centre line, for both sides of the car.
     {"std.tyre.temp.inner", "degC", 0.0f, 150.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Tread temperature in the middle of the tread.
     {"std.tyre.temp.middle", "degC", 0.0f, 150.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Tread temperature on the side away from the car's centre line, for both sides of the car.
     {"std.tyre.temp.outer", "degC", 0.0f, 150.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Tyre pressure (absolute or gauge as delivered by the source).
     {"std.tyre.pressure", "kPa", 0.0f, 400.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Brake disc temperature per wheel; a source with a single value broadcasts it to every wheel.
     {"std.brake.temp", "degC", 0.0f, 1000.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// 1 = the tyre touches the ground, 0 = airborne.
+    {"std.wheel.contact", "", 0.0f, 1.0f, Kind::Discrete, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Linear speed of the tread relative to the wheel centre (omega*r), + = rolling forward, same sign as wheel.speed.
+    {"std.wheel.surface_speed", "m/s", -120.0f, 120.0f, Kind::Continuous, kFlagOptional, 8, ArrayLayout::Wheel},
+    /// Travel of the third (heave) element of the axle, + = compression.
     {"std.suspension.third", "m", -0.2f, 0.2f, Kind::Continuous, kFlagOptional, 4, ArrayLayout::Axle},
 };
 

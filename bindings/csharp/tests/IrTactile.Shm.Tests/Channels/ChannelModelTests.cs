@@ -65,20 +65,20 @@ public class ChannelModelTests
         "std.vehicle.yaw_rate", "std.vehicle.pitch_rate", "std.vehicle.roll_rate",
         "std.vehicle.orientation.pitch", "std.vehicle.orientation.roll",
         "std.vehicle.pit_limiter", "std.vehicle.boost_active",
-        "std.assist.abs_level", "std.assist.tc_active",
+        "std.assist.abs_active", "std.assist.tc_active",
         "std.engine.rpm", "std.engine.max_rpm", "std.engine.throttle", "std.engine.torque",
-        "std.engine.manifold_pressure", "std.engine.turbo_boost", "std.engine.ignition", "std.engine.starter",
+        "std.engine.manifold_pressure", "std.engine.ignition", "std.engine.starter",
         "std.engine.rev_limiter",
         "std.drivetrain.gear", "std.steering.torque", "std.aero.drs", "std.hybrid.deploy",
     };
 
     private static readonly string[] WheelArrayNames =
     {
-        "std.suspension.deflection", "std.suspension.velocity", "std.suspension.acceleration", "std.suspension.ride_height",
+        "std.suspension.deflection", "std.suspension.velocity", "std.suspension.ride_height",
         "std.wheel.speed", "std.wheel.load", "std.wheel.slip_ratio", "std.wheel.slip_angle", "std.wheel.surface",
         "std.wheel.force.lat", "std.wheel.force.lon",
-        "std.tyre.temp", "std.tyre.temp.inner", "std.tyre.temp.middle", "std.tyre.temp.outer",
-        "std.tyre.pressure", "std.brake.temp",
+        "std.tyre.temp.inner", "std.tyre.temp.middle", "std.tyre.temp.outer",
+        "std.tyre.pressure", "std.brake.temp", "std.wheel.contact", "std.wheel.surface_speed",
     };
 
     [Fact]
@@ -107,7 +107,7 @@ public class ChannelModelTests
             Assert.True(names.Add(a.Name), a.Name);
             handles += a.ArrayCapacity;
         }
-        Assert.Equal(175, handles);
+        Assert.Equal(174, handles);
 
         Assert.Equal(ScalarNames, Std.All.Select(c => c.Name));
         Assert.Equal(WheelArrayNames.Length + 1, Std.Arrays.Length);

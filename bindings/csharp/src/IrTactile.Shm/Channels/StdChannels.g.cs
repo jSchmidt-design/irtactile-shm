@@ -26,14 +26,13 @@ public enum StdChannel : uint
     VehicleOrientationRoll,
     VehiclePitLimiter,
     VehicleBoostActive,
-    AssistAbsLevel,
+    AssistAbsActive,
     AssistTcActive,
     EngineRpm,
     EngineMaxRpm,
     EngineThrottle,
     EngineTorque,
     EngineManifoldPressure,
-    EngineTurboBoost,
     EngineIgnition,
     EngineStarter,
     EngineRevLimiter,
@@ -47,7 +46,6 @@ public enum StdArray : uint
 {
     SuspensionDeflection,
     SuspensionVelocity,
-    SuspensionAcceleration,
     SuspensionRideHeight,
     WheelSpeed,
     WheelLoad,
@@ -56,12 +54,13 @@ public enum StdArray : uint
     WheelSurface,
     WheelForceLat,
     WheelForceLon,
-    TyreTemp,
     TyreTempInner,
     TyreTempMiddle,
     TyreTempOuter,
     TyrePressure,
     BrakeTemp,
+    WheelContact,
+    WheelSurfaceSpeed,
     SuspensionThird,
 }
 
@@ -96,63 +95,114 @@ public static class Std
 {
     public static readonly ChannelDef[] All =
     {
+        /// <summary>Connection state of the source (std::ConnectionStatus).</summary>
         new("std.session.status", "", 0.0f, 4.0f, SignalKind.Discrete, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Throttle pedal: 0 = released, 1 = fully pressed.</summary>
         new("std.input.throttle", "", 0.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Brake pedal: 0 = released, 1 = fully pressed.</summary>
         new("std.input.brake", "", 0.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Clutch pedal: 0 = released, 1 = fully pressed (like throttle and brake).</summary>
         new("std.input.clutch", "", 0.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Steering wheel angle normalised to full lock: +1 = fully turned left (counter-clockwise seen by the driver), -1 = fully right.</summary>
         new("std.input.steering", "", -1.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Handbrake lever: 0 = released, 1 = fully pulled.</summary>
         new("std.input.handbrake", "", 0.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Speed over ground, always &gt;= 0.</summary>
         new("std.vehicle.speed", "m/s", 0.0f, 120.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Velocity along the vehicle's longitudinal axis, + = forward.</summary>
         new("std.vehicle.velocity.lon", "m/s", -120.0f, 120.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Velocity along the vehicle's lateral axis, + = left.</summary>
         new("std.vehicle.velocity.lat", "m/s", -120.0f, 120.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Velocity along the vehicle's vertical axis, + = up.</summary>
         new("std.vehicle.velocity.vert", "m/s", -120.0f, 120.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Acceleration along the longitudinal axis, + = forward.</summary>
         new("std.vehicle.accel.lon", "m/s2", -50.0f, 50.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Acceleration along the lateral axis, + = left (a left turn reads positive).</summary>
         new("std.vehicle.accel.lat", "m/s2", -50.0f, 50.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Acceleration along the vertical axis, + = up, gravity removed (0 at rest).</summary>
         new("std.vehicle.accel.vert", "m/s2", -50.0f, 50.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Rotation about the vertical axis, + = counter-clockwise seen from above (turning left).</summary>
         new("std.vehicle.yaw_rate", "rad/s", -5.0f, 5.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Rotation about the lateral axis, + = nose down.</summary>
         new("std.vehicle.pitch_rate", "rad/s", -5.0f, 5.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Rotation about the longitudinal axis, + = right side down.</summary>
         new("std.vehicle.roll_rate", "rad/s", -5.0f, 5.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Pitch angle relative to the horizontal plane, + = nose down.</summary>
         new("std.vehicle.orientation.pitch", "rad", -1.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Roll angle relative to the horizontal plane, + = right side down.</summary>
         new("std.vehicle.orientation.roll", "rad", -1.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>1 = pit limiter is engaged.</summary>
         new("std.vehicle.pit_limiter", "", 0.0f, 1.0f, SignalKind.Discrete, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>1 = a push-to-pass, boost or overtake system is delivering extra power now.</summary>
         new("std.vehicle.boost_active", "", 0.0f, 1.0f, SignalKind.Discrete, ChannelFlags.Optional, 0, ArrayLayout.Index),
-        new("std.assist.abs_level", "", 0.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>1 = ABS is reducing brake pressure on at least one wheel now (not: ABS is switched on).</summary>
+        new("std.assist.abs_active", "", 0.0f, 1.0f, SignalKind.Discrete, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>1 = traction control is cutting torque now (not: TC is switched on).</summary>
         new("std.assist.tc_active", "", 0.0f, 1.0f, SignalKind.Discrete, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Crankshaft speed.</summary>
         new("std.engine.rpm", "rpm", 0.0f, 20000.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Rev limit of the current car.</summary>
         new("std.engine.max_rpm", "rpm", 0.0f, 20000.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Throttle plate opening as applied by the engine: 0 = closed, 1 = fully open (differs from input.throttle with electronic throttle or traction control).</summary>
         new("std.engine.throttle", "", 0.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Torque at the crankshaft, + = driving.</summary>
         new("std.engine.torque", "Nm", -500.0f, 1500.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Absolute intake manifold pressure. Predates the two-source rule (one source at 1.0).</summary>
         new("std.engine.manifold_pressure", "bar", 0.0f, 5.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
-        new("std.engine.turbo_boost", "bar", 0.0f, 3.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>1 = ignition is on.</summary>
         new("std.engine.ignition", "", 0.0f, 1.0f, SignalKind.Discrete, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>1 = starter motor is engaged.</summary>
         new("std.engine.starter", "", 0.0f, 1.0f, SignalKind.Discrete, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>1 = the rev limiter is cutting now.</summary>
         new("std.engine.rev_limiter", "", 0.0f, 1.0f, SignalKind.Discrete, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Selected gear: -1 = reverse, 0 = neutral, 1.. = forward gears.</summary>
         new("std.drivetrain.gear", "", -1.0f, 10.0f, SignalKind.Discrete, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Torque on the steering wheel, + = torque that turns the wheel left.</summary>
         new("std.steering.torque", "Nm", -50.0f, 50.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>1 = DRS (or an equivalent drag-reduction flap) is open.</summary>
         new("std.aero.drs", "", 0.0f, 1.0f, SignalKind.Discrete, ChannelFlags.Optional, 0, ArrayLayout.Index),
+        /// <summary>Hybrid or KERS deployment: 0 = none, 1 = maximum.</summary>
         new("std.hybrid.deploy", "", 0.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 0, ArrayLayout.Index),
     };
 
     /// <summary>Base names; elements are <c>name[0..ArrayCapacity)</c>.</summary>
     public static readonly ChannelDef[] Arrays =
     {
+        /// <summary>Change of the suspension travel from the sim's reference position, + = compression; not normalised. Ride height is in ride_height.</summary>
         new("std.suspension.deflection", "m", -0.2f, 0.2f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Rate of change of deflection, same sign: + = compressing.</summary>
         new("std.suspension.velocity", "m/s", -2.0f, 2.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
-        new("std.suspension.acceleration", "m/s2", -200.0f, 200.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Height of the chassis above the ground at the wheel.</summary>
         new("std.suspension.ride_height", "m", 0.0f, 0.3f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Angular speed of the wheel, + = rolling forward.</summary>
         new("std.wheel.speed", "rad/s", -50.0f, 500.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Vertical force on the tyre contact patch, &gt;= 0.</summary>
         new("std.wheel.load", "N", 0.0f, 20000.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>(omega*r - v) / |v| of the tyre: 0 = free rolling, -1 = locked, &gt; 0 = wheelspin. Predates the two-source rule.</summary>
         new("std.wheel.slip_ratio", "", -1.0f, 3.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Angle of the contact-patch velocity relative to the wheel heading, + = patch moving to the left of the heading. Predates the two-source rule.</summary>
         new("std.wheel.slip_angle", "rad", -1.0f, 1.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Surface under the tyre (std::Surface).</summary>
         new("std.wheel.surface", "std::Surface", 0.0f, 15.0f, SignalKind.Discrete, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Lateral force on the tyre from the road in the wheel's axes, + = left.</summary>
         new("std.wheel.force.lat", "N", -20000.0f, 20000.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Longitudinal force on the tyre from the road in the wheel's axes, + = forward (traction).</summary>
         new("std.wheel.force.lon", "N", -20000.0f, 20000.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
-        new("std.tyre.temp", "degC", 0.0f, 150.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Tread temperature on the side toward the car's centre line, for both sides of the car.</summary>
         new("std.tyre.temp.inner", "degC", 0.0f, 150.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Tread temperature in the middle of the tread.</summary>
         new("std.tyre.temp.middle", "degC", 0.0f, 150.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Tread temperature on the side away from the car's centre line, for both sides of the car.</summary>
         new("std.tyre.temp.outer", "degC", 0.0f, 150.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Tyre pressure (absolute or gauge as delivered by the source).</summary>
         new("std.tyre.pressure", "kPa", 0.0f, 400.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Brake disc temperature per wheel; a source with a single value broadcasts it to every wheel.</summary>
         new("std.brake.temp", "degC", 0.0f, 1000.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>1 = the tyre touches the ground, 0 = airborne.</summary>
+        new("std.wheel.contact", "", 0.0f, 1.0f, SignalKind.Discrete, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Linear speed of the tread relative to the wheel centre (omega*r), + = rolling forward, same sign as wheel.speed.</summary>
+        new("std.wheel.surface_speed", "m/s", -120.0f, 120.0f, SignalKind.Continuous, ChannelFlags.Optional, 8, ArrayLayout.Wheel),
+        /// <summary>Travel of the third (heave) element of the axle, + = compression.</summary>
         new("std.suspension.third", "m", -0.2f, 0.2f, SignalKind.Continuous, ChannelFlags.Optional, 4, ArrayLayout.Axle),
     };
 }
