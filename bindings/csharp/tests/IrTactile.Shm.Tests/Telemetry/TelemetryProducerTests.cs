@@ -27,6 +27,35 @@ public unsafe class TelemetryProducerTests
 
     private static readonly string Dir = FindDir();
 
+    [Theory]
+    [InlineData("irTactile_Telemetry_", "irTactile_TelemetryReturn_")]
+    [InlineData("irTactile_Telemetry_demo", "irTactile_TelemetryReturn_demo")]
+    [InlineData("MySegment", "MySegment_Return")]
+    public void ReturnNameFollowsPrefixRule(string inbound, string expected)
+    {
+        Assert.Equal(expected, TelemetryLayout.ReturnNameFor(inbound));
+    }
+
+    [Fact]
+    public void SimIdMustFitWithoutTruncation()
+    {
+        int bytes = TelemetryLayout.RequiredBytes(64);
+        var buffer = new ulong[(bytes + 7) / 8];
+        fixed (ulong* aligned = buffer)
+        {
+            var p = new TelemetryProducer();
+            Assert.Equal(TelemetryOpenResult.BadIdentity,
+                p.Open((byte*)aligned, bytes, 64, new ProducerIdentity { SimId = new string('a', 24) }));
+            string id = new string('a', 23);
+            Assert.Equal(TelemetryOpenResult.Ok,
+                p.Open((byte*)aligned, bytes, 64, new ProducerIdentity { SimId = id }));
+            Assert.True(p.CommitLayout());
+            var field = new ReadOnlySpan<byte>((byte*)aligned + TelemetryLayout.OffSimId, 24);
+            Assert.Equal(id, System.Text.Encoding.UTF8.GetString(field.Slice(0, 23)));
+            Assert.Equal((byte)0, field[23]);
+        }
+    }
+
     [Fact]
     public void WheelsPerAxleValidation()
     {
@@ -82,6 +111,8 @@ public unsafe class TelemetryProducerTests
         {
             *(uint*)r = TelemetryLayout.ReturnMagic;
             *(ushort*)(r + 4) = TelemetryLayout.VersionMajor;
+            *(uint*)(r + TelemetryLayout.OffHeaderBytes) = TelemetryLayout.ReturnHeaderBytes;
+            *(uint*)(r + TelemetryLayout.OffTotalBytes) = TelemetryLayout.ReturnBytes;
             *(uint*)(r + TelemetryLayout.ROffCapacity) = 64;
             *(uint*)(r + TelemetryLayout.ROffAccepted) = TelemetryLayout.ReturnHeaderBytes;
             *(uint*)(r + TelemetryLayout.ROffDemanded) = TelemetryLayout.ReturnHeaderBytes + 8;
@@ -111,6 +142,54 @@ public unsafe class TelemetryProducerTests
             Assert.True(p.CommitLayout());                      // a new layout while the region is stuck
             Assert.False(segment.PollReturn(rv));
             Assert.False(rv.IsAccepted(0));                     // the masks of the old layout are dropped
+        }
+        finally
+        {
+            view.SafeMemoryMappedViewHandle.ReleasePointer();
+        }
+    }
+
+    [Fact]
+    public void PollReturn_ValidatesReturnHeader()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        string name = "irTactile_Telemetry_test_cs_retval_" + Environment.ProcessId;
+        using var segment = TelemetrySegment.Create(name, 64, new ProducerIdentity());
+        Assert.True(segment.Producer.CommitLayout());
+
+        using var ret = System.IO.MemoryMappedFiles.MemoryMappedFile.CreateNew(
+            TelemetryLayout.ReturnNameFor(name), TelemetryLayout.ReturnBytes);
+        using var view = ret.CreateViewAccessor();
+        byte* r = null;
+        view.SafeMemoryMappedViewHandle.AcquirePointer(ref r);
+        try
+        {
+            var rv = new TelemetryReturnView();
+            Assert.False(segment.PollReturn(rv));               // magic 0: not ready
+
+            *(uint*)r = TelemetryLayout.ReturnMagic;
+            *(ushort*)(r + 4) = TelemetryLayout.VersionMajor;
+            *(uint*)(r + TelemetryLayout.OffHeaderBytes) = TelemetryLayout.ReturnHeaderBytes;
+            *(uint*)(r + TelemetryLayout.OffTotalBytes) = TelemetryLayout.ReturnBytes;
+            *(uint*)(r + TelemetryLayout.ROffAccepted) = 3;     // ignored while capacity is 0
+            *(ulong*)(r + TelemetryLayout.ROffRetSeq) = 2;
+            *(ulong*)(r + TelemetryLayout.ROffRetSeqEnd) = 2;
+            Assert.True(segment.PollReturn(rv));                // capacity 0: no masks yet
+            Assert.Equal(0u, rv.Capacity);
+
+            *(uint*)(r + TelemetryLayout.ROffCapacity) = 64;
+            Assert.False(segment.PollReturn(rv));               // misaligned accepted offset
+            *(uint*)(r + TelemetryLayout.ROffAccepted) = TelemetryLayout.ReturnHeaderBytes;
+            *(uint*)(r + TelemetryLayout.ROffDemanded) = TelemetryLayout.ReturnBytes;
+            Assert.False(segment.PollReturn(rv));               // demanded mask ends past totalBytes
+            *(uint*)(r + TelemetryLayout.ROffDemanded) = TelemetryLayout.ReturnHeaderBytes + 8;
+            Assert.True(segment.PollReturn(rv));
+
+            *(uint*)(r + TelemetryLayout.OffHeaderBytes) = 64;
+            Assert.False(segment.PollReturn(rv));               // headerBytes below 128
+            *(uint*)(r + TelemetryLayout.OffHeaderBytes) = TelemetryLayout.ReturnHeaderBytes;
+            *(uint*)(r + TelemetryLayout.OffTotalBytes) = 1u << 20;
+            Assert.False(segment.PollReturn(rv));               // totalBytes beyond the mapping
         }
         finally
         {

@@ -57,7 +57,7 @@ public enum TelemetryOpenResult
     /// <summary>The buffer (or the pinned totalBytes of an existing segment) cannot hold the layout.</summary>
     TooSmall,
 
-    /// <summary>simId is not a valid owner id or is reserved.</summary>
+    /// <summary>simId exceeds 23 characters, is not a valid owner id, or is reserved.</summary>
     BadIdentity,
 }
 
@@ -112,6 +112,9 @@ public static class TelemetryLayout
     public const int MinCapacity = 64;
     public const int MaxCapacity = 8192;
 
+    /// <summary>Size of the simId field, including the terminating NUL.</summary>
+    public const int SimIdBytes = 24;
+
     // Header offsets.
     internal const int OffMagic = 0, OffVersionMajor = 4, OffVersionMinor = 6, OffHeaderBytes = 8, OffTotalBytes = 12;
     internal const int OffCapacity = 16, OffChannelCount = 20, OffDescOffset = 24, OffValidOffset = 28;
@@ -134,6 +137,10 @@ public static class TelemetryLayout
     public static bool IsValidCapacity(int capacity) =>
         capacity >= MinCapacity && capacity <= MaxCapacity && capacity % 64 == 0;
 
+    // An 8-byte aligned array of `bytes` at `offset` lies within [headerBytes, totalBytes).
+    internal static bool ArrayFits(uint offset, long bytes, uint headerBytes, uint totalBytes) =>
+        offset % 8 == 0 && offset >= headerBytes && offset + bytes <= totalBytes;
+
     /// <summary>Bytes a segment needs for <paramref name="capacity"/> slots.</summary>
     public static int RequiredBytes(int capacity) =>
         HeaderBytes + capacity * DescBytes + (capacity / 64) * 8 + capacity * 4 + capacity * 4;
@@ -145,7 +152,7 @@ public static class TelemetryLayout
     public static string ReturnNameFor(string inbound)
     {
         const string prefix = "irTactile_Telemetry_";
-        if (inbound.Length > prefix.Length && inbound.StartsWith(prefix, StringComparison.Ordinal))
+        if (inbound.StartsWith(prefix, StringComparison.Ordinal))
         {
             return "irTactile_TelemetryReturn_" + inbound.Substring(prefix.Length);
         }
@@ -200,7 +207,8 @@ public sealed unsafe class TelemetryProducer
     public TelemetryOpenResult Open(byte* baseAddress, long bytes, int capacity, ProducerIdentity identity)
     {
         string simId = identity.SimId ?? "";
-        if (simId.Length != 0 && (!ChannelModel.IsValidOwnerId(simId) || TelemetryLayout.IsReservedSimId(simId)))
+        if (simId.Length >= TelemetryLayout.SimIdBytes ||
+            (simId.Length != 0 && (!ChannelModel.IsValidOwnerId(simId) || TelemetryLayout.IsReservedSimId(simId))))
         {
             return TelemetryOpenResult.BadIdentity;
         }
@@ -538,17 +546,27 @@ public sealed unsafe class TelemetrySegment : IDisposable
         _returnView!.SafeMemoryMappedViewHandle.AcquirePointer(ref p);
         try
         {
-            if (*(uint*)p != TelemetryLayout.ReturnMagic || *(ushort*)(p + 4) != TelemetryLayout.VersionMajor) return false;
+            // Pinned fields (spec: return region, Validation).
+            long mapped = _returnView.Capacity;
+            if (mapped < TelemetryLayout.ReturnHeaderBytes) return false;
+            if (*(uint*)p != TelemetryLayout.ReturnMagic ||
+                *(ushort*)(p + TelemetryLayout.OffVersionMajor) != TelemetryLayout.VersionMajor) return false;
+            uint headerBytes = *(uint*)(p + TelemetryLayout.OffHeaderBytes);
+            uint totalBytes = *(uint*)(p + TelemetryLayout.OffTotalBytes);
+            if (headerBytes < TelemetryLayout.ReturnHeaderBytes || headerBytes > mapped ||
+                totalBytes < headerBytes || totalBytes > mapped) return false;
             for (int attempt = 0; attempt < TelemetryLayout.MaxFrameRetries; attempt++)
             {
                 ulong r1 = Volatile.Read(ref *(ulong*)(p + TelemetryLayout.ROffRetSeq));
                 if ((r1 & 1) != 0) continue;
+                // Frame fields, validated inside the retSeq window. Capacity 0 = no masks yet; offsets are ignored.
                 uint cap = *(uint*)(p + TelemetryLayout.ROffCapacity);
-                if (!TelemetryLayout.IsValidCapacity((int)cap)) return false;
+                if (cap != 0 && !TelemetryLayout.IsValidCapacity((int)cap)) return false;
                 int words = (int)cap / 64;
                 uint accOff = *(uint*)(p + TelemetryLayout.ROffAccepted);
                 uint demOff = *(uint*)(p + TelemetryLayout.ROffDemanded);
-                if (accOff + words * 8 > TelemetryLayout.ReturnBytes || demOff + words * 8 > TelemetryLayout.ReturnBytes) return false;
+                if (cap != 0 && (!TelemetryLayout.ArrayFits(accOff, words * 8L, headerBytes, totalBytes) ||
+                                 !TelemetryLayout.ArrayFits(demOff, words * 8L, headerBytes, totalBytes))) return false;
                 var acc = new ulong[words];
                 var dem = new ulong[words];
                 for (int i = 0; i < words; i++)

@@ -28,11 +28,10 @@ acquire loads, never from a snapshot.
 
 ## Rules
 
-- **Re-read `layoutSeq` on every read cycle, not only at attach.** It is free:
-  the concurrent range sits in one cache line with `writeSeq`, which you are
-  fetching anyway. If it changed, re-take the snapshot before using any
-  offset - the copy you hold may name a layout the producer no longer has.
-- **Every block copy is checked against the snapshot's epoch** (`layoutEpoch`
+- **Re-read `layoutSeq` on every read cycle, not only at attach.** If it
+  changed, re-take the snapshot before using any offset - the copy you hold
+  may name a layout the producer no longer has.
+- **In stream-shm, every block copy is checked against the snapshot's epoch** (`layoutEpoch`
   in the block descriptor; see
   [../stream-shm/v1/fields.md](../stream-shm/v1/fields.md)). A block published
   under a different epoch is discarded - it defends against stale-geometry
@@ -45,18 +44,18 @@ acquire loads, never from a snapshot.
   strictly greater than anything a spinning reader has seen. See the
   format's publish protocol, *Restarting into an existing segment*.
 
-The per-read protocol that consumes the snapshot is in
-[../stream-shm/v1/README.md](../stream-shm/v1/README.md) - "The reader
-protocol".
+The formats define their complete read protocols:
+[stream-shm](../stream-shm/v1/README.md) and
+[telemetry-shm](../telemetry-shm/v1/README.md#read-protocol-consumer).
 
 ## Generalization: a counter that guards a whole frame
 
 `layoutSeq` guards the layout fields of a header that is otherwise written
-concurrently. The same protocol also guards a **whole frame** - a block that is
-rewritten as one unit on every publish (telemetry values, a descriptor table
-plus values). Such a segment has no concurrent range: *every* byte is protected
-by the counter. Nothing in the protocol changes except the scope, so a format
-that needs it names its counter `frameSeq` (a segment may carry both).
+concurrently. A frame seqlock guards the **frame fields** published as one unit,
+such as telemetry values and their sample timestamp. Other fields in the same
+segment may be pinned, layout or concurrent fields. Each format names its frame
+counter (`frameSeq` inbound or `retSeq` return in telemetry-shm) and specifies
+which fields it protects. A segment may carry both layout and frame seqlocks.
 
 Writer:
 
@@ -64,7 +63,7 @@ Writer:
 frameSeq += 1            // odd: write in progress     (release)
 write the frame fields
 frameSeqEnd = frameSeq + 1                              (release)
-frameSeq += 1            // even: stable
+frameSeq += 1            // even: stable                (release)
 ```
 
 Reader (bounded retries):
@@ -84,9 +83,9 @@ Rules that differ from `layoutSeq`:
 
 - **Bounded retries.** A reader on a real-time thread never spins unboundedly;
   after N failed tries it keeps its previous frame and tries again next cycle.
-- **A partial copy is allowed** when the segment lets the reader find the bytes
-  it needs without the rest (offsets live in the header, which is part of the
-  frame). The retry condition is the same: the counters must match after the
-  copy.
+- **A partial copy is allowed** when the reader can locate the required bytes
+  using validated offsets. Read frame offsets within the frame seqlock window;
+  read layout offsets from a validated layout snapshot and recheck `layoutSeq`
+  after the frame copy. The frame counters must also match after the copy.
 - **Latest value only.** A frame segment carries one frame; there is no queue.
   A reader that falls behind loses frames, never reads a mix of two.

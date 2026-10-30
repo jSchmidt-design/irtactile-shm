@@ -47,7 +47,7 @@ struct Identity {
 enum class OpenResult : uint32_t {
     Ok,
     TooSmall,      ///< the buffer (or the pinned totalBytes of an existing segment) cannot hold the layout
-    BadIdentity,   ///< simId is not a valid owner id or is reserved
+    BadIdentity,   ///< simId exceeds 23 characters, is not a valid owner id, or is reserved
     SegmentFailed, ///< ProducerSegment only: the OS refused to create or map the segment (access, namespace)
     WriterActive,  ///< ProducerSegment only: another live producer holds the segment's writer lock
 };
@@ -111,7 +111,8 @@ public:
         m_committed = false;
         if (!base || bytes < kHeaderBytes || bytes > UINT32_MAX ||
             (reinterpret_cast<uintptr_t>(base) & 7u) || !isValidCapacity(capacity)) return OpenResult::TooSmall;
-        if (!channels::isValidOwnerId(identity.simId) && !identity.simId.empty()) return OpenResult::BadIdentity;
+        if (identity.simId.size() >= kSimIdBytes ||
+            (!channels::isValidOwnerId(identity.simId) && !identity.simId.empty())) return OpenResult::BadIdentity;
         if (isReservedSimId(identity.simId)) return OpenResult::BadIdentity;
         m_base = static_cast<uint8_t*>(base);
         m_identity = std::move(identity);

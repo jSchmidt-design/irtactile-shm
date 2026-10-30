@@ -86,7 +86,7 @@ TEST_CASE("segment names")
     CHECK(inboundName("demo") == "irTactile_Telemetry_demo");
     CHECK(returnNameFor("irTactile_Telemetry_demo") == "irTactile_TelemetryReturn_demo");
     CHECK(returnNameFor("MySegment") == "MySegment_Return");
-    CHECK(returnNameFor("irTactile_Telemetry_") == "irTactile_Telemetry__Return");
+    CHECK(returnNameFor("irTactile_Telemetry_") == "irTactile_TelemetryReturn_");
 }
 
 TEST_CASE("eventsSince is a modular difference")
@@ -261,6 +261,7 @@ TEST_CASE("frames round-trip values, valid bits, events and QPC")
     REQUIRE(r.readFrame(f, 2) == ReadResult::NewFrame);
     CHECK_FALSE(f.isValid(bump));                   // events are valid only in the frame that carries one
     CHECK(f.eventCount[bump] == 1);                 // the counter keeps counting
+    CHECK(f.values[bump] == 0.75f);                // retained even when validity is clear
 }
 
 TEST_CASE("a frame being written is Torn, never a mix")
@@ -392,6 +393,10 @@ TEST_CASE("open rejects a segment that is too small and a bad simId")
     Segment s(Producer::requiredBytes(64));
     CHECK(p.open(s.data(), s.size, 64, identity("std")) == OpenResult::BadIdentity);
     CHECK(p.open(s.data(), s.size, 64, identity("Bad-Id")) == OpenResult::BadIdentity);
+    CHECK(p.open(s.data(), s.size, 64, identity(std::string(24, 'a').c_str())) == OpenResult::BadIdentity);
+    REQUIRE(p.open(s.data(), s.size, 64, identity(std::string(23, 'a').c_str())) == OpenResult::Ok);
+    REQUIRE(p.commitLayout());
+    CHECK(std::string(s.header().simId) == std::string(23, 'a'));
     CHECK(p.open(s.data(), s.size, 64, identity("lmu")) == OpenResult::Ok);   // a built-in simId is allowed
     CHECK(p.open(s.data(), s.size, 64, identity("")) == OpenResult::Ok);      // empty = chosen by the consumer
 }
@@ -702,6 +707,10 @@ TEST_CASE("validateDescriptor and matchesTable")
     CHECK_FALSE(validateDescriptor(x));
     x = scalar; x.provenance = 3;
     CHECK(matchesTable(x, rpm, 0));              // provenance is not compared
+    x = scalar; x.flags |= ~channels::kFlagOptional;
+    CHECK(matchesTable(x, rpm, 0));              // reserved flag bits are ignored
+    x.flags ^= channels::kFlagOptional;
+    CHECK_FALSE(matchesTable(x, rpm, 0));        // the defined flag must still match
 }
 
 

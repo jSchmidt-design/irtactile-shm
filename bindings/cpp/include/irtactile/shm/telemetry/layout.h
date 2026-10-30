@@ -70,13 +70,13 @@ struct Header {
     uint32_t producerPid;
     uint32_t reserved0;
     char     simId[kSimIdBytes];
-    // concurrent [80, 120)
+    // concurrent [80, 112)
     uint64_t frameSeq;
     uint64_t lastPublishQpc;
     uint32_t producerState;
     uint32_t layoutSeq;
     uint64_t frameSeqEnd;
-    uint64_t frameQpc;
+    uint64_t frameQpc;                // frame field
     // layout: session identity
     char     simName[32];
     char     carId[64];
@@ -205,7 +205,7 @@ inline std::string inboundName(std::string_view simId)
 /// Return-region name derived from the inbound name alone (spec: Names).
 inline std::string returnNameFor(std::string_view inbound)
 {
-    if (inbound.size() > kInboundPrefix.size() && inbound.substr(0, kInboundPrefix.size()) == kInboundPrefix) {
+    if (inbound.substr(0, kInboundPrefix.size()) == kInboundPrefix) {
         return std::string(kReturnPrefix) + std::string(inbound.substr(kInboundPrefix.size()));
     }
     return std::string(inbound) + "_Return";
@@ -343,13 +343,14 @@ inline bool validateDescriptor(const ChannelDesc& d) noexcept
 }
 
 /// Properties of a descriptor must equal the table entry of a std.* name. A producer may declare an array with
-/// a smaller capacity than the table (`1 <= arrayCapacity <= def.arrayCapacity`); provenance is not compared.
+/// a smaller capacity than the table (`1 <= arrayCapacity <= def.arrayCapacity`). Reserved flag bits and
+/// provenance are not compared.
 inline bool matchesTable(const ChannelDesc& d, const channels::ChannelDef& def, uint32_t arrayElement) noexcept
 {
     std::string_view unit;
     if (!fieldString(d.unit, sizeof(d.unit), unit) || unit != def.unit) return false;
     if (d.rangeMin != def.rangeMin || d.rangeMax != def.rangeMax ||
-        d.kind != static_cast<uint32_t>(def.kind) || d.flags != def.flags ||
+        d.kind != static_cast<uint32_t>(def.kind) || ((d.flags ^ def.flags) & channels::kFlagOptional) != 0 ||
         d.layout != static_cast<uint8_t>(def.layout)) {
         return false;
     }

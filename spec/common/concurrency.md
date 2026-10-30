@@ -7,15 +7,15 @@ three concurrency classes, or four in a format with a frame seqlock (see
 
 ## Layout fields
 
-Every field outside the concurrently-written byte range (`[80, 112)` in v1)
-that is not **pinned** is a **layout** field. Layout fields are read under the
+Layout fields describe the geometry and identity that remain stable between
+layout rewrites. Each format's field table identifies them. They are read under the
 `layoutSeq` seqlock ([seqlock.md](seqlock.md)): take a snapshot while
 `layoutSeq` is even and unchanged, then use that snapshot for all addressing
 and interpretation until the next read cycle. A producer restart into the same
 segment may rewrite any layout field; changing one invalidates every cached
 snapshot.
 
-Note what is deliberately a layout field: the **geometry** (`channelCount`,
+In stream-shm v1, these include the **geometry** (`channelCount`,
 `samplesPerBlock`, `ringBlocks`, `sampleFormat`, `slotBytes`,
 `channelPlaneBytes`) and the **identity** (`deviceGuid`, `deviceName`,
 `producerPid`, plus the clock calibration `qpcFrequency`). A restart that
@@ -25,15 +25,17 @@ after any `layoutSeq` change.
 
 ## Pinned fields
 
-A rewrite MUST NOT change `magic`, `versionMajor`, `headerBytes`, `totalBytes`
-or `slotArrayOffset`. Consumers map once, blind, against those five and never
-remap, and an OS segment cannot grow. Changing any of them requires a different
-segment - which, since the size class is baked into the name, means a different
-name. They are read once, at attach, and never again.
+A rewrite MUST NOT change a pinned field. Each format's field table lists these
+fields; they include `magic`, `versionMajor`, `headerBytes` and `totalBytes`.
+Consumers may cache them at attach. Changing one requires a different segment.
+In stream-shm v1, `slotArrayOffset` is also pinned; in telemetry-shm v1,
+`versionMinor` is pinned. Telemetry return-mask offsets are frame fields, not
+pinned: they move when the producer capacity changes.
 
 ## Concurrent fields
 
-Bytes `[80, 112)` are read directly with per-field acquire loads:
+Concurrent fields are read directly with per-field acquire loads. In stream-shm v1,
+these occupy bytes `[80, 112)`:
 `writeSeq`, `lastPublishQpc`, `deviceState`, `layoutSeq`, `wiredChannelMask`,
 `reserved1`. The seqlock does **not** cover them - that is not a restriction
 on *when* they may be read but on *how*: each is a single naturally-aligned
@@ -46,8 +48,10 @@ snapshot's bytes in this range may be mid-store garbage - see
   outside the lock; the values it guards are layout fields.
 - `wiredChannelMask` is a concurrent hint because it changes on every producer
   graph rebuild, which is not compatible with the snapshot model.
-- All six words sit inside one cache line, so a reader loading `writeSeq` gets
-  `layoutSeq` and `deviceState` for free.
+
+Telemetry-shm v1 also has an inbound concurrent range of `[80, 112)`, but with
+different fields. Its `frameQpc` at offset 112 is a frame field. The return region
+has concurrent fields interspersed with frame fields; use its field table.
 
 ## Frame fields
 

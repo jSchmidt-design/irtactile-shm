@@ -24,7 +24,7 @@ cached across reads).
 | 40 | 8 | `qpcFrequency` | layout | `QueryPerformanceFrequency()` of the producer |
 | 48 | 4 | `producerPid` | layout | process id, `0` = unknown |
 | 52 | 4 | `reserved0` | layout | producer zeroes, reader ignores |
-| 56 | 24 | `simId` | layout | namespace of local names (`sim.<simId>.*`); `[a-z0-9_]`, NUL-padded; empty = chosen by the consumer |
+| 56 | 24 | `simId` | layout | namespace of local names (`sim.<simId>.*`); `[a-z0-9_]{1,23}`, NUL-padded to 24 bytes; empty = chosen by the consumer. Reject longer ids; do not truncate |
 | 80 | 8 | `frameSeq` | concurrent | frame seqlock: odd = frame being written |
 | 88 | 8 | `lastPublishQpc` | concurrent | QPC of the last publish (liveness field only) |
 | 96 | 4 | `producerState` | concurrent | `0` Inactive, `1` Active, `2` Closed; reject others |
@@ -36,15 +36,14 @@ cached across reads).
 | 216 | 32 | `carName` | layout | display name of the car |
 | 248 | 8 | `wheelsPerAxle` | layout | `uint8_t[8]`: wheels per axle, front to back (car `2,2`; truck `2,4,4`). The first `0` ends the list; all zero = unknown. Reject (`Malformed`) an entry above 8 or a non-zero entry after a zero. Defines the element order of `wheel` arrays and the element count of `axle` arrays; a change (car change) is a layout rewrite |
 
-The concurrent range of this format is `[80, 120)` (it contains the frame words; `frameQpc` is the first
-frame-guarded field).
+The concurrent range is `[80, 112)`. The next field, `frameQpc`, is protected by the frame seqlock.
 
 ## `ChannelDesc` - 128 bytes
 
 | Offset | Size | Field | Meaning |
 |---:|---:|---|---|
 | 0 | 64 | `name` | table name or local name; array elements carry `[i]` |
-| 64 | 16 | `unit` | |
+| 64 | 16 | `unit` | physical unit; must match the table for a standard channel |
 | 80 | 4 | `rangeMin` | `float32`, nominal |
 | 84 | 4 | `rangeMax` | `float32`, nominal |
 | 88 | 4 | `kind` | `0` CONTINUOUS, `1` DISCRETE, `2` EVENT; reject others |
@@ -63,7 +62,7 @@ A descriptor with an empty `name` is an unused slot.
 |---|---|---|
 | `valid` | `uint64[capacity/64]` | bit `slot & 63` of word `slot >> 6`; set = the slot carries a value in this frame |
 | `eventCount` | `uint32[capacity]` | EVENT channels: free-running event counter; other slots `0` |
-| `values` | `float32[capacity]` | value, or the amplitude of the latest event |
+| `values` | `float32[capacity]` | value, or the amplitude of the latest event (retained through frames without an event) |
 
 ## Return header - 128 bytes
 
