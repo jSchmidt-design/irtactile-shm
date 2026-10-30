@@ -28,6 +28,9 @@ a fixed name and documents it; the user enters that name in the irTactile config
 cannot list named segments, so the consumer only opens names it was configured with, and irTactile passes nothing
 to the producer.
 
+Inbound names starting with `irTactile_TelemetryReturn_` or ending in `_Return` are reserved and must be rejected.
+This keeps inbound and return names disjoint.
+
 A segment name is 1-200 characters from `[A-Za-z0-9_.-]`. The recommended form is `irTactile_Telemetry_<simId>`
 (the bindings' `inboundName()` builds it). The return name is derived from the inbound name alone, so both sides
 compute it without further configuration:
@@ -154,7 +157,8 @@ process, means the producer is gone: the source is *disconnected*.
 
 **Events.** The consumer remembers the previous `eventCount` per EVENT channel and, per read, turns a non-zero
 difference (modular `uint32` arithmetic) into **one** event with the latest amplitude. Several events of one channel
-between two reads collapse into one; none is lost. The first read after attach or after a layout rewrite takes the
+between two reads collapse into one: individual occurrences and earlier amplitudes are lost.
+Detection requires fewer than 2^32 events between observations; a full counter wrap can appear unchanged. The first read after attach or after a layout rewrite takes the
 count as baseline and emits nothing.
 
 ## Return region

@@ -108,6 +108,7 @@ public:
     /// and `identity.pid` are filled in when zero. SegmentFailed: the OS refused to create or map the segment.
     OpenResult create(const std::string& inboundSegmentName, uint32_t capacity, Identity identity)
     {
+        if (!isValidSegmentName(inboundSegmentName) || !isValidCapacity(capacity)) return OpenResult::SegmentFailed;
         if (identity.qpcFrequency == 0) identity.qpcFrequency = qpcFrequency();
         if (identity.pid == 0) identity.pid = GetCurrentProcessId();
         m_returnName = returnNameFor(inboundSegmentName);
@@ -167,6 +168,7 @@ class ConsumerSegment {
 public:
     SegmentOpen open(const std::string& inboundSegmentName)
     {
+        if (!isValidSegmentName(inboundSegmentName)) return SegmentOpen::Failed;
         DWORD err = 0;
         if (m_view.open(detail::widen(inboundSegmentName), false, &err)) return SegmentOpen::Ok;
         if (err == ERROR_FILE_NOT_FOUND) return SegmentOpen::NotFound;
@@ -187,6 +189,7 @@ class ReturnSegment {
 public:
     bool create(const std::string& inboundSegmentName)
     {
+        if (!isValidSegmentName(inboundSegmentName)) return false;
         if (!m_view.create(detail::widen(returnNameFor(inboundSegmentName)), kReturnBytes)) return false;
         return m_writer.init(m_view.data(), m_view.size(), GetCurrentProcessId());
     }

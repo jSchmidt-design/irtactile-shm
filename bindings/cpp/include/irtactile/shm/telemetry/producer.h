@@ -105,6 +105,10 @@ public:
     /// into an existing segment) its pinned fields are kept; `capacity` is clamped to what fits.
     OpenResult open(void* base, size_t bytes, uint32_t capacity, Identity identity)
     {
+        m_base = nullptr;
+        m_committed = false;
+        if (!base || bytes < kHeaderBytes || bytes > UINT32_MAX ||
+            (reinterpret_cast<uintptr_t>(base) & 7u) || !isValidCapacity(capacity)) return OpenResult::TooSmall;
         if (!channels::isValidOwnerId(identity.simId) && !identity.simId.empty()) return OpenResult::BadIdentity;
         if (isReservedSimId(identity.simId)) return OpenResult::BadIdentity;
         m_base = static_cast<uint8_t*>(base);
@@ -116,7 +120,7 @@ public:
             m_total = h->totalBytes;   // restart into an existing segment: totalBytes is pinned
         }
         while (capacity >= kMinCapacity && layoutFor(capacity).totalBytes > m_total) capacity -= 64;
-        if (!isValidCapacity(capacity)) return OpenResult::TooSmall;
+        if (!isValidCapacity(capacity)) { m_base = nullptr; return OpenResult::TooSmall; }
         m_capacity = capacity;
         m_stage.clear();
         m_committed = false;

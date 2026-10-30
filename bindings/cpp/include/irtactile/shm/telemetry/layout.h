@@ -184,6 +184,19 @@ constexpr uint32_t eventsSince(uint32_t previous, uint32_t current) noexcept { r
 inline constexpr std::string_view kInboundPrefix = "irTactile_Telemetry_";
 inline constexpr std::string_view kReturnPrefix  = "irTactile_TelemetryReturn_";
 
+/// Return-region names are reserved and cannot be inbound names.
+inline bool isValidSegmentName(std::string_view name) noexcept
+{
+    if (name.empty() || name.size() > 200 ||
+        name.substr(0, kReturnPrefix.size()) == kReturnPrefix ||
+        (name.size() >= 7 && name.substr(name.size() - 7) == "_Return")) return false;
+    for (char c : name) {
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '_' || c == '.' || c == '-')) return false;
+    }
+    return true;
+}
+
 inline std::string inboundName(std::string_view simId)
 {
     return std::string(kInboundPrefix) + std::string(simId);

@@ -642,3 +642,34 @@ TEST_CASE("validateDescriptor and matchesTable")
     CHECK(matchesTable(x, rpm, 0));              // provenance is not compared
 }
 
+
+TEST_CASE("inbound names cannot alias return regions")
+{
+    CHECK(isValidSegmentName("MySegment"));
+    CHECK(isValidSegmentName("irTactile_Telemetry_demo"));
+    CHECK_FALSE(isValidSegmentName(""));
+    CHECK_FALSE(isValidSegmentName("bad/name"));
+    CHECK_FALSE(isValidSegmentName(std::string(201, 'a')));
+    CHECK_FALSE(isValidSegmentName("MySegment_Return"));
+    CHECK_FALSE(isValidSegmentName("irTactile_TelemetryReturn_demo"));
+    CHECK_FALSE(isValidSegmentName(returnNameFor("MySegment")));
+    CHECK_FALSE(isValidSegmentName(returnNameFor("irTactile_Telemetry_demo")));
+}
+
+TEST_CASE("producer rejects invalid buffers and capacities before accessing a header")
+{
+    Producer p;
+    uint64_t tiny = 0;
+    CHECK(p.open(nullptr, 4096, 64, identity()) == OpenResult::TooSmall);
+    CHECK(p.open(&tiny, sizeof(tiny), 64, identity()) == OpenResult::TooSmall);
+    Segment s(Producer::requiredBytes(64));
+    CHECK(p.open(s.bytes() + 1, s.size - 1, 64, identity()) == OpenResult::TooSmall);
+    for (uint32_t capacity : {0u, 63u, 65u, 8256u, UINT32_MAX}) {
+        CHECK(p.open(s.data(), s.size, capacity, identity()) == OpenResult::TooSmall);
+        CHECK_FALSE(p.commitLayout());
+    }
+    REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
+    REQUIRE(p.commitLayout());
+    CHECK(p.open(&tiny, sizeof(tiny), 64, identity()) == OpenResult::TooSmall);
+    CHECK_FALSE(p.commitLayout());
+}
