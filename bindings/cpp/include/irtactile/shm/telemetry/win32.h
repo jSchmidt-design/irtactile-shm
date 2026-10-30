@@ -38,6 +38,17 @@ inline std::wstring widen(const std::string& s)
     return std::wstring(s.begin(), s.end());   // segment names are ASCII
 }
 
+/// True when `pid` is non-zero and no longer names a running process. A process we may not open counts as running.
+inline bool processGone(uint32_t pid) noexcept
+{
+    if (pid == 0) return false;
+    HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, pid);
+    if (!h) return GetLastError() == ERROR_INVALID_PARAMETER;
+    const bool exited = WaitForSingleObject(h, 0) == WAIT_OBJECT_0;
+    CloseHandle(h);
+    return exited;
+}
+
 }  // namespace detail
 
 /// A mapped, named view; closes on destruction.
@@ -101,21 +112,68 @@ private:
     bool   m_existed{false};
 };
 
+/// The writer lock of an inbound segment: a named event that only its producer holds open. The kernel destroys it
+/// with the last handle, so a crashed producer releases it and the next one restarts into the segment.
+class WriterLock {
+public:
+    WriterLock() = default;
+    WriterLock(const WriterLock&) = delete;
+    WriterLock& operator=(const WriterLock&) = delete;
+    ~WriterLock() { release(); }
+
+    /// False with ERROR_ALREADY_EXISTS in `error`: another live producer holds the lock.
+    bool acquire(const std::wstring& name, DWORD* error = nullptr)
+    {
+        release();
+        m_handle = CreateEventW(nullptr, TRUE, FALSE, name.c_str());
+        if (!m_handle) { if (error) *error = GetLastError(); return false; }
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            if (error) *error = ERROR_ALREADY_EXISTS;
+            release();
+            return false;
+        }
+        return true;
+    }
+    void release() noexcept
+    {
+        if (m_handle) CloseHandle(m_handle);
+        m_handle = nullptr;
+    }
+    [[nodiscard]] bool isHeld() const noexcept { return m_handle != nullptr; }
+
+private:
+    HANDLE m_handle{nullptr};
+};
+
 /// Producer: owns the inbound segment and the Producer bound to it; opens the return region on demand.
 class ProducerSegment {
 public:
     /// Creates (or restarts into) the segment for `capacity` slots and binds the Producer. `identity.qpcFrequency`
-    /// and `identity.pid` are filled in when zero. SegmentFailed: the OS refused to create or map the segment.
+    /// and `identity.pid` are filled in when zero. WriterActive: another live producer writes this segment.
+    /// SegmentFailed: the OS refused to create or map the segment. On any failure the Producer is left unbound.
     OpenResult create(const std::string& inboundSegmentName, uint32_t capacity, Identity identity)
     {
+        m_producer.close();   // before the views go: a failed recreate must not leave it bound to unmapped memory
         if (!isValidSegmentName(inboundSegmentName) || !isValidCapacity(capacity)) return OpenResult::SegmentFailed;
         if (identity.qpcFrequency == 0) identity.qpcFrequency = qpcFrequency();
         if (identity.pid == 0) identity.pid = GetCurrentProcessId();
+        m_inbound.close();
+        m_return.close();
+        DWORD err = 0;
+        if (!m_lock.acquire(detail::widen(writerLockNameFor(inboundSegmentName)), &err)) {
+            return err == ERROR_ALREADY_EXISTS ? OpenResult::WriterActive : OpenResult::SegmentFailed;
+        }
         m_returnName = returnNameFor(inboundSegmentName);
         if (!m_inbound.create(detail::widen(inboundSegmentName), Producer::requiredBytes(capacity))) {
+            m_lock.release();
             return OpenResult::SegmentFailed;
         }
-        return m_producer.open(m_inbound.data(), m_inbound.size(), capacity, std::move(identity));
+        const OpenResult r = m_producer.open(m_inbound.data(), m_inbound.size(), capacity, std::move(identity));
+        if (r != OpenResult::Ok) {
+            m_inbound.close();
+            m_lock.release();
+        }
+        return r;
     }
 
     [[nodiscard]] Producer& producer() noexcept { return m_producer; }
@@ -123,9 +181,15 @@ public:
 
     /// Reads the return region (opening it lazily; absence is normal). False = no consistent view this time
     /// (region absent, not ready, or torn). Masks computed for another layout than the current one are cleared,
-    /// so every slot reads as not accepted until irTactile has evaluated this layout.
+    /// so every slot reads as not accepted until irTactile has evaluated this layout. An Active consumer that is stale
+    /// or whose process is gone sets `consumerGone`, so every accepted slot reads as demanded. False without a bound
+    /// Producer (create() not called or failed).
+    /// Once the region is attached, a false return still ages `out`: the layout check and `consumerGone` are applied
+    /// to the view kept from the last good read, so a consumer that died mid-publication (retSeq left odd) is
+    /// detected as gone, not obeyed indefinitely.
     bool pollReturn(ReturnView& out)
     {
+        if (!m_producer.isOpen()) return false;
         if (!m_return.isOpen()) {
             if (!m_return.open(detail::widen(m_returnName), false)) return false;
             if (m_returnReader.attach(m_return.data(), m_return.size()) != AttachResult::Ok) {
@@ -134,15 +198,19 @@ public:
                 return false;
             }
         }
-        if (!m_returnReader.read(out)) return false;
+        const bool fresh = m_returnReader.read(out);
         if (out.forLayoutSeq != shm::detail::acquireLoad(m_producer.publishedHeader().layoutSeq)) {
             out.accepted.clear();
             out.demanded.clear();
         }
-        return true;
+        out.consumerGone = out.consumerState == ConsumerState::Active &&
+                           (isConsumerStale(out.lastConsumeQpc, qpcNow(), qpcFrequency()) ||
+                            detail::processGone(out.consumerPid));
+        return fresh;
     }
 
 private:
+    WriterLock   m_lock;      // declared first: released after the views are unmapped
     MappedView   m_inbound;
     MappedView   m_return;
     Producer     m_producer;

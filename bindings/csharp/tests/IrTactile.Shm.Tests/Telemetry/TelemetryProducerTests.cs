@@ -62,6 +62,62 @@ public unsafe class TelemetryProducerTests
         }
     }
 
+    [Fact]
+    public void PollReturn_ConsumerDiedMidPublication_AgesIntoGone()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        string name = "irTactile_Telemetry_test_cs_oddret_" + Environment.ProcessId;
+        using var segment = TelemetrySegment.Create(name, 64, new ProducerIdentity());
+        var p = segment.Producer;
+        Assert.NotEqual(TelemetryProducer.InvalidSlot, p.Declare(FindDef("std.engine.rpm")));
+        Assert.True(p.CommitLayout());
+
+        // A consumer's return region: slot 0 accepted, not demanded, Active and fresh.
+        using var ret = System.IO.MemoryMappedFiles.MemoryMappedFile.CreateNew(
+            TelemetryLayout.ReturnNameFor(name), TelemetryLayout.ReturnBytes);
+        using var view = ret.CreateViewAccessor();
+        byte* r = null;
+        view.SafeMemoryMappedViewHandle.AcquirePointer(ref r);
+        try
+        {
+            *(uint*)r = TelemetryLayout.ReturnMagic;
+            *(ushort*)(r + 4) = TelemetryLayout.VersionMajor;
+            *(uint*)(r + TelemetryLayout.ROffCapacity) = 64;
+            *(uint*)(r + TelemetryLayout.ROffAccepted) = TelemetryLayout.ReturnHeaderBytes;
+            *(uint*)(r + TelemetryLayout.ROffDemanded) = TelemetryLayout.ReturnHeaderBytes + 8;
+            *(uint*)(r + TelemetryLayout.ROffForLayoutSeq) = p.LayoutSeq;
+            *(uint*)(r + TelemetryLayout.ROffConsumerState) = (uint)ConsumerState.Active;
+            *(ulong*)(r + TelemetryLayout.ROffLastConsume) = TelemetryClock.Now;
+            *(uint*)(r + TelemetryLayout.ROffConsumerPid) = (uint)Environment.ProcessId;
+            *(ulong*)(r + TelemetryLayout.ReturnHeaderBytes) = 0b1;
+            *(ulong*)(r + TelemetryLayout.ROffRetSeq) = 2;
+            *(ulong*)(r + TelemetryLayout.ROffRetSeqEnd) = 2;
+
+            var rv = new TelemetryReturnView();
+            Assert.True(segment.PollReturn(rv));
+            Assert.False(rv.IsDemanded(0));
+
+            *(ulong*)(r + TelemetryLayout.ROffRetSeq) = 3;    // the consumer crashes mid-publication
+            Assert.False(segment.PollReturn(rv));
+            Assert.False(rv.ConsumerGone);                      // not yet stale
+            Assert.False(rv.IsDemanded(0));
+
+            rv.LastConsumeQpc = TelemetryClock.Now - 2 * TelemetryClock.Frequency;   // time passes without a good read
+            Assert.False(segment.PollReturn(rv));
+            Assert.True(rv.ConsumerGone);
+            Assert.True(rv.IsDemanded(0));                      // every accepted slot, not the stale mask
+
+            Assert.NotEqual(TelemetryProducer.InvalidSlot, p.Declare(FindDef("std.engine.throttle")));
+            Assert.True(p.CommitLayout());                      // a new layout while the region is stuck
+            Assert.False(segment.PollReturn(rv));
+            Assert.False(rv.IsAccepted(0));                     // the masks of the old layout are dropped
+        }
+        finally
+        {
+            view.SafeMemoryMappedViewHandle.ReleasePointer();
+        }
+    }
+
     public static IEnumerable<object[]> EncodeCases()
     {
         using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(Dir, "manifest.json")));

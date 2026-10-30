@@ -211,6 +211,13 @@ inline std::string returnNameFor(std::string_view inbound)
     return std::string(inbound) + "_Return";
 }
 
+/// Writer-lock name of an inbound segment (spec: Single writer). `#` is outside the segment-name alphabet, so it
+/// cannot collide with a segment.
+inline std::string writerLockNameFor(std::string_view inbound)
+{
+    return std::string(inbound) + "#Writer";
+}
+
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------

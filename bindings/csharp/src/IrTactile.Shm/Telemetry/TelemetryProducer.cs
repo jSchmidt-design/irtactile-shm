@@ -435,6 +435,9 @@ public sealed class TelemetryReturnView
     public uint ForLayoutSeq { get; internal set; }
     public ConsumerState ConsumerState { get; internal set; }
     public ulong LastConsumeQpc { get; internal set; }
+    public uint ConsumerPid { get; internal set; }
+    /// <summary>The consumer reads Active but is stale or its process is gone; it then counts as not Active.</summary>
+    public bool ConsumerGone { get; internal set; }
     internal ulong[] Accepted { get; set; } = Array.Empty<ulong>();
     internal ulong[] Demanded { get; set; } = Array.Empty<ulong>();
 
@@ -442,10 +445,10 @@ public sealed class TelemetryReturnView
     public bool IsAccepted(int slot) =>
         slot >= 0 && (slot >> 6) < Accepted.Length && ((Accepted[slot >> 6] >> (slot & 63)) & 1UL) != 0;
 
-    /// <summary>True when something consumes this slot; while the consumer is not Active every accepted slot counts.</summary>
+    /// <summary>True when something consumes this slot; while the consumer is not Active (or is gone) every accepted slot counts.</summary>
     public bool IsDemanded(int slot)
     {
-        if (ConsumerState != ConsumerState.Active) return IsAccepted(slot);
+        if (ConsumerState != ConsumerState.Active || ConsumerGone) return IsAccepted(slot);
         return slot >= 0 && (slot >> 6) < Demanded.Length && ((Demanded[slot >> 6] >> (slot & 63)) & 1UL) != 0;
     }
 }
@@ -498,7 +501,10 @@ public sealed unsafe class TelemetrySegment : IDisposable
     /// <summary>
     /// Reads the return region (opened lazily; absence is normal). False = no consistent view this time (region absent,
     /// not ready, malformed or torn). Masks computed for another layout than the current one are cleared, so every slot
-    /// reads as not accepted until irTactile has evaluated this layout.
+    /// reads as not accepted until irTactile has evaluated this layout. Once the region is open, a false return still
+    /// ages <paramref name="into"/>: the layout check and <see cref="TelemetryReturnView.ConsumerGone"/> are applied to
+    /// the view kept from the last good read, so a consumer that died mid-publication (retSeq left odd) is detected
+    /// as gone, not obeyed indefinitely.
     /// </summary>
     public bool PollReturn(TelemetryReturnView into)
     {
@@ -514,8 +520,22 @@ public sealed unsafe class TelemetrySegment : IDisposable
                 return false;
             }
         }
+        bool fresh = ReadReturn(into);
+        if (into.ForLayoutSeq != Producer.LayoutSeq)
+        {
+            into.Accepted = Array.Empty<ulong>();
+            into.Demanded = Array.Empty<ulong>();
+        }
+        into.ConsumerGone = into.ConsumerState == ConsumerState.Active &&
+            (IsConsumerStale(into.LastConsumeQpc, TelemetryClock.Now, TelemetryClock.Frequency) || ProcessGone(into.ConsumerPid));
+        return fresh;
+    }
+
+    // One seqlock read of the return region into `into`; false (and `into` untouched) when none succeeded.
+    private bool ReadReturn(TelemetryReturnView into)
+    {
         byte* p = null;
-        _returnView.SafeMemoryMappedViewHandle.AcquirePointer(ref p);
+        _returnView!.SafeMemoryMappedViewHandle.AcquirePointer(ref p);
         try
         {
             if (*(uint*)p != TelemetryLayout.ReturnMagic || *(ushort*)(p + 4) != TelemetryLayout.VersionMajor) return false;
@@ -544,9 +564,9 @@ public sealed unsafe class TelemetrySegment : IDisposable
                 into.ForLayoutSeq = *(uint*)(p + TelemetryLayout.ROffForLayoutSeq);
                 into.ConsumerState = (ConsumerState)cs;
                 into.LastConsumeQpc = Volatile.Read(ref *(ulong*)(p + TelemetryLayout.ROffLastConsume));
-                bool current = into.ForLayoutSeq == Producer.LayoutSeq;
-                into.Accepted = current ? acc : Array.Empty<ulong>();
-                into.Demanded = current ? dem : Array.Empty<ulong>();
+                into.ConsumerPid = Volatile.Read(ref *(uint*)(p + TelemetryLayout.ROffConsumerPid));
+                into.Accepted = acc;
+                into.Demanded = dem;
                 return true;
             }
             return false;
@@ -554,6 +574,35 @@ public sealed unsafe class TelemetrySegment : IDisposable
         finally
         {
             _returnView.SafeMemoryMappedViewHandle.ReleasePointer();
+        }
+    }
+
+    /// <summary>An Active consumer that has not consumed a frame for this long is treated as gone.</summary>
+    public const int ConsumerStaleMs = 1000;
+
+    /// <summary>True when <paramref name="lastConsumeQpc"/> (0 = never) is more than <see cref="ConsumerStaleMs"/> before <paramref name="nowQpc"/>.</summary>
+    public static bool IsConsumerStale(ulong lastConsumeQpc, ulong nowQpc, ulong qpcFrequency)
+    {
+        if (qpcFrequency == 0 || lastConsumeQpc > nowQpc) return false;   // a store that landed after our clock read
+        return nowQpc - lastConsumeQpc > qpcFrequency * ConsumerStaleMs / 1000;
+    }
+
+    // Non-zero and no longer a running process. A process we may not inspect counts as running.
+    private static bool ProcessGone(uint pid)
+    {
+        if (pid == 0) return false;
+        try
+        {
+            using var process = Process.GetProcessById((int)pid);
+            return process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 

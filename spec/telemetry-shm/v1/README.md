@@ -43,6 +43,18 @@ otherwise                                   ->  <inbound> + "_Return"
 Both are plain (unprefixed) names, i.e. the session namespace, as in stream-shm. A producer running elevated or as a
 service lives in another namespace and is not found; that is a deployment problem, not a protocol state.
 
+### Single writer
+
+A segment that already exists is not proof that its producer is gone: irTactile keeps the mapping open across a
+producer crash. So before it creates or opens the inbound region, a producer **must** create the named event
+`<inbound>#Writer` (Windows: `CreateEventW`) and keep the handle open for as long as it writes. If the event already
+exists, another producer is live: the producer must not touch the segment and reports the conflict (C++:
+`OpenResult::WriterActive`). Nobody else opens the event, so the kernel destroys it with the producer's last
+handle, including after a crash, and the next producer restarts into the segment as usual. `#` is outside the
+segment-name alphabet, so the event name cannot collide with a segment.
+
+The return region has no such lock: irTactile runs as a single instance.
+
 ## Inbound region
 
 One header, a descriptor table, and exactly **one frame** - the newest. There is no ring: `CONTINUOUS` and
@@ -176,8 +188,8 @@ a producer restart with another capacity.
 - `accepted[]` - bit set: the consumer bound this slot. Clear: rejected (see *Names a producer may declare*) or not
   yet evaluated. Lets a producer report mapping errors without irTactile's log.
 - `demanded[]` - bit set: something consumes this slot (the active graph, editor watches, plugins, or a recording).
-  A producer **may** skip expensive channels whose bit is clear. While `consumerState != Active`, every accepted
-  channel counts as demanded.
+  A producer **may** skip expensive channels whose bit is clear. While `consumerState != Active`, or while the
+  consumer is gone (see *Consumer liveness*), every accepted channel counts as demanded.
 - `consumerState`: `Idle` (irTactile is up, this source is not driving the bus), `Active`, `Closed`.
 - `lastConsumeQpc`: QPC of the last frame irTactile consumed from this source; `consumerPid`.
 - `forLayoutSeq`: the producer `layoutSeq` the masks were computed for. A producer ignores masks whose
@@ -187,6 +199,23 @@ The region uses the same frame seqlock (`retSeq` / `retSeqEnd`) with bounded rea
 offsets, `forLayoutSeq` and both masks are *frame* fields: the producer copies them inside one `retSeq` window and
 never caches an offset across reads. `consumerState`, `lastConsumeQpc` and `consumerPid` are concurrent and read
 with live acquire loads.
+
+**Consumer liveness.** The producer keeps the return region mapped, so it outlives a consumer that crashes, and an
+`Active` state and its masks would stay in effect without these rules:
+
+- While `Active`, irTactile refreshes `lastConsumeQpc` with every frame it consumes from this source.
+- A producer treats an `Active` consumer as **gone**, i.e. as not `Active`, when `lastConsumeQpc` is more than
+  **1 s** older than its own QPC (`0` = never consumed), or when `consumerPid` is non-zero and no longer names a
+  running process. A live PID never overrides a stale `lastConsumeQpc` (PIDs are reused). The 1 s threshold is
+  independent of the frame rate: a producer that publishes slower than 1 Hz, or has just resumed from `Inactive`,
+  reads the consumer as gone and so publishes every accepted channel, which is always safe.
+- The producer applies this rule, and the `forLayoutSeq` check above, on every poll, including one that finds no
+  consistent frame: it ages the view of its last good read. A consumer that crashes inside a publication leaves
+  `retSeq` odd, so no read succeeds until the next consumer resets the region; its last masks must not stay in
+  effect meanwhile.
+- A consumer that starts into an existing return region first resets it: `consumerState = Idle`,
+  `lastConsumeQpc = 0`, then, under `retSeq`, both masks cleared with `forLayoutSeq = 0` (no committed layout has
+  `layoutSeq` 0), and only then writes `consumerPid`. Nothing a previous consumer published stays in effect.
 
 ## Versioning
 

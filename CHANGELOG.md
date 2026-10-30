@@ -22,11 +22,31 @@
   - `toCString()` for `OpenResult`, `ReadResult`, `ProducerState`, `SegmentOpen`.
   - `irtactile/shm/common/qpc.h`: `shm::qpcNow()` / `shm::qpcFrequency()` without the segment handling;
     `telemetry::qpcNow` / `qpcFrequency` remain as aliases.
+- telemetry-shm: single-writer rule for the inbound region. A producer holds the named event `<inbound>#Writer`
+  while it writes; if the event exists, another producer is live and the segment is left alone. C++:
+  `ProducerSegment::create()` returns the new `OpenResult::WriterActive`; `writerLockNameFor()`. Before this, a
+  second producer on the same name was taken for a restart and both wrote the same seqlocks.
 - `bindings/cpp` fix: `Reader::readFrame()` and `ReturnReader::read()` copied into the caller's `Frame` /
   `ReturnView` before the seqlock check, so a `Torn` or `LayoutChanged` read (or a rejected return read) left a
   torn mix in it. Both now copy into internal scratch storage and swap it in only on success, so a failed read keeps
   the previous frame or view as documented. `ReturnReader::read()` is no longer `const`. The C# binding was not
   affected.
+- telemetry-shm: consumer liveness for the return region. A consumer that crashed while `Active` left its demand
+  masks in effect indefinitely. Now a producer treats an `Active` consumer as gone (every accepted channel demanded)
+  when `lastConsumeQpc` is more than 1 s old or `consumerPid` names no running process, and a consumer that starts
+  into an existing return region resets it to `Idle` with empty masks for `forLayoutSeq = 0` first. C++:
+  `ReturnView::consumerGone`, `isConsumerStale()`, `kConsumerStaleMs`; `ReturnWriter::init()` does the reset.
+  C#: `TelemetryReturnView.ConsumerGone` / `ConsumerPid`, `TelemetrySegment.IsConsumerStale()`.
+- `bindings/cpp` fix: a failed `ProducerSegment::create()` on an existing instance (`WriterActive`, `SegmentFailed`
+  or a rejected `Producer::open`) left the `Producer` bound to the unmapped previous view, so later calls wrote to
+  invalid memory. `create()` now unbinds it first; new `Producer::close()` / `isOpen()`; `Producer::setState()` is a
+  no-op and `pollReturn()` returns false while unbound.
+- telemetry-shm fix: liveness and the layout check were applied only after a successful return read. A consumer that
+  crashed mid-publication left `retSeq` odd, every read failed, and the producer kept the last view with
+  `consumerGone == false` and its demand masks indefinitely. C++ `ProducerSegment::pollReturn()` and C#
+  `TelemetrySegment.PollReturn()` now age the kept view on every poll once the region is open: `consumerGone` is
+  re-evaluated from its `lastConsumeQpc` / `consumerPid`, and masks for another layout are cleared, even when the
+  call returns false.
 
 ## 1.2.0 - Unreleased
 

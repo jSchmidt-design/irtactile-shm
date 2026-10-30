@@ -180,6 +180,16 @@ private:
 // Return region
 // ---------------------------------------------------------------------------
 
+/// An Active consumer that has not consumed a frame for this long is treated as gone (spec: *Consumer liveness*).
+inline constexpr uint32_t kConsumerStaleMs = 1000;
+
+/// True when `lastConsumeQpc` (0 = never) is more than kConsumerStaleMs before `nowQpc`.
+inline bool isConsumerStale(uint64_t lastConsumeQpc, uint64_t nowQpc, uint64_t qpcFrequency) noexcept
+{
+    if (qpcFrequency == 0 || lastConsumeQpc > nowQpc) return false;   // a store that landed after our clock read
+    return nowQpc - lastConsumeQpc > qpcFrequency * kConsumerStaleMs / 1000;
+}
+
 /// Masks and consumer state as a producer sees them.
 struct ReturnView {
     uint32_t              capacity{0};
@@ -187,6 +197,9 @@ struct ReturnView {
     ConsumerState         consumerState{ConsumerState::Idle};
     uint64_t              lastConsumeQpc{0};
     uint32_t              consumerPid{0};
+    /// Active, but stale or its process is gone. Set by ProducerSegment::pollReturn() (also when it returns false);
+    /// ReturnReader::read() clears it.
+    bool                  consumerGone{false};
     std::vector<uint64_t> accepted;
     std::vector<uint64_t> demanded;
 
@@ -194,10 +207,10 @@ struct ReturnView {
     {
         return (slot >> 6) < accepted.size() && ((accepted[slot >> 6] >> (slot & 63)) & 1u) != 0;
     }
-    /// While the consumer is not Active every accepted channel counts as demanded.
+    /// While the consumer is not Active (or is gone) every accepted channel counts as demanded.
     [[nodiscard]] bool isDemanded(uint32_t slot) const noexcept
     {
-        if (consumerState != ConsumerState::Active) return isAccepted(slot);
+        if (consumerState != ConsumerState::Active || consumerGone) return isAccepted(slot);
         return (slot >> 6) < demanded.size() && ((demanded[slot >> 6] >> (slot & 63)) & 1u) != 0;
     }
 };
@@ -220,6 +233,17 @@ public:
             h->acceptedOffset = returnAcceptedOffset();
             h->demandedOffset = returnDemandedOffset(kMaxCapacity);
         }
+        // A restart into a region a previous consumer left behind: none of its state may stay effective. Idle
+        // first, then empty masks for no layout (forLayoutSeq 0 never matches a committed layout).
+        setState(ConsumerState::Idle);
+        shm::detail::releaseStore(h->lastConsumeQpc, uint64_t{0});
+        const uint64_t s = shm::detail::acquireLoad(h->retSeq);
+        const uint64_t begin = s + 1 + (s & 1u);
+        shm::detail::releaseStore(h->retSeq, begin);
+        h->forLayoutSeq = 0;
+        std::memset(m_base + kReturnHeaderBytes, 0, kReturnBytes - kReturnHeaderBytes);
+        shm::detail::releaseStore(h->retSeqEnd, begin + 1);
+        shm::detail::releaseStore(h->retSeq, begin + 1);
         shm::detail::releaseStore(h->consumerPid, consumerPid);
         shm::detail::releaseStore(h->magic, kReturnMagic);
         return true;
@@ -303,6 +327,7 @@ public:
             m_scratch.consumerState = static_cast<ConsumerState>(cs);
             m_scratch.lastConsumeQpc = shm::detail::acquireLoad(live.lastConsumeQpc);
             m_scratch.consumerPid = shm::detail::acquireLoad(live.consumerPid);
+            m_scratch.consumerGone = false;
             std::swap(out, m_scratch);   // the previous vectors become the next scratch
             return true;
         }

@@ -49,6 +49,7 @@ enum class OpenResult : uint32_t {
     TooSmall,      ///< the buffer (or the pinned totalBytes of an existing segment) cannot hold the layout
     BadIdentity,   ///< simId is not a valid owner id or is reserved
     SegmentFailed, ///< ProducerSegment only: the OS refused to create or map the segment (access, namespace)
+    WriterActive,  ///< ProducerSegment only: another live producer holds the segment's writer lock
 };
 
 inline const char* toCString(OpenResult r) noexcept
@@ -58,6 +59,7 @@ inline const char* toCString(OpenResult r) noexcept
         case OpenResult::TooSmall:      return "TooSmall";
         case OpenResult::BadIdentity:   return "BadIdentity";
         case OpenResult::SegmentFailed: return "SegmentFailed";
+        case OpenResult::WriterActive:  return "WriterActive";
     }
     return "?";
 }
@@ -126,6 +128,15 @@ public:
         m_committed = false;
         return OpenResult::Ok;
     }
+
+    /// Unbinds from the buffer: until the next open() every call is a no-op and commitLayout() fails.
+    void close() noexcept
+    {
+        m_base = nullptr;
+        m_committed = false;
+        m_stage.clear();
+    }
+    [[nodiscard]] bool isOpen() const noexcept { return m_base != nullptr; }
 
     [[nodiscard]] uint32_t capacity() const noexcept { return m_capacity; }
     [[nodiscard]] uint32_t channelCount() const noexcept { return static_cast<uint32_t>(m_stage.size()); }
@@ -323,11 +334,13 @@ public:
     }
     void setState(ProducerState state, uint64_t nowQpc)
     {
+        if (m_base == nullptr) return;
         Header* h = header();
         shm::detail::releaseStore(h->lastPublishQpc, nowQpc);
         shm::detail::releaseStore(h->producerState, static_cast<uint32_t>(state));
     }
 
+    /// Requires isOpen().
     [[nodiscard]] const Header& publishedHeader() const noexcept { return *reinterpret_cast<const Header*>(m_base); }
 
 private:

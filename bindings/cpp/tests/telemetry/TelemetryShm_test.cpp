@@ -558,6 +558,68 @@ TEST_CASE("return region: the offsets follow capacity, consumerPid is a live loa
     CHECK(v.capacity == 256);
 }
 
+TEST_CASE("return region: a consumer restart drops the previous consumer's state and masks")
+{
+    Segment ret(kReturnBytes);
+    ReturnWriter w;
+    REQUIRE(w.init(ret.data(), ret.size, 21));
+    std::vector<uint64_t> accepted(1, 0b0111), demanded(1, 0b0001);
+    w.publishMasks(64, 6, accepted.data(), demanded.data());
+    w.setState(ConsumerState::Active);
+    w.touch(555);
+
+    ReturnWriter restarted;                                              // the first consumer crashed while Active
+    REQUIRE(restarted.init(ret.data(), ret.size, 22));
+    ReturnReader rr;
+    REQUIRE(rr.attach(ret.data(), ret.size) == AttachResult::Ok);
+    ReturnView v;
+    REQUIRE(rr.read(v));
+    CHECK(v.consumerState == ConsumerState::Idle);
+    CHECK(v.lastConsumeQpc == 0);
+    CHECK(v.forLayoutSeq == 0);                                          // matches no committed layout
+    CHECK(v.capacity == 64);
+    CHECK_FALSE(v.isAccepted(0));
+    CHECK(v.consumerPid == 22);
+    CHECK((reinterpret_cast<ReturnHeader*>(ret.data())->retSeq & 1u) == 0);
+}
+
+TEST_CASE("return region: a gone consumer counts as not Active")
+{
+    ReturnView v;
+    v.consumerState = ConsumerState::Active;
+    v.accepted = {0b0011};
+    v.demanded = {0b0001};
+    CHECK_FALSE(v.isDemanded(1));
+    v.consumerGone = true;
+    CHECK(v.isDemanded(1));
+    CHECK_FALSE(v.isDemanded(2));                                        // still only accepted slots
+
+    const uint64_t f = 10'000'000;
+    CHECK_FALSE(isConsumerStale(5 * f, 5 * f + f, f));                   // exactly the threshold
+    CHECK(isConsumerStale(5 * f, 5 * f + f + 1, f));
+    CHECK(isConsumerStale(0, 5 * f, f));                                 // never consumed
+    CHECK_FALSE(isConsumerStale(5 * f + 1, 5 * f, f));                   // stored after our clock read
+    CHECK_FALSE(isConsumerStale(0, 5 * f, 0));
+}
+
+TEST_CASE("a closed producer ignores every call")
+{
+    Segment s(Producer::requiredBytes(64));
+    Producer p;
+    REQUIRE(p.open(s.data(), s.size, 64, identity()) == OpenResult::Ok);
+    const int rpm = p.declare(channels::standard::Id::EngineRpm);
+    REQUIRE(p.commitLayout());
+    p.close();
+    CHECK_FALSE(p.isOpen());
+    const Header before = s.header();
+    p.setState(ProducerState::Active, 99);
+    p.beginFrame();
+    p.set(rpm, 1.0f);
+    p.endFrame(1, 2);
+    CHECK_FALSE(p.commitLayout());
+    CHECK(std::memcmp(&before, &s.header(), sizeof(Header)) == 0);
+}
+
 TEST_CASE("the producer writes provenance, layout and the wheel layout")
 {
     Segment s(Producer::requiredBytes(64));
@@ -673,3 +735,136 @@ TEST_CASE("producer rejects invalid buffers and capacities before accessing a he
     CHECK(p.open(&tiny, sizeof(tiny), 64, identity()) == OpenResult::TooSmall);
     CHECK_FALSE(p.commitLayout());
 }
+
+#ifdef _WIN32
+#include <irtactile/shm/telemetry/win32.h>
+
+TEST_CASE("ProducerSegment: a second live producer is WriterActive, the lock dies with its producer")
+{
+    const std::string name = "irTactile_Telemetry_test_writer_" + std::to_string(GetCurrentProcessId());
+    ConsumerSegment consumer;   // keeps the mapping alive across producers, like irTactile
+    {
+        ProducerSegment first;
+        REQUIRE(first.create(name, 64, identity()) == OpenResult::Ok);
+        CHECK_FALSE(first.restarted());
+        REQUIRE(consumer.open(name) == SegmentOpen::Ok);
+
+        ProducerSegment second;
+        CHECK(second.create(name, 64, identity()) == OpenResult::WriterActive);
+        CHECK(first.create(name, 64, identity()) == OpenResult::Ok);   // re-creating releases its own lock first
+    }
+    ProducerSegment next;   // the first producer is gone, the mapping is not: a restart
+    CHECK(next.create(name, 64, identity()) == OpenResult::Ok);
+    CHECK(next.restarted());
+}
+
+TEST_CASE("ProducerSegment: a failed recreate leaves the Producer unbound, not on unmapped memory")
+{
+    const std::string pid = std::to_string(GetCurrentProcessId());
+    const std::string a = "irTactile_Telemetry_test_recreate_a_" + pid;
+    const std::string b = "irTactile_Telemetry_test_recreate_b_" + pid;
+    ProducerSegment holder;
+    REQUIRE(holder.create(b, 64, identity()) == OpenResult::Ok);
+
+    ProducerSegment s;
+    ReturnView rv;
+    CHECK_FALSE(s.pollReturn(rv));                                       // never created
+    REQUIRE(s.create(a, 64, identity()) == OpenResult::Ok);
+    Producer& p = s.producer();
+    const int rpm = p.declare(channels::standard::Id::EngineRpm);
+    REQUIRE(p.commitLayout());
+
+    CHECK(s.create(b, 64, identity()) == OpenResult::WriterActive);
+    CHECK_FALSE(p.isOpen());
+    p.setState(ProducerState::Active, qpcNow());                         // no-ops, not writes to the old view
+    p.beginFrame();
+    p.set(rpm, 1.0f);
+    p.endFrame(qpcNow(), qpcNow());
+    CHECK_FALSE(p.commitLayout());
+    CHECK_FALSE(s.pollReturn(rv));
+}
+
+TEST_CASE("pollReturn: an Active consumer that is stale or whose process exited is gone")
+{
+    const std::string name = "irTactile_Telemetry_test_gone_" + std::to_string(GetCurrentProcessId());
+    ProducerSegment s;
+    REQUIRE(s.create(name, 64, identity()) == OpenResult::Ok);
+    Producer& p = s.producer();
+    p.declare(channels::standard::Id::EngineRpm);
+    REQUIRE(p.commitLayout());
+    const uint32_t layoutSeq = p.publishedHeader().layoutSeq;
+
+    ReturnSegment ret;
+    REQUIRE(ret.create(name));
+    std::vector<uint64_t> accepted(1, 0b1), demanded(1, 0b0);
+    ret.writer().publishMasks(64, layoutSeq, accepted.data(), demanded.data());
+    ret.writer().setState(ConsumerState::Active);
+    ret.writer().touch(qpcNow());
+
+    ReturnView rv;
+    REQUIRE(s.pollReturn(rv));
+    CHECK_FALSE(rv.consumerGone);
+    CHECK_FALSE(rv.isDemanded(0));
+
+    ret.writer().touch(qpcNow() - 2 * qpcFrequency());
+    REQUIRE(s.pollReturn(rv));
+    CHECK(rv.consumerGone);
+    CHECK(rv.isDemanded(0));
+
+    ret.writer().setState(ConsumerState::Idle);
+    REQUIRE(s.pollReturn(rv));
+    CHECK_FALSE(rv.consumerGone);                                        // only an Active consumer can be gone
+
+    CHECK_FALSE(detail::processGone(0));
+    CHECK_FALSE(detail::processGone(GetCurrentProcessId()));
+    wchar_t cmd[] = L"cmd.exe /c exit 0";
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    REQUIRE(CreateProcessW(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi));
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    CHECK(detail::processGone(pi.dwProcessId));                          // our handle keeps the pid from reuse
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+}
+
+TEST_CASE("pollReturn: a consumer that died mid-publication (retSeq left odd) still ages into gone")
+{
+    const std::string name = "irTactile_Telemetry_test_oddret_" + std::to_string(GetCurrentProcessId());
+    ProducerSegment s;
+    REQUIRE(s.create(name, 64, identity()) == OpenResult::Ok);
+    Producer& p = s.producer();
+    p.declare(channels::standard::Id::EngineRpm);
+    REQUIRE(p.commitLayout());
+
+    ReturnSegment ret;
+    REQUIRE(ret.create(name));
+    std::vector<uint64_t> accepted(1, 0b1), demanded(1, 0b0);
+    ret.writer().publishMasks(64, p.publishedHeader().layoutSeq, accepted.data(), demanded.data());
+    ret.writer().setState(ConsumerState::Active);
+    ret.writer().touch(qpcNow());
+
+    ReturnView rv;
+    REQUIRE(s.pollReturn(rv));
+    CHECK_FALSE(rv.isDemanded(0));
+
+    MappedView raw;   // the consumer crashes inside publishMasks(): retSeq stays odd
+    REQUIRE(raw.open(detail::widen(returnNameFor(name)), true));
+    auto* h = reinterpret_cast<ReturnHeader*>(raw.data());
+    h->retSeq += 1;
+
+    CHECK_FALSE(s.pollReturn(rv));                                       // no consistent view any more
+    CHECK_FALSE(rv.consumerGone);                                        // but not yet stale
+    CHECK_FALSE(rv.isDemanded(0));
+
+    rv.lastConsumeQpc = qpcNow() - 2 * qpcFrequency();                   // time passes without a good read
+    CHECK_FALSE(s.pollReturn(rv));
+    CHECK(rv.consumerGone);
+    CHECK(rv.isDemanded(0));                                             // every accepted slot, not the stale mask
+
+    p.declare(channels::standard::Id::EngineThrottle);                   // a new layout while the region is stuck
+    REQUIRE(p.commitLayout());
+    CHECK_FALSE(s.pollReturn(rv));
+    CHECK_FALSE(rv.isAccepted(0));                                       // the masks of the old layout are dropped
+}
+#endif
