@@ -256,7 +256,7 @@ public:
 
         const uint32_t s = shm::detail::acquireLoad(h->layoutSeq);
         const uint32_t begin = s + 1 + (s & 1u);              // odd, and past a leftover odd value
-        shm::detail::releaseStore(h->layoutSeq, begin);
+        shm::detail::seqWriteBegin(h->layoutSeq, begin);
 
         // Frame seqlock: step past a leftover odd value so readers never wedge on it.
         uint64_t fs = shm::detail::acquireLoad(h->frameSeq);
@@ -305,7 +305,7 @@ public:
     {
         if (!m_committed) return;
         Header* h = header();
-        shm::detail::releaseStore(h->frameSeq, shm::detail::acquireLoad(h->frameSeq) + 1);   // odd
+        shm::detail::seqWriteBegin(h->frameSeq, shm::detail::acquireLoad(h->frameSeq) + 1);   // odd
         std::memset(m_base + h->validOffset, 0, (m_capacity / 64) * 8);
     }
     void set(int slot, float value) noexcept

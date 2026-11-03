@@ -70,13 +70,18 @@ a Rust, C# or Python binding cannot see it at all - it sees bytes and hardcodes
 an offset. The struct is a plain byte layout; the correct access discipline
 lives in accessor code, and producer and reader use the same discipline.
 
-Three facts a binding author must know - they make a non-C++ binding
+Four facts a binding author must know - they make a non-C++ binding
 straightforward and stop incorrect generalisation:
 
 - **On x86-64, loads are acquire and stores are release in hardware (TSO).**
   The protocol needs no StoreLoad ordering, so on x64 the fences are compiler
   barriers only and a plain volatile read is correct. **This is not portable** -
   Windows on ARM64 requires real barriers.
+- **Acquire/release accessors are not enough for a seqlock.** A writer needs a
+  release fence after its odd counter store and a reader needs an acquire fence
+  after its copy, before the recheck ([seqlock.md](seqlock.md), *Memory
+  ordering*). In .NET, `Volatile.Read` / `Volatile.Write` alone leave both gaps
+  open.
 - **64-bit fields must be naturally aligned** to be tear-free. The layout
   guarantees it, and it survives into the mapped view.
 - **A 32-bit consumer process** must use an 8-byte atomic load intrinsic

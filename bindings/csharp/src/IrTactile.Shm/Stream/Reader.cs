@@ -327,6 +327,7 @@ public sealed unsafe class Reader
             ShmStreamHeader snap = default;
             Buffer.MemoryCopy(_base, &snap, StreamLayout.HeaderBytes, bytes);
 
+            SeqLock.BeforeRecheck();
             uint s2 = AcquireU32(StreamLayout.HeaderOffset.LayoutSeq);
             if (s1 == s2)
             {
@@ -549,7 +550,9 @@ public sealed unsafe class Reader
 
         // The slot may have been recycled, or the layout rewritten, mid-copy:
         // re-check the descriptor seq, the live layoutSeq, and the
-        // descriptor's layoutEpoch.
+        // descriptor's layoutEpoch. The fence keeps the copy above from
+        // completing after these loads.
+        SeqLock.BeforeRecheck();
         if (Volatile.Read(ref *(ulong*)(slot + StreamLayout.DescOffset.Seq)) != seq)
             return false;
         if (AcquireU32(StreamLayout.HeaderOffset.LayoutSeq) != _snapLayoutSeq)

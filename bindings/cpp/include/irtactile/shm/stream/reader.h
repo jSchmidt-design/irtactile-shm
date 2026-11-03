@@ -394,6 +394,7 @@ private:
             std::memset(&m_hdr, 0, sizeof(m_hdr));
             std::memcpy(&m_hdr, m_base, bytes);
 
+            irtactile::shm::detail::seqReadBeforeRecheck();
             const uint32_t s2 = irtactile::shm::detail::acquireLoad(live.layoutSeq);
             if (s1 == s2) {
                 m_snapLayoutSeq = s2;
@@ -591,7 +592,9 @@ private:
 
         // The slot may have been recycled, or the layout rewritten, mid-copy:
         // re-check the descriptor seq, the live layoutSeq, and the
-        // descriptor's layoutEpoch.
+        // descriptor's layoutEpoch. The fence keeps the copy above from
+        // completing after these loads.
+        irtactile::shm::detail::seqReadBeforeRecheck();
         if (irtactile::shm::detail::acquireLoad(desc->seq) != seq) return false;
         if (irtactile::shm::detail::acquireLoad(liveHeader().layoutSeq) != m_snapLayoutSeq) return false;
         if (irtactile::shm::detail::acquireLoad(desc->layoutEpoch) != m_snapLayoutSeq) return false;

@@ -273,8 +273,9 @@ A producer that reopens a segment a consumer may still hold **must**:
 
 - **Preserve `writeSeq`** - resume from the value found in the segment, never
   reset it. It is the one counter that always moves forward.
-- **Cycle `layoutSeq`** (odd while rewriting, then even, ending strictly
-  greater) **on every restart, even when no field changes.** The seqlock bump
+- **Cycle `layoutSeq`** (odd while rewriting, with a release fence after the
+  odd store, then even, ending strictly greater) **on every restart, even when
+  no field changes.** The seqlock bump
   is the only signal a holding consumer gets that a restart happened - it is
   what triggers the re-read of `deviceName`, the re-check of any structural
   assertion, and the consumer's awareness that `firstSampleIndex` restarted
@@ -288,9 +289,11 @@ The slot under construction is written **in place, incrementally**; there is no
 staging buffer. Only the final chunk of a publish makes the block visible:
 
 1. `slot_base = slotArrayOffset + (writeSeq % ringBlocks) × slotBytes`
-2. *(first chunk only)* **Release**-store `desc.seq = kSlotBusy` - the slot is
-   declared under construction *before* the first sample of the new block
-   lands in it.
+2. *(first chunk only)* **Release**-store `desc.seq = kSlotBusy`, **then a
+   release fence** - the slot is declared under construction *before* the
+   first sample of the new block lands in it. A release store alone does not
+   keep the sample stores after it ([seqlock.md](../../common/seqlock.md),
+   *Memory ordering*).
 3. Write this chunk's samples into the channel planes at the running offset.
 4. *(last chunk only)* Fill `firstSampleIndex`, `timestampQpc`,
    `flags`, `silentChannelMask`, `layoutEpoch`.
@@ -351,8 +354,9 @@ consumer should ever see it.
 3. For each `seq` in `[cursor, head)`: address the slot; acquire-load
    `desc->seq`; if `!= seq` - including `kSlotBusy` - discard the block and
    continue with the next `seq`. **Copy** the descriptor and all
-   `channelCount` planes out. Then acquire-load **three** values and discard
-   the block unless all three agree:
+   `channelCount` planes out. Then issue an **acquire fence** (so the copy
+   completes first), acquire-load **three** values and discard the block
+   unless all three agree:
 
    | Load | Must equal |
    |---|---|

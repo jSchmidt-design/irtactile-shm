@@ -74,7 +74,7 @@ public:
         uint8_t* slot = slotAt(static_cast<uint8_t*>(m_bytes.data()), h, m_writeSeq);
         auto*    desc = reinterpret_cast<Desc*>(slot);
 
-        irtactile::shm::detail::releaseStore(desc->seq, kSlotBusy);
+        irtactile::shm::detail::seqWriteBegin(desc->seq, kSlotBusy);
 
         uint32_t silent = 0;
         for (uint32_t ch = 0; ch < h.channelCount; ++ch) {

@@ -128,6 +128,7 @@ public:
             std::memcpy(m_scratch.values.data(), m_base + m_header.valuesOffset, static_cast<size_t>(m_header.capacity) * 4);
             const uint64_t qpc = liveHeader().frameQpc;
 
+            shm::detail::seqReadBeforeRecheck();
             const uint64_t f2 = shm::detail::acquireLoad(liveHeader().frameSeqEnd);
             if (f2 != f1 || shm::detail::acquireLoad(liveHeader().frameSeq) != f1) continue;
             if (layoutSeqLive() != m_snapshotSeq) return ReadResult::LayoutChanged;
@@ -150,11 +151,16 @@ private:
             Header h;
             std::memcpy(&h, m_base, kHeaderBytes);
             const AttachResult v = validateHeader(h, m_mapped);
-            if (v != AttachResult::Ok && layoutSeqLive() != s1) continue;   // torn copy, not a verdict
-            if (v != AttachResult::Ok) { m_attached = false; return v; }
+            if (v != AttachResult::Ok) {
+                shm::detail::seqReadBeforeRecheck();
+                if (layoutSeqLive() != s1) continue;   // torn copy, not a verdict
+                m_attached = false;
+                return v;
+            }
 
             std::vector<ChannelDesc> descs(h.capacity);
             std::memcpy(descs.data(), m_base + h.descOffset, static_cast<size_t>(h.capacity) * kDescBytes);
+            shm::detail::seqReadBeforeRecheck();
             if (layoutSeqLive() != s1) continue;
 
             m_header = h;
@@ -239,7 +245,7 @@ public:
         shm::detail::releaseStore(h->lastConsumeQpc, uint64_t{0});
         const uint64_t s = shm::detail::acquireLoad(h->retSeq);
         const uint64_t begin = s + 1 + (s & 1u);
-        shm::detail::releaseStore(h->retSeq, begin);
+        shm::detail::seqWriteBegin(h->retSeq, begin);
         h->forLayoutSeq = 0;
         std::memset(m_base + kReturnHeaderBytes, 0, kReturnBytes - kReturnHeaderBytes);
         shm::detail::releaseStore(h->retSeqEnd, begin + 1);
@@ -256,7 +262,7 @@ public:
         ReturnHeader* h = header();
         const uint64_t s = shm::detail::acquireLoad(h->retSeq);
         const uint64_t begin = s + 1 + (s & 1u);
-        shm::detail::releaseStore(h->retSeq, begin);
+        shm::detail::seqWriteBegin(h->retSeq, begin);
         h->capacity = capacity;
         h->acceptedOffset = returnAcceptedOffset();
         h->demandedOffset = returnDemandedOffset(capacity);
@@ -318,6 +324,7 @@ public:
                 std::memcpy(m_scratch.accepted.data(), m_base + h.acceptedOffset, static_cast<size_t>(words) * 8);
                 std::memcpy(m_scratch.demanded.data(), m_base + h.demandedOffset, static_cast<size_t>(words) * 8);
             }
+            shm::detail::seqReadBeforeRecheck();
             if (shm::detail::acquireLoad(live.retSeqEnd) != r1 || shm::detail::acquireLoad(live.retSeq) != r1) continue;
             // Concurrent fields: live loads, never the copy. An unknown state is rejected (as at attach).
             const uint32_t cs = shm::detail::acquireLoad(live.consumerState);

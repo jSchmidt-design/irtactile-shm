@@ -303,7 +303,7 @@ public sealed unsafe class TelemetryProducer
 
         uint s = Volatile.Read(ref U32(TelemetryLayout.OffLayoutSeq));
         uint begin = s + 1 + (s & 1u);                       // odd, and past a leftover odd value
-        Volatile.Write(ref U32(TelemetryLayout.OffLayoutSeq), begin);
+        SeqLock.BeginWrite(ref U32(TelemetryLayout.OffLayoutSeq), begin);
 
         ulong fs = Volatile.Read(ref U64(TelemetryLayout.OffFrameSeq));
         if ((fs & 1u) != 0) fs++;
@@ -353,7 +353,7 @@ public sealed unsafe class TelemetryProducer
     public void BeginFrame()
     {
         if (!_committed) return;
-        Volatile.Write(ref U64(TelemetryLayout.OffFrameSeq), Volatile.Read(ref U64(TelemetryLayout.OffFrameSeq)) + 1);
+        SeqLock.BeginWrite(ref U64(TelemetryLayout.OffFrameSeq), Volatile.Read(ref U64(TelemetryLayout.OffFrameSeq)) + 1);   // odd
         new Span<byte>(_base + U32(TelemetryLayout.OffValidOffset), (_capacity / 64) * 8).Clear();
     }
 
@@ -565,6 +565,7 @@ public sealed unsafe class TelemetrySegment : IDisposable
                 int words = (int)cap / 64;
                 uint accOff = *(uint*)(p + TelemetryLayout.ROffAccepted);
                 uint demOff = *(uint*)(p + TelemetryLayout.ROffDemanded);
+                uint forLayoutSeq = *(uint*)(p + TelemetryLayout.ROffForLayoutSeq);
                 if (cap != 0 && (!TelemetryLayout.ArrayFits(accOff, words * 8L, headerBytes, totalBytes) ||
                                  !TelemetryLayout.ArrayFits(demOff, words * 8L, headerBytes, totalBytes))) return false;
                 var acc = new ulong[words];
@@ -574,12 +575,13 @@ public sealed unsafe class TelemetrySegment : IDisposable
                     acc[i] = *(ulong*)(p + accOff + i * 8);
                     dem[i] = *(ulong*)(p + demOff + i * 8);
                 }
+                SeqLock.BeforeRecheck();
                 if (Volatile.Read(ref *(ulong*)(p + TelemetryLayout.ROffRetSeqEnd)) != r1 ||
                     Volatile.Read(ref *(ulong*)(p + TelemetryLayout.ROffRetSeq)) != r1) continue;
                 uint cs = Volatile.Read(ref *(uint*)(p + TelemetryLayout.ROffConsumerState));
                 if (cs > (uint)ConsumerState.Closed) return false;   // unknown state: malformed, as in the C++ ReturnReader
                 into.Capacity = cap;
-                into.ForLayoutSeq = *(uint*)(p + TelemetryLayout.ROffForLayoutSeq);
+                into.ForLayoutSeq = forLayoutSeq;   // read inside the window above, never after the recheck
                 into.ConsumerState = (ConsumerState)cs;
                 into.LastConsumeQpc = Volatile.Read(ref *(ulong*)(p + TelemetryLayout.ROffLastConsume));
                 into.ConsumerPid = Volatile.Read(ref *(uint*)(p + TelemetryLayout.ROffConsumerPid));

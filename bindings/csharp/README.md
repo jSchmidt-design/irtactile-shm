@@ -2,7 +2,9 @@
 
 The C# binding for the irTactile shared-memory contracts. One assembly,
 `IrTactile.Shm`. **Fully managed** - `MemoryMappedFile`, `EventWaitHandle`,
-`Volatile.Read` / `Volatile.Write` for the acquire/release fields. No native
+`Volatile.Read` / `Volatile.Write` for the acquire/release fields, plus a full
+fence at the two seqlock points that acquire/release does not cover
+([seqlock.md](../../spec/common/seqlock.md), *Memory ordering*). No native
 dependency, no P/Invoke.
 
 | Namespace | Content |

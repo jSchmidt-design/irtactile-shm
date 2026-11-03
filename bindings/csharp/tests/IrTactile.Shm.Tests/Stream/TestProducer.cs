@@ -93,7 +93,7 @@ internal sealed unsafe class TestProducer : IDisposable
         uint slotPayloadOffset = SegmentMemory.U32(b, HeaderOffset.SlotPayloadOffset);
         uint channelPlaneBytes = SegmentMemory.U32(b, HeaderOffset.ChannelPlaneBytes);
 
-        SegmentMemory.Release64(slot, DescOffset.Seq, SlotBusy);
+        SeqLock.BeginWrite(ref *(ulong*)(slot + DescOffset.Seq), SlotBusy);
 
         uint silent = 0;
         for (uint ch = 0; ch < channelCount; ++ch)

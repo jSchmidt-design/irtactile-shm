@@ -286,7 +286,7 @@ slot <code>head % ringBlocks</code> for the entire current publish period.</p>
     <tr><td>2 · overrun check</td><td>If <code>writeSeq − cursor &gt; ringBlocks − 1</code>, the oldest wanted blocks are already recycled: count them as dropped, snap the cursor to the oldest still-readable block.</td></tr>
     <tr><td>3 · check before copy</td><td><code>desc.seq == wanted seq</code>? Anything else - <code>kSlotBusy</code> or another block's index - means the slot is gone. Count, move on, never spin.</td></tr>
     <tr><td>4 · copy</td><td>Copy payload out into your own buffer. Loop to <code>header.samplesPerBlock</code> from your seqlock snapshot - every published block is full, and attach-time validation has already bounded that field by the plane extent.</td></tr>
-    <tr><td>5 · check after copy</td><td>Re-read <b>three</b> values and discard the block unless all three still match: <code>desc.seq</code> must equal the wanted <code>seq</code>; <code>header.layoutSeq</code> must equal the snapshot; <code>desc.layoutEpoch</code> must also equal that same snapshot - the <code>layoutEpoch</code> check is the one that defends against stale-geometry aliasing (a block written under a previous geometry can pass the <code>layoutSeq</code> check yet no longer belong to the one you validated).</td></tr>
+    <tr><td>5 · check after copy</td><td>Issue an acquire fence so the copy completes first, then re-read <b>three</b> values and discard the block unless all three still match: <code>desc.seq</code> must equal the wanted <code>seq</code>; <code>header.layoutSeq</code> must equal the snapshot; <code>desc.layoutEpoch</code> must also equal that same snapshot - the <code>layoutEpoch</code> check is the one that defends against stale-geometry aliasing (a block written under a previous geometry can pass the <code>layoutSeq</code> check yet no longer belong to the one you validated).</td></tr>
   </tbody>
 </table>
 
@@ -313,7 +313,8 @@ Pinned fields are never rewritten while the segment exists. The seqlock makes ch
 <pre>reader:                             producer (start / restart / reconfigure):
   s1 = load(layoutSeq)                next = old + ((old &amp; 1) ? 2 : 1)  // step PAST a leftover odd value
   if (s1 &amp; 1) retry                   store(layoutSeq, next)            // → odd: writing
-  copy header (≤ headerBytes)         … rewrite layout fields …
+  copy header (≤ headerBytes)         release_fence()                   // rewrites stay after the odd store
+  acquire_fence()                     … rewrite layout fields …
   s2 = load(layoutSeq)                store(layoutSeq, next + 1)        // → even AND strictly greater: done
   if (s1 != s2) retry</pre>
 
@@ -450,6 +451,7 @@ staleAfterMs    = max(100, 5 × periodMs)</pre>
     <ul style="font-size:13.5px;">
       <li>Fields are plain integers, not <code>std::atomic&lt;T&gt;</code> - bindings see bytes and hardcode offsets.</li>
       <li>x86-64 loads/stores are acquire/release in hardware (TSO); the protocol needs no StoreLoad ordering. <b>Windows-on-ARM64 needs real barriers.</b></li>
+      <li>Acquire loads and release stores alone are not enough for a seqlock: a release fence follows the odd store (<code>layoutSeq</code>, or <code>kSlotBusy</code> in <code>desc.seq</code>), and an acquire fence comes after the copy, before the recheck. See <code>spec/common/seqlock.md</code>, <i>Memory ordering</i>.</li>
       <li>64-bit fields must be naturally aligned to be tear-free; a mapping at offset 0 is 64 KB-aligned, so alignment survives.</li>
       <li>A 32-bit consumer must use an 8-byte atomic load intrinsic (<code>Interlocked.Read</code> / <code>cmpxchg8b</code>) for the 64-bit fields.</li>
     </ul>

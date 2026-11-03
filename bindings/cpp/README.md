@@ -120,9 +120,10 @@ memory ordering, and those are exactly the two headers.
 | Fill the header | `ShmStreamHeader`, `kMagic`, `kVersionMajor` / `kVersionMinor`, `bytesPerSampleOf()`, `slotPayloadOffsetOf()`, `slotArrayOffsetOf()`, `slotBytesOf()`, `channelPlaneBytesOf()` |
 | Address a slot and its planes | `slotAt()`, `planeAt()` (non-const overloads) |
 | Encode samples | `floatToInt16()` |
-| Publish, and adjudicate a zombie segment | `ShmBlockDesc`, `kSlotBusy`, `staleAfterMsOf()`, `detail::releaseStore()` / `detail::acquireLoad()` |
+| Publish, and adjudicate a zombie segment | `ShmBlockDesc`, `kSlotBusy`, `staleAfterMsOf()`, `detail::seqWriteBegin()`, `detail::releaseStore()` / `detail::acquireLoad()` |
 
-The publish protocol those pieces implement - claim the slot with `kSlotBusy`,
+The publish protocol those pieces implement - claim the slot with
+`detail::seqWriteBegin(desc->seq, kSlotBusy)` (the store plus the release fence),
 fill it, release-store the real `seq`, then bump `writeSeq` - is normative and
 lives in [the spec](../../spec/stream-shm/v1/README.md); the header table is in
 [fields.md](../../spec/stream-shm/v1/fields.md), and the seqlock rules for

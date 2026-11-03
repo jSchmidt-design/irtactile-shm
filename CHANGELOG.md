@@ -26,6 +26,17 @@
   while it writes; if the event exists, another producer is live and the segment is left alone. C++:
   `ProducerSegment::create()` returns the new `OpenResult::WriterActive`; `writerLockNameFor()`. Before this, a
   second producer on the same name was taken for a restart and both wrote the same seqlocks.
+- Seqlock memory ordering fix (spec, C++ and C#; no wire-format change). Acquire loads and release stores do not
+  keep a seqlock's protected accesses inside the counter window: the copy could complete after the reader's
+  recheck, and the writer's data stores could become visible before its odd counter store. On ARM64 (including
+  Windows on ARM) a torn frame, header snapshot, return view or stream block could pass the check; on x86-64 only
+  the compiler could reorder them. Every seqlock (`layoutSeq`, `frameSeq`, `retSeq`, stream slot `desc.seq`) now
+  has a release fence after the odd store and an acquire fence after the copy, before the recheck.
+  `spec/common/seqlock.md` gains *Memory ordering*, which makes both fences normative for every binding and
+  producer; the telemetry-shm and stream-shm protocols and `concurrency.md` reference it. C++:
+  `detail::seqWriteBegin()` and `detail::seqReadBeforeRecheck()` in `common/atomic.h`. C#: an internal `SeqLock`
+  helper (full fence via `Thread.MemoryBarrier()`). C# return-region read: `forLayoutSeq` was loaded after the
+  `retSeq` recheck, so it could belong to a later publication than the masks; it is now read inside the window.
 - `bindings/cpp` fix: `Reader::readFrame()` and `ReturnReader::read()` copied into the caller's `Frame` /
   `ReturnView` before the seqlock check, so a `Torn` or `LayoutChanged` read (or a rejected return read) left a
   torn mix in it. Both now copy into internal scratch storage and swap it in only on success, so a failed read keeps

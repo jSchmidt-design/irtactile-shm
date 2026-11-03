@@ -82,7 +82,7 @@ public:
         // of the new block lands in it. Without this a reader preempted
         // mid-copy would re-check a descriptor still holding the previous
         // block's seq and return torn data.
-        irtactile::shm::detail::releaseStore(desc->seq, kSlotBusy);
+        irtactile::shm::detail::seqWriteBegin(desc->seq, kSlotBusy);
 
         uint32_t silent = 0;
         for (uint32_t ch = 0; ch < h.channelCount; ++ch) {

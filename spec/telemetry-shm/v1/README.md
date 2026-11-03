@@ -148,6 +148,7 @@ with release. A consumer that sees `magic == 0` retries.
 
 ```
 frameSeq += 1                      // odd, release
+release fence                      // frame stores stay after the odd store
 clear valid[]; write values, valid, eventCount, frameQpc
 frameSeqEnd = frameSeq + 1         // release
 frameSeq += 1                      // even, release
@@ -163,8 +164,11 @@ Frames without an event retain that counter and amplitude and leave the slot's v
 **Layout rewrite** (channel set, `simId`, car or any layout field changes; also at every producer start):
 
 ```
-layoutSeq += 1  (odd)  ->  rewrite header layout fields + descriptor table  ->  layoutSeq += 1  (even)
+layoutSeq += 1  (odd)  ->  release fence  ->  rewrite header layout fields + descriptor table  ->  layoutSeq += 1  (even)
 ```
+
+The fences here and in the read protocol below are required on every platform; see
+[seqlock.md](../../common/seqlock.md), *Memory ordering*. The return region's `retSeq` follows the same rules.
 
 A restarting producer cycles `layoutSeq` even when it rewrites nothing, and steps past a leftover odd value
 ([seqlock.md](../../common/seqlock.md), *Writer side*). A car change is a layout rewrite: `carId` / `carName` are
@@ -186,6 +190,7 @@ l1 = acquire(layoutSeq); if odd -> keep previous / retry
 if l1 != cached layoutSeq -> snapshot header + descriptor table, re-validate, re-map names
 f1 = acquire(frameSeq); if odd -> retry; if f1 == last seen -> no new frame
 copy valid / eventCount / values / frameQpc of the mapped slots
+acquire fence (the copy completes before the rechecks)
 f2 = acquire(frameSeqEnd) must equal f1, acquire(frameSeq) == f1, acquire(layoutSeq) == l1
 else bounded retry (at most 4 tries) and keep the previous frame
 ```
