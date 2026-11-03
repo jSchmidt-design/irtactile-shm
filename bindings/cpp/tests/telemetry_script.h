@@ -63,6 +63,7 @@ inline void run(const json& script, std::vector<uint64_t>& buffer)
             id.simName = op.value("simName", "");
             id.qpcFrequency = op.value("qpcFrequency", uint64_t{10'000'000});
             id.pid = op.value("pid", uint32_t{4242});
+            id.nominalRateMilliHz = op.value("nominalRateMilliHz", uint32_t{0});   // required: 0 fails the open
             if (producer.open(base, bytes, op.at("capacity"), std::move(id)) != sh::OpenResult::Ok) {
                 throw std::runtime_error("open failed");
             }
@@ -82,6 +83,8 @@ inline void run(const json& script, std::vector<uint64_t>& buffer)
                                       op.value("flags", 0u)) == sh::Producer::kInvalidSlot) {
                 throw std::runtime_error("declareLocal failed");
             }
+        } else if (kind == "rate") {
+            if (!producer.setNominalRate(op.at("milliHz").get<uint32_t>())) throw std::runtime_error("rate failed");
         } else if (kind == "car") {
             producer.setCar(op.at("id").get<std::string>(), op.value("name", ""));
         } else if (kind == "commit") {

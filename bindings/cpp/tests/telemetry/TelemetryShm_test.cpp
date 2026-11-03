@@ -32,6 +32,7 @@ Identity identity(const char* simId = "demo")
     id.simName = "Demo Sim";
     id.qpcFrequency = 10'000'000;
     id.pid = 4242;
+    id.nominalRateMilliHz = 100'000;   // 100 Hz
     return id;
 }
 
@@ -401,6 +402,90 @@ TEST_CASE("open rejects a segment that is too small and a bad simId")
     CHECK(p.open(s.data(), s.size, 64, identity("")) == OpenResult::Ok);      // empty = chosen by the consumer
 }
 
+TEST_CASE("nominal rate: required at open, published in the layout, a change is a layout rewrite")
+{
+    Segment s(Producer::requiredBytes(64));
+    Producer p;
+    for (uint32_t bad : {0u, 999u, 1'000'001u}) {
+        Identity id = identity();
+        id.nominalRateMilliHz = bad;
+        CHECK(p.open(s.data(), s.size, 64, id) == OpenResult::BadRate);
+        CHECK_FALSE(p.isOpen());
+    }
+    CHECK(std::string(toCString(OpenResult::BadRate)) == "BadRate");
+
+    Identity id = identity();
+    id.nominalRateMilliHz = 10'000;   // 10 Hz
+    REQUIRE(p.open(s.data(), s.size, 64, id) == OpenResult::Ok);
+    p.declare(channels::standard::Id::EngineRpm);
+    REQUIRE(p.commitLayout());
+    CHECK(s.header().nominalRateMilliHz == 10'000);
+    CHECK(s.header().versionMinor == 1);
+
+    Reader r;
+    REQUIRE(r.attach(s.data(), s.size) == AttachResult::Ok);
+    CHECK(r.staleAfterMs() == 500);
+
+    const uint32_t seq = s.header().layoutSeq;
+    CHECK_FALSE(p.setNominalRate(999));              // out of range: keeps the previous rate, no rewrite
+    CHECK_FALSE(p.setNominalRate(1'000'001));
+    CHECK(s.header().layoutSeq == seq);
+    CHECK(p.setNominalRate(10'000));                 // unchanged: no rewrite
+    CHECK(s.header().layoutSeq == seq);
+    CHECK(p.setNominalRate(1'000));                  // 1 Hz
+    CHECK(p.nominalRateMilliHz() == 1'000);
+    CHECK(s.header().nominalRateMilliHz == 1'000);
+    CHECK(s.header().layoutSeq == seq + 2);
+    CHECK(r.staleAfterMs() == 500);                  // the snapshot keeps the old rate until the refresh
+    REQUIRE(r.refreshLayout() == AttachResult::Ok);
+    CHECK(r.staleAfterMs() == 5'000);
+}
+
+TEST_CASE("staleAfterMsFor: max(100 ms, 5 periods), 100 ms when unknown")
+{
+    CHECK(staleAfterMsFor(0) == 100);
+    CHECK(staleAfterMsFor(1'000) == 5'000);          // 1 Hz
+    CHECK(staleAfterMsFor(10'000) == 500);           // 10 Hz
+    CHECK(staleAfterMsFor(50'000) == 100);           // 50 Hz: 5 periods = 100 ms
+    CHECK(staleAfterMsFor(60'000) == 100);           // floor
+    CHECK(staleAfterMsFor(1'000'000) == 100);        // 1 kHz
+    CHECK(staleAfterMsFor(30'000) == 166);           // integer division
+    CHECK_FALSE(isValidNominalRate(0));
+    CHECK(isValidNominalRate(kMinNominalRateMilliHz));
+    CHECK(isValidNominalRate(kMaxNominalRateMilliHz));
+}
+
+TEST_CASE("Reader::isStale follows the declared rate and only while Active")
+{
+    Segment s(Producer::requiredBytes(64));
+    Producer p;
+    Identity id = identity();                        // qpcFrequency 10 MHz: 1 ms = 10'000 ticks
+    id.nominalRateMilliHz = 10'000;                  // 10 Hz: stale after 500 ms
+    REQUIRE(p.open(s.data(), s.size, 64, id) == OpenResult::Ok);
+    REQUIRE(p.commitLayout());
+    Reader r;
+    REQUIRE(r.attach(s.data(), s.size) == AttachResult::Ok);
+
+    const uint64_t t0 = 1'000'000;
+    p.setState(ProducerState::Active, t0);
+    CHECK_FALSE(r.isStale(t0 + 500 * 10'000));       // exactly at the threshold: not yet
+    CHECK(r.isStale(t0 + 500 * 10'000 + 1));
+    CHECK_FALSE(r.isStale(t0 - 1));                  // a clock behind the timestamp is not stale
+
+    p.setState(ProducerState::Inactive, t0);
+    CHECK_FALSE(r.isStale(t0 + 60'000 * 10'000));    // a stale timestamp means nothing when not Active
+    p.setState(ProducerState::Closed, t0);
+    CHECK_FALSE(r.isStale(t0 + 60'000 * 10'000));
+
+    // A minor-0 producer left the field zero: the 100 ms fallback.
+    s.header().nominalRateMilliHz = 0;
+    s.header().layoutSeq += 2;
+    REQUIRE(r.refreshLayout() == AttachResult::Ok);
+    p.setState(ProducerState::Active, t0);
+    CHECK(r.staleAfterMs() == 100);
+    CHECK(r.isStale(t0 + 100 * 10'000 + 1));
+}
+
 TEST_CASE("validateHeader rejections")
 {
     Segment s(Producer::requiredBytes(64));
@@ -420,7 +505,12 @@ TEST_CASE("validateHeader rejections")
     CHECK(with([](Header& h) { h.magic = 0x12345678; }) == AttachResult::Malformed);
     CHECK(with([](Header& h) { h.versionMajor = 2; }) == AttachResult::BadVersion);
     CHECK(with([](Header& h) { h.versionMinor = 9; }) == AttachResult::Ok);          // tolerated
-    CHECK(with([](Header& h) { h.reserved0 = 9; }) == AttachResult::Ok);
+    CHECK(with([](Header& h) { h.nominalRateMilliHz = 0; }) == AttachResult::Ok);           // unknown (minor 0)
+    CHECK(with([](Header& h) { h.nominalRateMilliHz = 1000; }) == AttachResult::Ok);        // 1 Hz
+    CHECK(with([](Header& h) { h.nominalRateMilliHz = 1000000; }) == AttachResult::Ok);     // 1 kHz
+    CHECK(with([](Header& h) { h.nominalRateMilliHz = 999; }) == AttachResult::Malformed);  // rejected, not clamped
+    CHECK(with([](Header& h) { h.nominalRateMilliHz = 1000001; }) == AttachResult::Malformed);
+    CHECK(with([](Header& h) { h.nominalRateMilliHz = 0xFFFFFFFFu; }) == AttachResult::Malformed);
     CHECK(with([](Header& h) { h.headerBytes = 128; }) == AttachResult::Malformed);
     CHECK(with([&](Header& h) { h.totalBytes = static_cast<uint32_t>(s.size) + 8; }) == AttachResult::Malformed);
     CHECK(with([](Header& h) { h.capacity = 100; }) == AttachResult::Malformed);

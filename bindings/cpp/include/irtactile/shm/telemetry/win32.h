@@ -7,7 +7,8 @@
 //
 //     // producer
 //     ProducerSegment s;
-//     s.create(inboundName("demo"), 256, {"", "My Sim"});
+//     Identity id; id.simName = "My Sim"; id.nominalRateMilliHz = 60000;   // 60 Hz
+//     s.create(inboundName("demo"), 256, id);
 //     Producer& p = s.producer();
 //     p.declare(channels::standard::Id::EngineRpm);  p.commitLayout();
 //     ...
@@ -150,11 +151,13 @@ class ProducerSegment {
 public:
     /// Creates (or restarts into) the segment for `capacity` slots and binds the Producer. `identity.qpcFrequency`
     /// and `identity.pid` are filled in when zero. WriterActive: another live producer writes this segment.
-    /// SegmentFailed: the OS refused to create or map the segment. On any failure the Producer is left unbound.
+    /// SegmentFailed: the OS refused to create or map the segment. BadRate: see Identity::nominalRateMilliHz. On any
+    /// failure the Producer is left unbound.
     OpenResult create(const std::string& inboundSegmentName, uint32_t capacity, Identity identity)
     {
         m_producer.close();   // before the views go: a failed recreate must not leave it bound to unmapped memory
         if (!isValidSegmentName(inboundSegmentName) || !isValidCapacity(capacity)) return OpenResult::SegmentFailed;
+        if (!isValidNominalRate(identity.nominalRateMilliHz)) return OpenResult::BadRate;   // before any OS object
         if (identity.qpcFrequency == 0) identity.qpcFrequency = qpcFrequency();
         if (identity.pid == 0) identity.pid = GetCurrentProcessId();
         m_inbound.close();

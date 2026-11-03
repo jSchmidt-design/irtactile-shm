@@ -110,6 +110,8 @@ validates it as follows. Failures return `Malformed` unless another result is sp
   `headerBytes`, or its array does not end inside `totalBytes`;
 - `producerState` is not `Inactive`, `Active` or `Closed`;
 - `wheelsPerAxle` has an entry above 8, or a non-zero entry after a zero;
+- `nominalRateMilliHz` is neither `0` (unknown) nor in `[1000, 1000000]` (1 Hz to 1 kHz). An out-of-range rate is
+  rejected, not clamped: a clamped rate would hold the producer to a timing contract it did not declare;
 - `simId` is not empty and not a valid owner id, or is `std`, `sim`, `plugin` or `irtactile`
   (a built-in simulator id is allowed - the source then extends that simulator's `sim.*` namespace).
 
@@ -124,7 +126,7 @@ Fields have four concurrency classes ([concurrency.md](../../common/concurrency.
 
 - **pinned**: `magic`, `versionMajor`, `versionMinor`, `headerBytes`, `totalBytes`. Written once, never changed. A different value
   needs a different segment.
-- **layout** (read under `layoutSeq`): geometry, `qpcFrequency`, `producerPid`, `simId`, the session identity
+- **layout** (read under `layoutSeq`): geometry, `qpcFrequency`, `producerPid`, `nominalRateMilliHz`, `simId`, the session identity
   (`simName`, `carId`, `carName`) and the **descriptor table**.
 - **concurrent** (bytes `[80, 112)`): `frameSeq`, `lastPublishQpc`, `producerState`,
   `layoutSeq`, `frameSeqEnd`; read with per-field acquire loads.
@@ -134,7 +136,9 @@ Fields have four concurrency classes ([concurrency.md](../../common/concurrency.
 **Lifecycle.** A producer:
 
 1. Acquires the writer event and creates or opens the inbound region (see *Single writer*).
-2. Declares its channels and commits the layout (C++: `commitLayout()`).
+2. Declares its channels and its nominal publish rate (`nominalRateMilliHz`, see [Liveness](#liveness-consumer)) and
+   commits the layout (C++: `commitLayout()`). A producer written for minor 1 or later must declare a non-zero rate
+   before it sets `Active`; `0` exists only for minor-0 producers.
 3. Sets `producerState = Active` before publishing the first frame.
 4. Publishes frames while active; while inactive, refreshes the heartbeat (see *States*).
 5. Opens the return region once it exists (its absence is normal) and polls it on every publish cycle
@@ -172,7 +176,7 @@ The fences here and in the read protocol below are required on every platform; s
 
 A restarting producer cycles `layoutSeq` even when it rewrites nothing, and steps past a leftover odd value
 ([seqlock.md](../../common/seqlock.md), *Writer side*). A car change is a layout rewrite: `carId` / `carName` are
-layout fields.
+layout fields. So is a change of the nominal rate: `nominalRateMilliHz` is a layout field.
 
 **States.** `producerState` is `Inactive` while the sim is not running or sits in a menu, `Active` while frames
 are published, and `Closed` after a clean shutdown. The producer writes it only on a transition (`lastPublishQpc`
@@ -180,8 +184,26 @@ first, then `producerState`, both release), so it sets `Active` before its first
 state other than `Active` as not live, however fresh the frames are. While `Inactive`, the producer keeps
 refreshing `lastPublishQpc` as a heartbeat.
 
-Liveness follows [liveness.md](../../common/liveness.md) with `lastPublishQpc`. The stale threshold is
-`max(100 ms, 5 x 1000/rateHz)`; without a known rate the consumer assumes 20 ms per frame, i.e. 100 ms.
+### Liveness (consumer)
+
+Liveness follows [liveness.md](../../common/liveness.md) with `lastPublishQpc`: an `Active` producer whose
+`lastPublishQpc` is older than the stale threshold is stale. The threshold comes from the declared rate:
+
+```
+staleAfterMs = max(100, 5 000 000 / nominalRateMilliHz)     // integer division; = max(100 ms, 5 periods)
+staleAfterMs = 100                                          // nominalRateMilliHz == 0 (unknown)
+```
+
+A 10 Hz producer (`10000`) is stale after 500 ms, a 1 Hz producer (`1000`) after 5 s; at 50 Hz and above the
+100 ms floor applies. With a validated rate the division cannot overflow and the result is at most 5000.
+
+- The consumer takes the rate from its validated layout snapshot, not from a live read. A rate change takes effect
+  with the layout rewrite that publishes it.
+- The threshold follows the **declared** rate only. A producer that publishes slower than it declared can
+  legitimately be judged stale. The consumer does not stretch the threshold from observed publish intervals: that
+  would hide a stalled producer.
+- The nominal rate is the producer's publish rate, independent of how often the consumer polls. irTactile reads at
+  375 Hz; a higher rate is valid but gains nothing, because the region holds only the newest frame.
 
 ### Read protocol (consumer)
 

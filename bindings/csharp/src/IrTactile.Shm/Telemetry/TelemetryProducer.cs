@@ -7,7 +7,7 @@
 // (the encode cases compare segment bytes).
 //
 //     using var s = TelemetrySegment.Create(TelemetryLayout.InboundName("demo"), 256,
-//                                           new ProducerIdentity { SimName = "My Sim" });
+//                                           new ProducerIdentity { SimName = "My Sim", NominalRateMilliHz = 60_000 });
 //     TelemetryProducer p = s.Producer;
 //     int rpm = p.Declare(Std.All[(int)StdChannel.EngineRpm]);
 //     p.CommitLayout();
@@ -59,6 +59,12 @@ public enum TelemetryOpenResult
 
     /// <summary>simId exceeds 23 characters, is not a valid owner id, or is reserved.</summary>
     BadIdentity,
+
+    /// <summary>
+    /// <see cref="ProducerIdentity.NominalRateMilliHz"/> is 0 or outside
+    /// [<see cref="TelemetryLayout.MinNominalRateMilliHz"/>, <see cref="TelemetryLayout.MaxNominalRateMilliHz"/>].
+    /// </summary>
+    BadRate,
 }
 
 /// <summary>Identity the producer publishes in the header.</summary>
@@ -75,6 +81,12 @@ public sealed class ProducerIdentity
 
     /// <summary>Process id; 0 = the current process.</summary>
     public uint Pid { get; set; }
+
+    /// <summary>
+    /// Nominal publish rate in milli-Hertz (60_000 = 60 Hz), 1 Hz to 1 kHz. Required: it sets the consumer's stale
+    /// threshold, max(100 ms, 5 periods). Change it later with <see cref="TelemetryProducer.SetNominalRate"/>.
+    /// </summary>
+    public uint NominalRateMilliHz { get; set; }
 }
 
 /// <summary>QPC readings (Stopwatch ticks are QPC ticks on Windows).</summary>
@@ -100,7 +112,25 @@ public static class TelemetryLayout
     public const ushort VersionMajor = 1;
 
     /// <summary>Additive only; a reader tolerates a higher value.</summary>
-    public const ushort VersionMinor = 0;
+    public const ushort VersionMinor = 1;   // 1: nominalRateMilliHz
+
+    /// <summary>Lowest nominal rate a producer may declare, in milli-Hertz (1 Hz).</summary>
+    public const uint MinNominalRateMilliHz = 1_000;
+
+    /// <summary>Highest nominal rate a producer may declare, in milli-Hertz (1 kHz).</summary>
+    public const uint MaxNominalRateMilliHz = 1_000_000;
+
+    /// <summary>True for a rate a producer may declare. 0 (unknown) is not one.</summary>
+    public static bool IsValidNominalRate(uint milliHz) =>
+        milliHz >= MinNominalRateMilliHz && milliHz <= MaxNominalRateMilliHz;
+
+    /// <summary>Stale threshold for a validated nominal rate: max(100 ms, 5 periods); 100 ms for 0 (unknown).</summary>
+    public static uint StaleAfterMs(uint nominalRateMilliHz)
+    {
+        if (nominalRateMilliHz == 0) return 100;
+        uint periods = 5_000_000u / nominalRateMilliHz;
+        return periods > 100 ? periods : 100;
+    }
 
     /// <summary>Bounded seqlock retries of a frame read.</summary>
     internal const int MaxFrameRetries = 4;
@@ -119,6 +149,7 @@ public static class TelemetryLayout
     internal const int OffMagic = 0, OffVersionMajor = 4, OffVersionMinor = 6, OffHeaderBytes = 8, OffTotalBytes = 12;
     internal const int OffCapacity = 16, OffChannelCount = 20, OffDescOffset = 24, OffValidOffset = 28;
     internal const int OffEventCountOffset = 32, OffValuesOffset = 36, OffQpcFrequency = 40, OffProducerPid = 48;
+    internal const int OffNominalRateMilliHz = 52;
     internal const int OffSimId = 56, OffFrameSeq = 80, OffLastPublishQpc = 88, OffProducerState = 96;
     internal const int OffLayoutSeq = 100, OffFrameSeqEnd = 104, OffFrameQpc = 112, OffSimName = 120;
     internal const int OffCarId = 152, OffCarName = 216, OffWheelsPerAxle = 248;
@@ -193,6 +224,7 @@ public sealed unsafe class TelemetryProducer
     private string _carName = "";
     private readonly byte[] _wheelsPerAxle = new byte[TelemetryLayout.MaxAxles];
     private readonly List<byte[]> _stage = new();
+    private uint _nominalRateMilliHz;
 
     /// <summary>Slots the bound layout holds.</summary>
     public int Capacity => _capacity;
@@ -212,7 +244,9 @@ public sealed unsafe class TelemetryProducer
         {
             return TelemetryOpenResult.BadIdentity;
         }
+        if (!TelemetryLayout.IsValidNominalRate(identity.NominalRateMilliHz)) return TelemetryOpenResult.BadRate;
         _base = baseAddress;
+        _nominalRateMilliHz = identity.NominalRateMilliHz;
         _identity = identity;
         _total = (int)bytes;
         uint existingMagic = *(uint*)(_base + TelemetryLayout.OffMagic);
@@ -291,6 +325,22 @@ public sealed unsafe class TelemetryProducer
         if (_committed) CommitLayout();
     }
 
+    /// <summary>The declared nominal publish rate in milli-Hertz.</summary>
+    public uint NominalRateMilliHz => _nominalRateMilliHz;
+
+    /// <summary>
+    /// Nominal publish rate in milli-Hertz, 1 Hz to 1 kHz. Returns false (and keeps the previous rate) outside that
+    /// range. After <see cref="CommitLayout"/> a change is a layout rewrite published immediately.
+    /// </summary>
+    public bool SetNominalRate(uint milliHz)
+    {
+        if (_base == null || !TelemetryLayout.IsValidNominalRate(milliHz)) return false;
+        if (milliHz == _nominalRateMilliHz) return true;
+        _nominalRateMilliHz = milliHz;
+        if (_committed) CommitLayout();
+        return true;
+    }
+
     /// <summary>Publishes the layout fields and descriptor table under the layout seqlock; clears frame data.</summary>
     public bool CommitLayout()
     {
@@ -326,6 +376,7 @@ public sealed unsafe class TelemetryProducer
         U32(TelemetryLayout.OffValuesOffset) = (uint)valuesOffset;
         U64(TelemetryLayout.OffQpcFrequency) = _identity.QpcFrequency != 0 ? _identity.QpcFrequency : TelemetryClock.Frequency;
         U32(TelemetryLayout.OffProducerPid) = _identity.Pid != 0 ? _identity.Pid : (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+        U32(TelemetryLayout.OffNominalRateMilliHz) = _nominalRateMilliHz;
         SetString(TelemetryLayout.OffSimId, 24, _identity.SimId ?? "");
         SetString(TelemetryLayout.OffSimName, 32, _identity.SimName ?? "");
         SetString(TelemetryLayout.OffCarId, 64, _carId);
@@ -489,6 +540,10 @@ public sealed unsafe class TelemetrySegment : IDisposable
     /// <summary>Creates (or restarts into) the named segment. Windows only.</summary>
     public static TelemetrySegment Create(string inboundName, int capacity, ProducerIdentity identity)
     {
+        if (!TelemetryLayout.IsValidNominalRate(identity.NominalRateMilliHz))   // before any OS object
+        {
+            throw new InvalidOperationException("telemetry-shm: " + TelemetryOpenResult.BadRate);
+        }
         long bytes = TelemetryLayout.RequiredBytes(capacity);
         var file = MemoryMappedFile.CreateOrOpen(inboundName, bytes, MemoryMappedFileAccess.ReadWrite);
         var view = file.CreateViewAccessor(0, 0, MemoryMappedFileAccess.ReadWrite);

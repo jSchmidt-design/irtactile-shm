@@ -91,6 +91,21 @@ public:
     [[nodiscard]] const Header& header() const noexcept { return m_header; }
     [[nodiscard]] const std::vector<ChannelDesc>& descriptors() const noexcept { return m_descs; }
     [[nodiscard]] uint32_t snapshotLayoutSeq() const noexcept { return m_snapshotSeq; }
+    /// Stale threshold of the snapshot's nominal rate: max(100 ms, 5 periods), 100 ms when the rate is unknown.
+    [[nodiscard]] uint32_t staleAfterMs() const noexcept { return staleAfterMsFor(m_header.nominalRateMilliHz); }
+
+    /// Liveness verdict: Active and `lastPublishQpc` older than staleAfterMs() before `nowQpc`. Never true in
+    /// another state (a stale timestamp then means nothing). The threshold follows the declared rate only.
+    [[nodiscard]] bool isStale(uint64_t nowQpc) const noexcept
+    {
+        if (!m_attached || producerState() != ProducerState::Active) return false;
+        const uint64_t last = lastPublishQpc();
+        if (nowQpc <= last) return false;
+        const uint64_t ms = staleAfterMs();
+        const uint64_t freq = m_header.qpcFrequency;
+        const uint64_t limit = freq > UINT64_MAX / ms ? UINT64_MAX : freq * ms / 1000;   // hostile frequency
+        return nowQpc - last > limit;
+    }
 
     // --- concurrent fields: live loads only ---------------------------------
     [[nodiscard]] uint32_t layoutSeqLive() const noexcept { return shm::detail::acquireLoad(liveHeader().layoutSeq); }
@@ -233,7 +248,7 @@ public:
         if (h->magic != kReturnMagic) {
             std::memset(m_base, 0, kReturnBytes);
             h->versionMajor = kVersionMajor;
-            h->versionMinor = kVersionMinor;
+            h->versionMinor = kReturnVersionMinor;
             h->headerBytes = kReturnHeaderBytes;
             h->totalBytes = kReturnBytes;
             h->acceptedOffset = returnAcceptedOffset();

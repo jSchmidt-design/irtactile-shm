@@ -9,7 +9,9 @@
 // Windows segment handling is win32.h.
 //
 //     Producer p;
-//     p.open(base, Producer::requiredBytes(256), /*capacity*/ 256, Identity{});
+//     Identity id;
+//     id.nominalRateMilliHz = 60'000;   // 60 Hz; required
+//     p.open(base, Producer::requiredBytes(256), /*capacity*/ 256, id);
 //     const int rpm = p.declare(channels::standard::Id::EngineRpm);
 //     const int wave = p.declareLocal("demo_wave", "", -1.f, 1.f, channels::Kind::Continuous);
 //     p.commitLayout();
@@ -42,6 +44,9 @@ struct Identity {
     std::string simName;
     uint64_t    qpcFrequency{0};
     uint32_t    pid{0};
+    /// Nominal publish rate in milli-Hertz (60'000 = 60 Hz), 1 Hz to 1 kHz. Required: it sets the consumer's stale
+    /// threshold, max(100 ms, 5 periods). Change it later with Producer::setNominalRate().
+    uint32_t    nominalRateMilliHz{0};
 };
 
 enum class OpenResult : uint32_t {
@@ -50,6 +55,7 @@ enum class OpenResult : uint32_t {
     BadIdentity,   ///< simId exceeds 23 characters, is not a valid owner id, or is reserved
     SegmentFailed, ///< ProducerSegment only: the OS refused to create or map the segment (access, namespace)
     WriterActive,  ///< ProducerSegment only: another live producer holds the segment's writer lock
+    BadRate,       ///< nominalRateMilliHz is 0 or outside [kMinNominalRateMilliHz, kMaxNominalRateMilliHz]
 };
 
 inline const char* toCString(OpenResult r) noexcept
@@ -60,6 +66,7 @@ inline const char* toCString(OpenResult r) noexcept
         case OpenResult::BadIdentity:   return "BadIdentity";
         case OpenResult::SegmentFailed: return "SegmentFailed";
         case OpenResult::WriterActive:  return "WriterActive";
+        case OpenResult::BadRate:       return "BadRate";
     }
     return "?";
 }
@@ -114,6 +121,7 @@ public:
         if (identity.simId.size() >= kSimIdBytes ||
             (!channels::isValidOwnerId(identity.simId) && !identity.simId.empty())) return OpenResult::BadIdentity;
         if (isReservedSimId(identity.simId)) return OpenResult::BadIdentity;
+        if (!isValidNominalRate(identity.nominalRateMilliHz)) return OpenResult::BadRate;
         m_base = static_cast<uint8_t*>(base);
         m_identity = std::move(identity);
 
@@ -246,6 +254,18 @@ public:
         if (m_committed) commitLayout();
     }
 
+    /// Nominal publish rate in milli-Hertz, 1 Hz to 1 kHz. Returns false (and keeps the previous rate) outside that
+    /// range. A change after commitLayout() is a layout rewrite and is published immediately.
+    bool setNominalRate(uint32_t milliHz)
+    {
+        if (m_base == nullptr || !isValidNominalRate(milliHz)) return false;
+        if (milliHz == m_identity.nominalRateMilliHz) return true;
+        m_identity.nominalRateMilliHz = milliHz;
+        if (m_committed) commitLayout();
+        return true;
+    }
+    [[nodiscard]] uint32_t nominalRateMilliHz() const noexcept { return m_identity.nominalRateMilliHz; }
+
     /// Publishes header layout fields and the descriptor table under the layout seqlock. Also the first call
     /// that makes the segment visible (magic is stored last). Clears the frame data.
     bool commitLayout()
@@ -278,6 +298,7 @@ public:
         h->valuesOffset = l.valuesOffset;
         h->qpcFrequency = m_identity.qpcFrequency;
         h->producerPid = m_identity.pid;
+        h->nominalRateMilliHz = m_identity.nominalRateMilliHz;
         setString(h->simId, sizeof(h->simId), m_identity.simId);
         setString(h->simName, sizeof(h->simName), m_identity.simName);
         setString(h->carId, sizeof(h->carId), m_carId);

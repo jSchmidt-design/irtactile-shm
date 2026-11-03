@@ -45,15 +45,72 @@ public unsafe class TelemetryProducerTests
         {
             var p = new TelemetryProducer();
             Assert.Equal(TelemetryOpenResult.BadIdentity,
-                p.Open((byte*)aligned, bytes, 64, new ProducerIdentity { SimId = new string('a', 24) }));
+                p.Open((byte*)aligned, bytes, 64, new ProducerIdentity { SimId = new string('a', 24), NominalRateMilliHz = 100_000 }));
             string id = new string('a', 23);
             Assert.Equal(TelemetryOpenResult.Ok,
-                p.Open((byte*)aligned, bytes, 64, new ProducerIdentity { SimId = id }));
+                p.Open((byte*)aligned, bytes, 64, new ProducerIdentity { SimId = id, NominalRateMilliHz = 100_000 }));
             Assert.True(p.CommitLayout());
             var field = new ReadOnlySpan<byte>((byte*)aligned + TelemetryLayout.OffSimId, 24);
             Assert.Equal(id, System.Text.Encoding.UTF8.GetString(field.Slice(0, 23)));
             Assert.Equal((byte)0, field[23]);
         }
+    }
+
+    [Theory]
+    [InlineData(0u)]
+    [InlineData(999u)]
+    [InlineData(1_000_001u)]
+    public void OpenRejectsAMissingOrOutOfRangeRate(uint milliHz)
+    {
+        int bytes = TelemetryLayout.RequiredBytes(64);
+        var buffer = new ulong[(bytes + 7) / 8];
+        fixed (ulong* aligned = buffer)
+        {
+            var p = new TelemetryProducer();
+            Assert.Equal(TelemetryOpenResult.BadRate,
+                p.Open((byte*)aligned, bytes, 64, new ProducerIdentity { NominalRateMilliHz = milliHz }));
+            Assert.False(p.CommitLayout());
+        }
+    }
+
+    [Fact]
+    public void NominalRateIsALayoutField()
+    {
+        int bytes = TelemetryLayout.RequiredBytes(64);
+        var buffer = new ulong[(bytes + 7) / 8];
+        fixed (ulong* aligned = buffer)
+        {
+            byte* b = (byte*)aligned;
+            var p = new TelemetryProducer();
+            Assert.Equal(TelemetryOpenResult.Ok,
+                p.Open(b, bytes, 64, new ProducerIdentity { NominalRateMilliHz = 10_000 }));
+            Assert.True(p.CommitLayout());
+            Assert.Equal(10_000u, *(uint*)(b + TelemetryLayout.OffNominalRateMilliHz));
+            Assert.Equal((ushort)1, *(ushort*)(b + TelemetryLayout.OffVersionMinor));
+            uint seq = *(uint*)(b + TelemetryLayout.OffLayoutSeq);
+
+            Assert.False(p.SetNominalRate(999));             // out of range: no change, no rewrite
+            Assert.False(p.SetNominalRate(1_000_001));
+            Assert.True(p.SetNominalRate(10_000));           // unchanged: no rewrite
+            Assert.Equal(seq, *(uint*)(b + TelemetryLayout.OffLayoutSeq));
+
+            Assert.True(p.SetNominalRate(1_000));
+            Assert.Equal(1_000u, p.NominalRateMilliHz);
+            Assert.Equal(1_000u, *(uint*)(b + TelemetryLayout.OffNominalRateMilliHz));
+            Assert.Equal(seq + 2, *(uint*)(b + TelemetryLayout.OffLayoutSeq));
+        }
+    }
+
+    [Theory]
+    [InlineData(0u, 100u)]
+    [InlineData(1_000u, 5_000u)]
+    [InlineData(10_000u, 500u)]
+    [InlineData(30_000u, 166u)]
+    [InlineData(50_000u, 100u)]
+    [InlineData(1_000_000u, 100u)]
+    public void StaleAfterMsFollowsTheDeclaredRate(uint milliHz, uint expected)
+    {
+        Assert.Equal(expected, TelemetryLayout.StaleAfterMs(milliHz));
     }
 
     [Fact]
@@ -78,7 +135,7 @@ public unsafe class TelemetryProducerTests
         {
             byte* aligned = (byte*)(((long)pin.AddrOfPinnedObject() + 7) & ~7L);
             var p = new TelemetryProducer();
-            Assert.Equal(TelemetryOpenResult.Ok, p.Open(aligned, bytes, 64, new ProducerIdentity()));
+            Assert.Equal(TelemetryOpenResult.Ok, p.Open(aligned, bytes, 64, new ProducerIdentity { NominalRateMilliHz = 100_000 }));
             string x30 = new string('x', 30);
             p.SetCar("car", x30 + "é");   // 32 bytes; the field holds 31 + NUL, byte 31 would split the 'é'
             Assert.True(p.CommitLayout());
@@ -96,7 +153,7 @@ public unsafe class TelemetryProducerTests
     {
         if (!OperatingSystem.IsWindows()) return;
         string name = "irTactile_Telemetry_test_cs_oddret_" + Environment.ProcessId;
-        using var segment = TelemetrySegment.Create(name, 64, new ProducerIdentity());
+        using var segment = TelemetrySegment.Create(name, 64, new ProducerIdentity { NominalRateMilliHz = 100_000 });
         var p = segment.Producer;
         Assert.NotEqual(TelemetryProducer.InvalidSlot, p.Declare(FindDef("std.engine.rpm")));
         Assert.True(p.CommitLayout());
@@ -154,7 +211,7 @@ public unsafe class TelemetryProducerTests
     {
         if (!OperatingSystem.IsWindows()) return;
         string name = "irTactile_Telemetry_test_cs_retval_" + Environment.ProcessId;
-        using var segment = TelemetrySegment.Create(name, 64, new ProducerIdentity());
+        using var segment = TelemetrySegment.Create(name, 64, new ProducerIdentity { NominalRateMilliHz = 100_000 });
         Assert.True(segment.Producer.CommitLayout());
 
         using var ret = System.IO.MemoryMappedFiles.MemoryMappedFile.CreateNew(
@@ -255,6 +312,7 @@ public unsafe class TelemetryProducerTests
                                 SimName = op.TryGetProperty("simName", out var sn) ? sn.GetString()! : "",
                                 QpcFrequency = op.TryGetProperty("qpcFrequency", out var qf) ? qf.GetUInt64() : 10_000_000UL,
                                 Pid = op.TryGetProperty("pid", out var pid) ? pid.GetUInt32() : 4242u,
+                                NominalRateMilliHz = op.TryGetProperty("nominalRateMilliHz", out var nr) ? nr.GetUInt32() : 0u,
                             }));
                         break;
                     case "declare":
@@ -275,6 +333,9 @@ public unsafe class TelemetryProducerTests
                             op.TryGetProperty("max", out var mx) ? mx.GetSingle() : 1f,
                             KindOf(op.TryGetProperty("kind", out var k) ? k.GetString()! : "continuous"),
                             op.TryGetProperty("flags", out var fl) ? (ChannelFlags)fl.GetUInt32() : ChannelFlags.None));
+                        break;
+                    case "rate":
+                        Assert.True(p.SetNominalRate(op.GetProperty("milliHz").GetUInt32()));
                         break;
                     case "car":
                         p.SetCar(op.GetProperty("id").GetString()!, op.TryGetProperty("name", out var cn) ? cn.GetString()! : "");

@@ -11,7 +11,7 @@ using IrTactile.Shm.Channels;
 using IrTactile.Shm.Telemetry;
 
 string name = TelemetryLayout.InboundName("demo");
-using var segment = TelemetrySegment.Create(name, 256, new ProducerIdentity { SimName = "telemetry_demo_cs" });
+using var segment = TelemetrySegment.Create(name, 256, new ProducerIdentity { SimName = "telemetry_demo_cs", NominalRateMilliHz = 100_000 });
 TelemetryProducer p = segment.Producer;
 
 int thr = p.Declare(Std.All[(int)StdChannel.InputThrottle], Provenance.Native);

@@ -57,8 +57,10 @@
           }
         ],
         "layoutSeq": 2,
+        "nominalRateMilliHz": 100000,
         "simId": "demo",
         "simName": "Demo Sim",
+        "staleAfterMs": 100,
         "wheelsPerAxle": [
           2,
           2,
@@ -108,10 +110,86 @@
     },
     {
       "expect": {
-        "attach": "Ok"
+        "attach": "Ok",
+        "nominalRateMilliHz": 0,
+        "staleAfterMs": 100
       },
-      "file": "decode/attach_nonzero_reserved_tolerated.bin",
-      "name": "attach_nonzero_reserved_tolerated",
+      "file": "decode/attach_rate_zero_unknown.bin",
+      "name": "attach_rate_zero_unknown",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "nominalRateMilliHz": 1000,
+        "staleAfterMs": 5000
+      },
+      "file": "decode/attach_rate_min_1hz.bin",
+      "name": "attach_rate_min_1hz",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "nominalRateMilliHz": 10000,
+        "staleAfterMs": 500
+      },
+      "file": "decode/attach_rate_10hz.bin",
+      "name": "attach_rate_10hz",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "nominalRateMilliHz": 30000,
+        "staleAfterMs": 166
+      },
+      "file": "decode/attach_rate_30hz_integer_division.bin",
+      "name": "attach_rate_30hz_integer_division",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "nominalRateMilliHz": 1000000,
+        "staleAfterMs": 100
+      },
+      "file": "decode/attach_rate_max_1khz.bin",
+      "name": "attach_rate_max_1khz",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Ok",
+        "nominalRateMilliHz": 0,
+        "staleAfterMs": 100
+      },
+      "file": "decode/attach_rate_unknown_minor0_segment.bin",
+      "name": "attach_rate_unknown_minor0_segment",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_rate_below_minimum.bin",
+      "name": "attach_rate_below_minimum",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_rate_above_maximum.bin",
+      "name": "attach_rate_above_maximum",
+      "op": "attach"
+    },
+    {
+      "expect": {
+        "attach": "Malformed"
+      },
+      "file": "decode/attach_rate_max_u32.bin",
+      "name": "attach_rate_max_u32",
       "op": "attach"
     },
     {
@@ -671,6 +749,7 @@
       "script": [
         {
           "capacity": 64,
+          "nominalRateMilliHz": 100000,
           "op": "open",
           "pid": 4242,
           "qpcFrequency": 10000000,
@@ -756,6 +835,7 @@
       "script": [
         {
           "capacity": 64,
+          "nominalRateMilliHz": 100000,
           "op": "open",
           "pid": 4242,
           "qpcFrequency": 10000000,
@@ -827,6 +907,7 @@
       "script": [
         {
           "capacity": 64,
+          "nominalRateMilliHz": 100000,
           "op": "open",
           "pid": 4242,
           "qpcFrequency": 10000000,
@@ -940,6 +1021,7 @@
       "script": [
         {
           "capacity": 64,
+          "nominalRateMilliHz": 100000,
           "op": "open",
           "pid": 4343,
           "qpcFrequency": 10000000,
@@ -976,6 +1058,7 @@
       "script": [
         {
           "capacity": 64,
+          "nominalRateMilliHz": 100000,
           "op": "open",
           "pid": 4242,
           "qpcFrequency": 10000000,
@@ -1000,6 +1083,7 @@
       "script": [
         {
           "capacity": 64,
+          "nominalRateMilliHz": 100000,
           "op": "open",
           "pid": 4242,
           "qpcFrequency": 10000000,
@@ -1040,6 +1124,96 @@
             1
           ],
           "op": "wheels"
+        }
+      ]
+    },
+    {
+      "bytes": 8968,
+      "expect": {},
+      "file": "encode/nominal_rate_change.bin",
+      "name": "encode_nominal_rate_change",
+      "op": "encode",
+      "script": [
+        {
+          "capacity": 64,
+          "nominalRateMilliHz": 100000,
+          "op": "open",
+          "pid": 4242,
+          "qpcFrequency": 10000000,
+          "simId": "demo",
+          "simName": "Demo Sim"
+        },
+        {
+          "name": "std.engine.rpm",
+          "op": "declare",
+          "provenance": 1
+        },
+        {
+          "name": "std.vehicle.speed",
+          "op": "declare"
+        },
+        {
+          "name": "std.drivetrain.gear",
+          "op": "declare"
+        },
+        {
+          "max": 1.0,
+          "min": -1.0,
+          "name": "demo_wave",
+          "op": "declareLocal"
+        },
+        {
+          "kind": "event",
+          "max": 1.0,
+          "min": 0.0,
+          "name": "demo_bump",
+          "op": "declareLocal"
+        },
+        {
+          "name": "std.input.throttle",
+          "op": "declare"
+        },
+        {
+          "name": "std.wheel.load",
+          "op": "declare"
+        },
+        {
+          "list": [
+            2,
+            2
+          ],
+          "op": "wheels"
+        },
+        {
+          "id": "car_a",
+          "name": "Car A",
+          "op": "car"
+        },
+        {
+          "op": "commit"
+        },
+        {
+          "now": 1000,
+          "op": "state",
+          "state": "active"
+        },
+        {
+          "event": {
+            "4": 0.75
+          },
+          "frameQpc": 2000,
+          "now": 2001,
+          "op": "frame",
+          "set": {
+            "0": 6500.0,
+            "1": 42.5,
+            "2": 3.0,
+            "3": -0.5
+          }
+        },
+        {
+          "milliHz": 10000,
+          "op": "rate"
         }
       ]
     }

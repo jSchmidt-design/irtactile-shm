@@ -42,7 +42,7 @@ void poke(std::vector<uint64_t>& buf, size_t offset, T v)
 json baseScript(bool withFrame = true)
 {
     json s = json::array({
-        {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}},
+        {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}, {"nominalRateMilliHz", 100000}},
         {{"op", "declare"}, {"name", "std.engine.rpm"}, {"provenance", 1}},  // 0
         {{"op", "declare"}, {"name", "std.vehicle.speed"}},                // 1
         {{"op", "declare"}, {"name", "std.drivetrain.gear"}},              // 2
@@ -95,7 +95,8 @@ int main(int argc, char** argv)
     // --- attach -------------------------------------------------------------
     {
         json ex = {{"attach", "Ok"}, {"capacity", 64}, {"channelCount", 14}, {"simId", "demo"}, {"simName", "Demo Sim"},
-                   {"carId", "car_a"}, {"carName", "Car A"}, {"layoutSeq", 2}};
+                   {"carId", "car_a"}, {"carName", "Car A"}, {"layoutSeq", 2}, {"nominalRateMilliHz", 100000},
+                   {"staleAfterMs", 100}};
         ex["wheelsPerAxle"] = json::array({2, 2, 0, 0, 0, 0, 0, 0});
         ex["descNames"] = json::array({"std.engine.rpm", "std.vehicle.speed", "std.drivetrain.gear", "demo_wave",
                                        "demo_bump", "std.input.throttle", "std.wheel.load[0]", "std.wheel.load[1]"});
@@ -124,7 +125,22 @@ int main(int argc, char** argv)
     attach("attach_bad_magic", "Malformed", [](auto& b) { poke<uint32_t>(b, 0, 0x12345678); });
     attach("attach_higher_version_major", "BadVersion", [](auto& b) { poke<uint16_t>(b, 4, 2); });
     attach("attach_higher_version_minor_tolerated", "Ok", [](auto& b) { poke<uint16_t>(b, 6, 9); });
-    attach("attach_nonzero_reserved_tolerated", "Ok", [](auto& b) { poke<uint32_t>(b, 52, 0xDEADBEEF); });
+    // nominalRateMilliHz at offset 52 (minor 1; reserved and zeroed in minor 0).
+    auto rate = [&](const std::string& name, uint32_t milliHz, uint32_t staleAfterMs) {
+        s.segment(name, "attach", mutated([&](auto& b) { poke<uint32_t>(b, 52, milliHz); }), total,
+                  {{"attach", "Ok"}, {"nominalRateMilliHz", milliHz}, {"staleAfterMs", staleAfterMs}});
+    };
+    rate("attach_rate_zero_unknown", 0, 100);
+    rate("attach_rate_min_1hz", 1000, 5000);
+    rate("attach_rate_10hz", 10000, 500);
+    rate("attach_rate_30hz_integer_division", 30000, 166);
+    rate("attach_rate_max_1khz", 1000000, 100);
+    s.segment("attach_rate_unknown_minor0_segment", "attach",
+              mutated([](auto& b) { poke<uint32_t>(b, 52, 0); poke<uint16_t>(b, 6, 0); }), total,
+              {{"attach", "Ok"}, {"nominalRateMilliHz", 0}, {"staleAfterMs", 100}});
+    attach("attach_rate_below_minimum", "Malformed", [](auto& b) { poke<uint32_t>(b, 52, 999); });
+    attach("attach_rate_above_maximum", "Malformed", [](auto& b) { poke<uint32_t>(b, 52, 1000001); });
+    attach("attach_rate_max_u32", "Malformed", [](auto& b) { poke<uint32_t>(b, 52, 0xFFFFFFFFu); });
     attach("attach_header_bytes_below_minimum", "Malformed", [](auto& b) { poke<uint32_t>(b, 8, 128); });
     attach("attach_total_bytes_exceeds_mapped", "Malformed", [](auto&) {}, {{"mappedBytes", total - 8}});
     attach("attach_capacity_not_multiple_of_64", "Malformed", [](auto& b) { poke<uint32_t>(b, 16, 100); });
@@ -191,7 +207,7 @@ int main(int argc, char** argv)
     {
         // A producer built against a smaller capacity: 4 of the table's 8 elements.
         const auto small = makeSegment(json::array({
-            {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}},
+            {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}, {"nominalRateMilliHz", 100000}},
             {{"op", "declare"}, {"name", "std.suspension.deflection"}, {"count", 4}, {"provenance", 1}},
             {{"op", "wheels"}, {"list", json::array({2, 2})}},
             {{"op", "commit"}},
@@ -292,7 +308,7 @@ int main(int argc, char** argv)
         encode("event_counter", ev);
     }
     encode("layout_rewrite_restart", json::array({
-        {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4343}},
+        {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4343}, {"nominalRateMilliHz", 100000}},
         {{"op", "declare"}, {"name", "std.engine.rpm"}},
         {{"op", "declareLocal"}, {"name", "other"}, {"min", 0.0}, {"max", 10.0}},
         {{"op", "car"}, {"id", "car_b"}, {"name", "Car B"}},
@@ -305,13 +321,13 @@ int main(int argc, char** argv)
         poke<uint64_t>(crashed, 80, 7);
         writeFile(s.dir / "encode" / "crashed.bin", crashed, total);
         encode("restart_after_crash", json::array({
-            {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}},
+            {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}, {"nominalRateMilliHz", 100000}},
             {{"op", "declare"}, {"name", "std.engine.rpm"}},
             {{"op", "commit"}},
         }), "encode/crashed.bin");
     }
     encode("wheel_layout", json::array({
-        {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}},
+        {{"op", "open"}, {"capacity", kCap}, {"simId", "demo"}, {"simName", "Demo Sim"}, {"qpcFrequency", 10000000}, {"pid", 4242}, {"nominalRateMilliHz", 100000}},
         {{"op", "declare"}, {"name", "std.engine.rpm"}, {"provenance", 1}},
         {{"op", "declare"}, {"name", "std.suspension.deflection"}, {"count", 4}, {"provenance", 2}},
         {{"op", "declare"}, {"name", "std.suspension.third"}, {"count", 2}, {"provenance", 3}},
@@ -319,6 +335,12 @@ int main(int argc, char** argv)
         {{"op", "commit"}},
         {{"op", "wheels"}, {"list", json::array({1, 1})}},      // car change after the first commit: a layout rewrite
     }));
+    {
+        // A rate change after the first commit is a layout rewrite (layoutSeq 2 -> 4); frame data is cleared.
+        json rc = baseScript();
+        rc.push_back({{"op", "rate"}, {"milliHz", 10000}});
+        encode("nominal_rate_change", rc);
+    }
 
     json manifest = {{"schema", 1}, {"api", "telemetry-shm"}, {"version", 1}, {"cases", s.cases}};
     std::ofstream(s.dir / "manifest.json") << manifest.dump(2) << "\n";

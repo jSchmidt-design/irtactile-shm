@@ -32,6 +32,7 @@ int main()
     Identity id;
     id.simId = "";               // empty: irTactile uses the id of the sim it is configured for (sim.<id>.*)
     id.simName = "telemetry_demo";
+    id.nominalRateMilliHz = 100000;   // 100 Hz: irTactile judges it stale after max(100 ms, 5 periods) = 100 ms
 
     ProducerSegment s;
     if (s.create(segment, 256, id) != OpenResult::Ok) {

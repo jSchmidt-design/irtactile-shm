@@ -199,7 +199,7 @@ using IrTactile.Shm.Channels;
 using IrTactile.Shm.Telemetry;
 
 using var s = TelemetrySegment.Create(TelemetryLayout.InboundName("mysim"), 256,
-                                      new ProducerIdentity { SimName = "My Sim" });
+                                      new ProducerIdentity { SimName = "My Sim", NominalRateMilliHz = 60_000 });
 TelemetryProducer p = s.Producer;
 // Table channels copy their unit, range and kind from the table.
 int rpm  = p.Declare(Std.All[(int)StdChannel.EngineRpm], Provenance.Native);
@@ -219,7 +219,10 @@ while (running)
 }
 ```
 
-`Create` throws `InvalidOperationException` when the segment cannot hold the layout or the `SimId` is invalid.
+`Create` throws `InvalidOperationException` when the segment cannot hold the layout, the `SimId` is invalid or
+`NominalRateMilliHz` is missing or outside 1 Hz to 1 kHz. Declare the rate you actually publish at: irTactile treats
+an `Active` producer as stale after `max(100 ms, 5 periods)` (`TelemetryLayout.StaleAfterMs`). `SetNominalRate`
+changes it later and publishes a new layout.
 `PollReturn` tells you which channels irTactile accepted and which it demands, the same as the C++
 `pollReturn()`. `samples/TelemetryDemoProducer` is the full example.
 

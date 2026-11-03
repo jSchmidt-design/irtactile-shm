@@ -197,17 +197,17 @@ list of steps:
 
 | Op | Fields | Semantics |
 |---|---|---|
-| `attach` | `file`, optional `mappedBytes`, `expect` | Attach a consumer to the inbound segment. `expect.attach` is `Ok` / `NotReady` / `BadVersion` / `Malformed`. On `Ok`, optional keys assert the snapshot: `capacity`, `channelCount`, `simId`, `simName`, `carId`, `carName`, `wheelsPerAxle`, `layoutSeq`, `descNames` (slot order), and `descs` (per `slot`: `name`, `unit`, `kind`, `flags`, `arrayIndex`, `arrayCapacity`, `provenance`, `layout`; `valid` = passes the per-descriptor rules, `tableMatch` = a `std.*` name whose properties equal the table). |
+| `attach` | `file`, optional `mappedBytes`, `expect` | Attach a consumer to the inbound segment. `expect.attach` is `Ok` / `NotReady` / `BadVersion` / `Malformed`. On `Ok`, optional keys assert the snapshot: `capacity`, `channelCount`, `simId`, `simName`, `carId`, `carName`, `wheelsPerAxle`, `layoutSeq`, `nominalRateMilliHz`, `staleAfterMs` (the threshold the reader derives from the snapshot), `descNames` (slot order), and `descs` (per `slot`: `name`, `unit`, `kind`, `flags`, `arrayIndex`, `arrayCapacity`, `provenance`, `layout`; `valid` = passes the per-descriptor rules, `tableMatch` = a `std.*` name whose properties equal the table). |
 | `frame` | `file`, optional `lastSeen`, `expect` | Attach (expected `Ok` unless `expect.attach` says otherwise), then read one frame given the last seen `frameSeq` (default 0). `expect.result` is `NewFrame` / `NoNewFrame` / `Torn` / `LayoutChanged` / `LayoutBusy` / `Detached`. Optional `producerState`, `lastPublishQpc`; on `NewFrame` also `frameSeq`, `frameQpc`, `values` (slot -> float, exact), `validSlots` (the exact set of valid slots), `eventCounts` (slot -> count). |
 | `return` | `file`, `expect` | Attach a producer-side reader to the return region (`expect.attach`); if `expect.read` is present, read once and compare `capacity`, `forLayoutSeq`, `consumerState`, `lastConsumeQpc`, and `accepted` / `demanded` (exact slot sets, `demanded` read with the "not Active = every accepted slot" rule). |
 | `encode` | `script`, `bytes`, `file`, optional `initial` | Start from a zeroed buffer of `bytes` (or the `initial` blob, a restart), run `script` through the binding's producer, and compare the whole buffer with `file` byte for byte. |
 
-Script ops (`encode`): `open` (`capacity`, `simId`, `simName`, `qpcFrequency` default
+Script ops (`encode`): `open` (`capacity`, `simId`, `simName`, `nominalRateMilliHz` (required), `qpcFrequency` default
 10000000, `pid` default 4242), `declare` (`name` of a `std.*` entry, optional `count`
 for arrays and `provenance`), `declareLocal` (`name`, `unit`, `min`, `max`, `kind`,
-`flags`), `wheels` (`list`), `car` (`id`, `name`), `commit`, `state` (`state`, `now`),
+`flags`), `wheels` (`list`), `rate` (`milliHz`, `setNominalRate`), `car` (`id`, `name`), `commit`, `state` (`state`, `now`),
 `frame` (`set` and `event` as slot -> value, `frameQpc`, `now`), `raw` (`offset` plus one
-of `u8` / `u16` / `u32` / `u64`, or `fill` + `len`). `open`, `declare` and `declareLocal`
+of `u8` / `u16` / `u32` / `u64`, or `fill` + `len`). `open`, `declare`, `declareLocal` and `rate`
 fail the case if the producer refuses them.
 
 The decode expectations are literals in

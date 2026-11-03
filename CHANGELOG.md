@@ -2,6 +2,23 @@
 
 ## 1.3.0 - Unreleased
 
+- telemetry-shm: nominal publish rate (inbound `versionMinor` 1; additive). Header offset 52, formerly `reserved0`, is
+  now `nominalRateMilliHz`, a layout field. The stale threshold referred to a rate that no field carried, so every
+  producer was judged against 100 ms and a 10 Hz producer flapped as stale. Now the threshold is
+  `max(100 ms, 5 000 000 / nominalRateMilliHz)` (10 Hz: 500 ms, 1 Hz: 5 s). `0` = unknown (minor-0 producers) keeps
+  the 100 ms fallback. A consumer rejects (`Malformed`) any other value outside `[1000, 1000000]` (1 Hz to 1 kHz)
+  rather than clamping it. A rate change is a layout rewrite. The threshold follows the declared rate only: it is
+  never stretched from observed publish intervals. The return region stays at minor 0.
+  - C++: `Identity::nominalRateMilliHz` is required; `Producer::open()` / `ProducerSegment::create()` return the
+    new `OpenResult::BadRate` for 0 or an out-of-range rate. New: `Producer::setNominalRate()`, `staleAfterMsFor()`,
+    `isValidNominalRate()`, `Reader::staleAfterMs()` / `Reader::isStale(nowQpc)`, `kReturnVersionMinor`.
+  - C#: `ProducerIdentity.NominalRateMilliHz` is required; `Open` returns `TelemetryOpenResult.BadRate` and
+    `TelemetrySegment.Create` throws. New: `TelemetryProducer.SetNominalRate()`, `TelemetryLayout.StaleAfterMs()`,
+    `IsValidNominalRate()`.
+  - Conformance: `nominalRateMilliHz` / `staleAfterMs` attach expectations, the `rate` script op, rate cases
+    (unknown, bounds, out of range, integer division) and the `encode_nominal_rate_change` case. All vectors were
+    regenerated; `attach_nonzero_reserved_tolerated` is gone.
+
 - Terminology: "section" is now "segment" (named shared memory; Windows: file mapping) in the bindings, spec and
   docs. The wire format and the shared memory names are unchanged. Renamed without aliases: C++ `ProducerSection`,
   `ConsumerSection`, `ReturnSection`, `SectionOpen`, `OpenResult::SectionFailed` (now `ProducerSegment`,

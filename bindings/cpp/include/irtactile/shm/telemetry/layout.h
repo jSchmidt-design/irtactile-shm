@@ -24,7 +24,8 @@ namespace telemetry {
 inline constexpr uint32_t kMagic          = 0x45545449u;   ///< 'I','T','T','E' in memory
 inline constexpr uint32_t kReturnMagic    = 0x52545449u;   ///< 'I','T','T','R' in memory
 inline constexpr uint16_t kVersionMajor   = 1;
-inline constexpr uint16_t kVersionMinor   = 0;
+inline constexpr uint16_t kVersionMinor   = 1;             ///< inbound region; 1: nominalRateMilliHz
+inline constexpr uint16_t kReturnVersionMinor = 0;          ///< return region
 inline constexpr uint32_t kHeaderBytes    = 256;
 inline constexpr uint32_t kReturnHeaderBytes = 128;
 inline constexpr uint32_t kReturnBytes    = 4096;          ///< fixed size of the return region
@@ -35,6 +36,25 @@ inline constexpr uint32_t kSimIdBytes     = 24;
 inline constexpr uint32_t kMaxAxles       = 8;             ///< entries of Header::wheelsPerAxle
 inline constexpr uint32_t kMaxWheelsPerAxle = 8;
 inline constexpr uint32_t kMaxFrameRetries = 4;
+inline constexpr uint32_t kMinNominalRateMilliHz = 1'000;       ///< 1 Hz
+inline constexpr uint32_t kMaxNominalRateMilliHz = 1'000'000;   ///< 1 kHz
+inline constexpr uint32_t kStaleFloorMs   = 100;
+inline constexpr uint32_t kStalePeriods   = 5;
+
+/// A rate a producer may declare: [kMinNominalRateMilliHz, kMaxNominalRateMilliHz]. 0 (unknown) is not one.
+constexpr bool isValidNominalRate(uint32_t milliHz) noexcept
+{
+    return milliHz >= kMinNominalRateMilliHz && milliHz <= kMaxNominalRateMilliHz;
+}
+
+/// Stale threshold for a validated `nominalRateMilliHz`: max(100 ms, 5 periods); 100 ms for 0 (unknown).
+/// Spec: telemetry-shm v1, *Liveness (consumer)*.
+constexpr uint32_t staleAfterMsFor(uint32_t nominalRateMilliHz) noexcept
+{
+    if (nominalRateMilliHz == 0) return kStaleFloorMs;
+    const uint32_t periods = kStalePeriods * 1'000'000u / nominalRateMilliHz;
+    return periods > kStaleFloorMs ? periods : kStaleFloorMs;
+}
 
 enum class ProducerState : uint32_t { Inactive = 0, Active = 1, Closed = 2 };
 enum class ConsumerState : uint32_t { Idle = 0, Active = 1, Closed = 2 };
@@ -68,7 +88,7 @@ struct Header {
     uint32_t valuesOffset;
     uint64_t qpcFrequency;
     uint32_t producerPid;
-    uint32_t reserved0;
+    uint32_t nominalRateMilliHz;      ///< 0 = unknown, else [kMinNominalRateMilliHz, kMaxNominalRateMilliHz]
     char     simId[kSimIdBytes];
     // concurrent [80, 112)
     uint64_t frameSeq;
@@ -135,6 +155,7 @@ struct ReturnHeader {
 static_assert(sizeof(Header) == kHeaderBytes, "inbound header is 256 bytes");
 static_assert(sizeof(ChannelDesc) == kDescBytes, "descriptor is 128 bytes");
 static_assert(sizeof(ReturnHeader) == kReturnHeaderBytes, "return header is 128 bytes");
+static_assert(offsetof(Header, nominalRateMilliHz) == 52, "nominal rate");
 static_assert(offsetof(Header, frameSeq) == 80 && offsetof(Header, frameQpc) == 112, "concurrent range");
 static_assert(offsetof(Header, simName) == 120 && offsetof(Header, wheelsPerAxle) == 248, "identity block");
 static_assert(offsetof(ChannelDesc, provenance) == 100 && offsetof(ChannelDesc, layout) == 101, "descriptor tail");
@@ -290,6 +311,7 @@ inline AttachResult validateHeader(const Header& h, size_t mappedBytes) noexcept
     if (!detail::arrayFits(h.eventCountOffset, cap * 4, h.headerBytes, h.totalBytes)) return AttachResult::Malformed;
     if (!detail::arrayFits(h.valuesOffset, cap * 4, h.headerBytes, h.totalBytes)) return AttachResult::Malformed;
     if (h.producerState > static_cast<uint32_t>(ProducerState::Closed)) return AttachResult::Malformed;
+    if (h.nominalRateMilliHz != 0 && !isValidNominalRate(h.nominalRateMilliHz)) return AttachResult::Malformed;
 
     std::string_view simId;
     if (!fieldString(h.simId, sizeof(h.simId), simId)) return AttachResult::Malformed;

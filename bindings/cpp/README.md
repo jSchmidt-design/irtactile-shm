@@ -154,7 +154,10 @@ using namespace irtactile::shm::telemetry;
 namespace channels = irtactile::shm::channels;
 
 ProducerSegment s;
-s.create(inboundName("mysim"), /*capacity*/ 256, Identity{/*simId*/ "", "My Sim"});
+Identity id;
+id.simName = "My Sim";
+id.nominalRateMilliHz = 60000;   // 60 Hz, required: irTactile judges staleness by it
+s.create(inboundName("mysim"), /*capacity*/ 256, id);
 Producer& p = s.producer();
 
 // Table channels copy their unit, range and kind from the table.
@@ -184,6 +187,10 @@ for (;;) {
   positional `declareLocal(name, unit, min, max, kind, flags, provenance)` still exists.
 - Declare every channel before `commitLayout()`. Changing the set later means another `commitLayout()`, and
   `setCar()` after the commit publishes a new layout on its own.
+- Declare the rate you actually publish at (`Identity::nominalRateMilliHz`, 1 Hz to 1 kHz; `create()` / `open()`
+  return `BadRate` otherwise). irTactile treats an `Active` producer as stale after `max(100 ms, 5 periods)`, so a
+  10 Hz producer gets 500 ms. If the rate changes, call `setNominalRate()`: it publishes a new layout. `Reader`
+  exposes `staleAfterMs()` and `isStale(nowQpc)`.
 - While the sim is not running, set `Inactive` and keep calling `setState(Inactive, qpcNow())` as a heartbeat.
 - `ProducerSegment::pollReturn()` tells you which channels irTactile accepted (name and properties are valid) and
   which it demands (something consumes them). You may skip channels nobody demands, but you don't have to.

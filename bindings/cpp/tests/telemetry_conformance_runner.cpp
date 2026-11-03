@@ -103,6 +103,10 @@ void checkAttach(const Reader& r, const json& ex, Failures& f)
         if (got != ex["wheelsPerAxle"].get<std::vector<uint8_t>>()) f.fail("wheelsPerAxle");
     }
     if (ex.contains("layoutSeq")) f.eq("layoutSeq", r.snapshotLayoutSeq(), ex["layoutSeq"].get<uint32_t>());
+    if (ex.contains("nominalRateMilliHz")) {
+        f.eq("nominalRateMilliHz", r.header().nominalRateMilliHz, ex["nominalRateMilliHz"].get<uint32_t>());
+    }
+    if (ex.contains("staleAfterMs")) f.eq("staleAfterMs", r.staleAfterMs(), ex["staleAfterMs"].get<uint32_t>());
     if (ex.contains("descNames")) {
         const auto& names = ex["descNames"];
         for (size_t i = 0; i < names.size(); ++i) {
@@ -144,7 +148,8 @@ void runCase(const json& c, const std::string& dir, Failures& f)
     f.knownKeys(c, "case", {"name", "op", "file", "expect", "mappedBytes", "lastSeen", "bytes", "initial", "script"});
     if (op == "attach") {
         f.knownKeys(ex, "attach expectation", {"attach", "capacity", "channelCount", "simId", "simName", "carId",
-                                               "carName", "wheelsPerAxle", "layoutSeq", "descNames", "descs"});
+                                               "carName", "wheelsPerAxle", "layoutSeq", "nominalRateMilliHz",
+                                               "staleAfterMs", "descNames", "descs"});
         if (ex.contains("descs")) {
             for (const json& d : ex["descs"]) {
                 f.knownKeys(d, "desc expectation", {"slot", "name", "unit", "kind", "flags", "arrayIndex",

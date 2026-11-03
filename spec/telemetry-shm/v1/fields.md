@@ -12,7 +12,7 @@ cached across reads).
 |---:|---:|---|---|---|
 | 0 | 4 | `magic` | pinned | `0x45545449` (`'I','T','T','E'` in memory). `0` = created, header not yet written |
 | 4 | 2 | `versionMajor` | pinned | `1`; reject a mismatch |
-| 6 | 2 | `versionMinor` | pinned | `0`; tolerate higher |
+| 6 | 2 | `versionMinor` | pinned | `1` (`0` before `nominalRateMilliHz`); tolerate higher |
 | 8 | 4 | `headerBytes` | pinned | `256`; never copy more than this |
 | 12 | 4 | `totalBytes` | pinned | segment size; must not exceed the mapped size |
 | 16 | 4 | `capacity` | layout | descriptor / value slots, multiple of 64, `[64, 8192]` |
@@ -23,7 +23,7 @@ cached across reads).
 | 36 | 4 | `valuesOffset` | layout | `float32[capacity]` |
 | 40 | 8 | `qpcFrequency` | layout | `QueryPerformanceFrequency()` of the producer |
 | 48 | 4 | `producerPid` | layout | process id, `0` = unknown |
-| 52 | 4 | `reserved0` | layout | producer zeroes, reader ignores |
+| 52 | 4 | `nominalRateMilliHz` | layout | nominal publish rate in milli-Hertz (`60000` = 60 Hz); sets the stale threshold (see [Liveness](README.md#liveness-consumer)). `0` = unknown (minor-0 producers zeroed this field). Otherwise `[1000, 1000000]` (1 Hz to 1 kHz); reject (`Malformed`) any other value. A change is a layout rewrite |
 | 56 | 24 | `simId` | layout | namespace of local names (`sim.<simId>.*`); `[a-z0-9_]{1,23}`, NUL-padded to 24 bytes; empty = chosen by the consumer. Reject longer ids; do not truncate |
 | 80 | 8 | `frameSeq` | concurrent | frame seqlock: odd = frame being written |
 | 88 | 8 | `lastPublishQpc` | concurrent | QPC of the last publish (liveness field only) |
